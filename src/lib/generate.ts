@@ -446,6 +446,9 @@ export function generatePackingList(
     }
   }
 
+  // Convention L × l × H : la longueur est toujours la plus grande cote au sol
+  for (const p of packages) if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+
   // Poids par ligne article (hors tare des palettes groupées)
   for (const p of allPieces) {
     const l = lines[p.lineIdx];

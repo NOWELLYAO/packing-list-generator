@@ -150,14 +150,21 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
     }
   } else if (fam === 'crate') {
     push(boxFaces(0, L, 0, l, 0, H, '#ddb98a', shade(WOOD, -0.5)));
-    // planches horizontales
-    const n = Math.max(2, Math.min(7, Math.round(H / 25)));
+    // planches fines (≈ 12 cm) : des joints discrets, pour ne pas suggérer des colis superposés
+    const n = Math.max(3, Math.min(10, Math.round(H / 12)));
     for (let i = 1; i < n; i++) {
       const z = (H * i) / n;
       push([
-        { kind: 'line', a: iso(0, l, z), b: iso(L, l, z), stroke: shade(WOOD, -0.35), sw: 0.45 },
-        { kind: 'line', a: iso(L, 0, z), b: iso(L, l, z), stroke: shade(WOOD, -0.45), sw: 0.45 },
+        { kind: 'line', a: iso(0, l, z), b: iso(L, l, z), stroke: shade(WOOD, -0.12), sw: 0.3 },
+        { kind: 'line', a: iso(L, 0, z), b: iso(L, l, z), stroke: shade(WOOD, -0.18), sw: 0.3 },
       ]);
+    }
+    // traverses verticales sur la grande face (une caisse est d'un seul tenant sur toute sa hauteur)
+    const nb = Math.max(1, Math.min(5, Math.round(L / 90)));
+    const bw = Math.min(L * 0.035, 7);
+    for (let i = 1; i <= nb; i++) {
+      const x = (L * i) / (nb + 1);
+      push([{ kind: 'poly', pts: [iso(x - bw / 2, l, 0), iso(x + bw / 2, l, 0), iso(x + bw / 2, l, H), iso(x - bw / 2, l, H)], fill: shade(WOOD, -0.08), stroke: shade(WOOD, -0.4), sw: 0.35 }]);
     }
     // montants d'angle
     const e = Math.min(L, l) * 0.07;
