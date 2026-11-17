@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { CatalogItem } from './types';
 import { usePersistent } from './lib/storage';
 import { mergeCatalog } from './lib/normalize';
@@ -11,11 +11,15 @@ type Tab = 'import' | 'catalog' | 'generate';
 export default function App() {
   const [catalog, setCatalog] = usePersistent<CatalogItem[]>('catalog', []);
   const [tab, setTab] = useState<Tab>(catalog.length ? 'generate' : 'import');
+  const latest = useRef(catalog);
+  latest.current = catalog;
 
+  // latest garde le catalogue le plus récent même si plusieurs fichiers sont importés avant un nouveau rendu
   const onImport = (items: CatalogItem[]) => {
-    const res = mergeCatalog(catalog, items);
-    setCatalog(res.catalog);
-    return res;
+    const r = mergeCatalog(latest.current, items);
+    latest.current = r.catalog;
+    setCatalog(r.catalog);
+    return { added: r.added, updated: r.updated };
   };
 
   const tabs: { id: Tab; label: string }[] = [

@@ -21,6 +21,8 @@ export interface CatalogItem {
   hsCode: string;
   origin: string;
   source: string; // fichier d'origine
+  /** valeurs estimées à partir d'un colis partagé avec d'autres articles */
+  mixed?: boolean;
   updatedAt: string;
 }
 

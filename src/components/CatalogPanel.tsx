@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { CatalogItem } from '../types';
 import { norm } from '../lib/detect';
 import { exportCatalogXlsx } from '../lib/exporters';
-import { uid } from '../lib/normalize';
+import { mergeCatalog, uid } from '../lib/normalize';
 
 interface Props {
   catalog: CatalogItem[];
@@ -80,7 +80,10 @@ export default function CatalogPanel({ catalog, setCatalog }: Props) {
     try {
       const data = JSON.parse(await f.text());
       if (!Array.isArray(data)) throw new Error();
-      if (confirm(`Remplacer le catalogue actuel par ${data.length} articles ?`)) setCatalog(data);
+      if (!catalog.length) return setCatalog(data);
+      if (confirm(`Fusionner ${data.length} articles avec la base actuelle (${catalog.length}) ?\nOK = fusionner, Annuler = remplacer`))
+        setCatalog(mergeCatalog(catalog, data).catalog);
+      else if (confirm('Remplacer toute la base actuelle ?')) setCatalog(data);
     } catch {
       alert('Fichier de sauvegarde invalide.');
     }
@@ -98,7 +101,7 @@ export default function CatalogPanel({ catalog, setCatalog }: Props) {
           <button onClick={downloadBackup} disabled={!catalog.length}>
             Sauvegarde JSON
           </button>
-          <button onClick={() => backupRef.current?.click()}>Restaurer</button>
+          <button onClick={() => backupRef.current?.click()}>Charger une base JSON</button>
           <input ref={backupRef} type="file" accept=".json" hidden onChange={(e) => restoreBackup(e.target.files?.[0])} />
           <button
             className="danger"
@@ -158,7 +161,8 @@ export default function CatalogPanel({ catalog, setCatalog }: Props) {
                         </td>
                       );
                     })}
-                    <td className="muted src" title={it.source}>
+                    <td className="muted src" title={it.mixed ? 'Valeurs estimées : colis partagé avec d’autres articles. ' + it.source : it.source}>
+                      {it.mixed && '⚠️ '}
                       {it.source}
                     </td>
                     <td>

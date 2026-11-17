@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { CatalogItem, DimUnit, FieldKey, ImportDraft, WeightBasis } from '../types';
 import { detectHeaderRow, detectMapping, FIELD_LABELS, FIELD_ORDER } from '../lib/detect';
 import { readAnyFile } from '../lib/readFiles';
+import { bestObservations, sapToCatalog } from '../lib/sapPackingList';
 import { normalizeRows } from '../lib/normalize';
 
 interface Props {
@@ -40,15 +41,30 @@ export default function ImportPanel({ onImport }: Props) {
   const queueRef = useRef<File[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | false>(false);
   const [log, setLog] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
   const openFile = async (file: File) => {
-    setBusy(true);
+    setBusy(`Lecture de ${file.name}…`);
     try {
-      const tables = (await readAnyFile(file)).filter((t) => t.rows.length > 0);
-      if (!tables.length) throw new Error('aucune donnée lisible');
+      const res = await readAnyFile(file, (m) => setBusy(`${file.name} : ${m}`));
+      // Format SAP / Grundfos reconnu : import direct
+      if (res.sap && res.sap.hus.some((h) => h.positions.length)) {
+        const sap = res.sap;
+        const items = bestObservations(sapToCatalog(sap, file.name));
+        const r = onImport(items, file.name);
+        const nPos = sap.hus.reduce((s, h) => s + h.positions.length, 0);
+        setLog((l) => [
+          `✅ ${file.name}${sap.number ? ` (PL ${sap.number})` : ''}${res.ocr ? ' [scan lu par OCR]' : ''} : ${sap.hus.length} colis, ${nPos} lignes → ${r.added} nouveaux articles, ${r.updated} mis à jour${sap.warnings.length ? ` ⚠️ ${sap.warnings.join(' ; ')}` : ''}`,
+          ...l,
+        ]);
+        setBusy(false);
+        next();
+        return;
+      }
+      const tables = res.tables.filter((t) => t.rows.length > 0);
+      if (!tables.length) throw new Error(res.ocr ? 'scan illisible' : 'aucune donnée lisible');
       setDraft(makeDraft(file.name, tables, bestTable(tables)));
     } catch (e) {
       setLog((l) => [`❌ ${file.name} : lecture impossible (${(e as Error).message})`, ...l]);
@@ -106,8 +122,9 @@ export default function ImportPanel({ onImport }: Props) {
     <div className="panel">
       <h2>1. Charger des Packing Lists</h2>
       <p className="muted">
-        Formats acceptés : Excel (.xlsx, .xls), CSV et PDF texte. Les colonnes (code, PN, quantité, dimensions, poids…)
-        sont détectées automatiquement ; vous pouvez corriger l'association avant d'ajouter à la base.{' '}
+        Formats acceptés : Excel (.xlsx, .xls), CSV et PDF (y compris scannés, lus par OCR). Les PL au format SAP
+        (Grundfos : « Hand. unit / Material / Gross wt. ») sont importées directement. Pour les autres, les colonnes
+        sont détectées automatiquement et vous pouvez corriger l'association avant d'ajouter à la base.{' '}
         <a href="/exemple_packing_list.xlsx" download>
           Télécharger un PL d'exemple
         </a>
@@ -138,7 +155,7 @@ export default function ImportPanel({ onImport }: Props) {
         <strong>Glissez vos PL ici</strong> ou cliquez pour choisir (plusieurs fichiers possibles)
       </label>
 
-      {busy && <p className="muted">Lecture du fichier…</p>}
+      {busy && <p className="busy">⏳ {busy}</p>}
       {queueCount > 0 && <p className="muted">{queueCount} fichier(s) en attente</p>}
 
       {draft && preview && (

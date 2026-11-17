@@ -210,6 +210,8 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
     const k = itemKey(it.code, it.pn);
     const prev = map.get(k);
     if (prev) {
+      // une fiche issue d'un colis dédié n'est pas écrasée par une estimation en colis mixte
+      if (it.mixed && !prev.mixed) continue;
       updated++;
       // garder les valeurs existantes si le nouvel import ne les fournit pas
       map.set(k, {
@@ -217,6 +219,7 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
         ...Object.fromEntries(
           Object.entries(it).filter(([key, v]) => key !== 'id' && v !== '' && v !== 0),
         ),
+        mixed: it.mixed ?? false,
         id: prev.id,
       } as CatalogItem);
     } else {

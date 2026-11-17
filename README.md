@@ -4,7 +4,11 @@ Application web (React + TypeScript + Vite) qui génère des **Packing Lists** �
 
 ## Fonctionnement
 
-1. **Importer des PL** (Excel `.xlsx/.xls`, CSV, PDF texte)
+1. **Importer des PL** (Excel `.xlsx/.xls`, CSV, PDF texte ou scanné)
+   - **PL au format SAP / Grundfos** (« Hand. unit / Material / Gross wt. KG / Dimens. CM ») : import direct, colis par colis.
+     Les PDF scannés sont lus par OCR dans le navigateur (Tesseract, embarqué dans l'application, aucun envoi externe).
+     Un article réparti sur plusieurs caisses (quantité 0,5) est géré ; les articles de colis mixtes sont marqués ⚠️
+     et ne remplacent jamais une fiche issue d'un colis dédié.
    - Détection automatique de la ligne d'en-tête et des colonnes (FR/EN) : code article, PN, désignation, quantité, unité, nb colis, emballage, dimensions (`120x80x100`, ou colonnes L/l/H), poids net/brut, volume, code SH, origine.
    - Association des colonnes modifiable avant validation.
    - Unités des dimensions détectées (mm / cm / m) et converties en cm.
@@ -20,6 +24,11 @@ Application web (React + TypeScript + Vite) qui génère des **Packing Lists** �
    Export **Excel**, **PDF** ou impression.
 
 Les données sont conservées dans le navigateur (localStorage). Pensez à faire une sauvegarde JSON régulière.
+
+## Fichiers embarqués
+
+`npm run dev` / `npm run build` lancent `scripts/copy-ocr-assets.mjs`, qui copie dans `public/` le moteur OCR,
+la langue anglaise et les décodeurs d'images PDF.js (JBIG2, JPEG 2000). Ces fichiers ne sont pas versionnés.
 
 ## Développement
 
