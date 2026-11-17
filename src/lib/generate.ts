@@ -156,8 +156,11 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
     const v = g.reduce((s, p) => s + goods(p), 0);
     const maxPieceH = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[2] || 0));
     const gLongest = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[0] || 0));
-    // demi-palette si le volume et la longueur des colis le permettent
-    const pal = v <= 0.3 && gLongest <= 80 ? PALLETS[0] : euro;
+    const gSecond = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[1] || 0));
+    // demi-palette si le volume et la taille des colis le permettent
+    const base = v <= 0.3 && gLongest <= 80 && gSecond <= 60 ? PALLETS[0] : euro;
+    // la palette doit être au moins aussi longue que le plus long colis (ex. pompe de 160 cm)
+    const pal = { ...base, l: Math.max(base.l, Math.ceil(gLongest)), w: Math.max(base.w, Math.ceil(gSecond)) };
     const loadH = Math.max(maxPieceH, Math.ceil(((v / FILL) * 1e6) / (pal.l * pal.w)));
     const h = Math.min(MAX_PALLET_HEIGHT, PALLET_BASE_CM + loadH);
     const net = g.reduce((s, p) => s + p.net, 0);
@@ -178,12 +181,22 @@ export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogIt
   if (all.length <= 1) return { item };
   const dedicated = all.filter((v) => !v.mixed && (v.length || v.volumePerPackage));
   const pool = dedicated.length ? dedicated : all;
-  let best = { item, vol: Infinity, n: Infinity };
+  // 1) La quantité demandée a déjà été expédiée telle quelle : on reprend cet emballage réel
+  const exact = pool.filter((v) => Math.abs(v.qtyPerPackage - qty) < 1e-9).sort((a, b) => b.count - a.count)[0];
+  if (exact) {
+    const it = applyVariant(item, exact);
+    return { item: it, note: `${exact.qtyPerPackage} / ${exact.packageType}` };
+  }
+  // 2) Sinon : le moins de colis possible, puis le volume le plus faible, puis la config la plus vue
+  let best = { item, n: Infinity, vol: Infinity, count: -1 };
   for (const v of pool) {
     const cand = applyVariant(item, v);
     const pieces = piecesFor(cand, qty, 0);
     const vol = pieces.reduce((s, p) => s + p.volume, 0);
-    if (vol < best.vol - 1e-6 || (Math.abs(vol - best.vol) < 1e-6 && pieces.length < best.n)) best = { item: cand, vol, n: pieces.length };
+    const better =
+      pieces.length < best.n ||
+      (pieces.length === best.n && (vol < best.vol - 1e-6 || (Math.abs(vol - best.vol) < 1e-6 && v.count > best.count)));
+    if (better) best = { item: cand, n: pieces.length, vol, count: v.count };
   }
   const q = best.item.qtyPerPackage;
   return { item: best.item, note: `${q} / ${best.item.packageType}` };
