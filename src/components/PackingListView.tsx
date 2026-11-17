@@ -2,6 +2,7 @@ import type { PackingList } from '../types';
 import { packLabel, useLang } from '../lib/i18n';
 import { packageDrawing, scaleStrip } from '../lib/drawing';
 import Drawing from './Drawing';
+import InfoTip from './InfoTip';
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -19,7 +20,9 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
         {strip.shapes.length > 0 && pl.packages.length > 1 && (
           <div className="scale-strip">
             <Drawing pic={strip} className="strip-svg" title="Vue à l'échelle" />
-            <span className="hint">Vue de face à la même échelle (repère : silhouette de 1,80 m)</span>
+            <span className="hint">
+              Vue de face à la même échelle (repère : silhouette de 1,80 m) <InfoTip k="scaleView" />
+            </span>
           </div>
         )}
         <div className="pkg-grid">
@@ -30,8 +33,18 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
                   <div className="pkg-no">Colis {p.no}</div>
                   <div className="pkg-type">
                     {packLabel(p.type, lang)}
-                    {p.basis === 'grouped' && <span className="chip chip-accent">groupé</span>}
-                    {p.basis === 'partial' && <span className="chip chip-warn">incomplet</span>}
+                    {p.basis === 'grouped' && (
+                      <span className="chip-with-tip">
+                        <span className="chip chip-accent">groupé</span>
+                        <InfoTip k="grouped" />
+                      </span>
+                    )}
+                    {p.basis === 'partial' && (
+                      <span className="chip-with-tip">
+                        <span className="chip chip-warn">incomplet</span>
+                        <InfoTip k="partial" />
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

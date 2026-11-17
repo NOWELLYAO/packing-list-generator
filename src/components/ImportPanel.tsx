@@ -3,6 +3,7 @@ import type { CatalogItem, DimUnit, FieldKey, ImportDraft, WeightBasis } from '.
 import { detectHeaderRow, detectMapping, FIELD_LABELS, FIELD_ORDER } from '../lib/detect';
 import { readAnyFile } from '../lib/readFiles';
 import { bestObservations, sapToCatalog } from '../lib/sapPackingList';
+import InfoTip from './InfoTip';
 import { normalizeRows } from '../lib/normalize';
 
 interface Props {
@@ -211,7 +212,9 @@ export default function ImportPanel({ onImport }: Props) {
               </select>
             </label>
             <label>
-              Les poids indiqués sont
+              <span>
+                Les poids indiqués sont <InfoTip k="weightBasis" />
+              </span>
               <select
                 value={draft.options.weightBasis}
                 onChange={(e) => setDraft({ ...draft, options: { ...draft.options, weightBasis: e.target.value as WeightBasis } })}
@@ -235,7 +238,9 @@ export default function ImportPanel({ onImport }: Props) {
             </label>
           </div>
 
-          <h4>Association des colonnes</h4>
+          <h4>
+            Association des colonnes <InfoTip k="mapping" />
+          </h4>
           <div className="mapping">
             {FIELD_ORDER.map((f) => (
               <label key={f} className={draft.mapping[f] !== undefined ? 'mapped' : ''}>

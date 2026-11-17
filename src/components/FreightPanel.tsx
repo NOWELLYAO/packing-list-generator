@@ -1,5 +1,6 @@
 import type { PackingList } from '../types';
 import { freightInfo } from '../lib/freight';
+import InfoTip from './InfoTip';
 
 const fmt = (n: number, d = 0) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -10,17 +11,23 @@ export default function FreightPanel({ pl }: { pl: PackingList }) {
       <h3 className="section-title">Transport</h3>
       <div className="freight">
         <div className="freight-card">
-          <small>Aérien – poids taxable</small>
+          <small>
+            Aérien – poids taxable <InfoTip k="airChargeable" />
+          </small>
           <b>{fmt(f.airChargeableKg)} kg</b>
           <span className="hint">max(brut ; volume × 167)</span>
         </div>
         <div className="freight-card">
-          <small>Routier / express – poids taxable</small>
+          <small>
+            Routier / express – poids taxable <InfoTip k="roadChargeable" />
+          </small>
           <b>{fmt(f.roadChargeableKg)} kg</b>
           <span className="hint">max(brut ; volume × 333)</span>
         </div>
         <div className="freight-card">
-          <small>Maritime groupage – unités payantes</small>
+          <small>
+            Maritime groupage – unités payantes <InfoTip k="revenueTon" />
+          </small>
           <b>{fmt(f.seaRevenueTon, 2)} UP</b>
           <span className="hint">max(tonnes ; m³)</span>
         </div>
@@ -39,8 +46,8 @@ export default function FreightPanel({ pl }: { pl: PackingList }) {
           );
         })}
         <p className="hint">
-          Occupation estimée = le plus contraignant entre volume, charge utile et surface au sol (colis non gerbés). Facteurs
-          usuels à confirmer avec votre transitaire.
+          Occupation estimée = le plus contraignant entre volume, charge utile et surface au sol (colis non gerbés).{' '}
+          <InfoTip k="containerFill" /> Facteurs usuels à confirmer avec votre transitaire.
         </p>
       </div>
       {f.alerts.length > 0 && (

@@ -3,6 +3,7 @@ import type { PackingList } from '../types';
 import { loadPlanDrawing, planLoad, VEHICLES } from '../lib/loadPlan';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
+import InfoTip from './InfoTip';
 
 const fmt = (n: number, d = 1) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -16,7 +17,9 @@ export default function LoadPlanPanel({ pl, accent }: { pl: PackingList; accent:
 
   return (
     <section>
-      <h3 className="section-title">Plan de chargement</h3>
+      <h3 className="section-title">
+        Plan de chargement <InfoTip k="loadPlan" />
+      </h3>
       <div className="segmented vehicle-select">
         <button className={mode === 'auto' ? 'on' : ''} onClick={() => setMode('auto')}>
           Automatique
@@ -39,7 +42,9 @@ export default function LoadPlanPanel({ pl, accent }: { pl: PackingList; accent:
 
       <div className="plan-facts">
         <div>
-          <small>Transport {mode === 'auto' ? 'proposé' : 'choisi'}</small>
+          <small>
+            Transport {mode === 'auto' ? 'proposé' : 'choisi'} <InfoTip k="vehicle" />
+          </small>
           <b>
             {plan.bins.length} × {vName}
           </b>
@@ -49,11 +54,15 @@ export default function LoadPlanPanel({ pl, accent }: { pl: PackingList; accent:
           <b>{plan.bins.map((b) => `${fmt(b.usedLength / 100, 2)} m`).join(' + ')}</b>
         </div>
         <div>
-          <small>Plancher occupé</small>
+          <small>
+            Plancher occupé <InfoTip k="floorUsed" />
+          </small>
           <b>{plan.bins.map((b) => `${fmt(b.floorPct)} %`).join(' + ')}</b>
         </div>
         <div>
-          <small>Mètres de plancher (LDM)</small>
+          <small>
+            Mètres de plancher (LDM) <InfoTip k="ldm" />
+          </small>
           <b>{fmt(plan.ldm, 2)}</b>
         </div>
       </div>
@@ -83,7 +92,7 @@ export default function LoadPlanPanel({ pl, accent }: { pl: PackingList; accent:
       )}
       <p className="hint">
         Vue de dessus, colis posés au sol sans gerbage (hypothèse prudente). Les colis lourds sont placés vers le fond ; le
-        point rouge indique le centre de gravité. Le plan figure aussi dans le PDF.
+        point rouge indique le centre de gravité <InfoTip k="cog" />. Le plan figure aussi dans le PDF.
       </p>
     </section>
   );

@@ -431,3 +431,29 @@ label.has-error input { border-color: var(--danger); }
 .plan-svg { width: 100%; min-width: 520px; height: auto; display: block; }
 .vehicle-select { margin-bottom: 0.2rem; }
 .vehicle-select button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ---------- Bulles d'explication ---------- */
+.info-btn {
+  display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; padding: 0; margin: 0 0.1rem;
+  border: 1.4px solid var(--accent-line); background: var(--surface); color: var(--accent);
+  font: italic 700 11px/1 Georgia, 'Times New Roman', serif; cursor: pointer; vertical-align: middle; flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.info-btn:hover, .info-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.info-btn.light { background: transparent; border-color: rgba(255, 255, 255, 0.45); color: #dbe3ee; }
+.info-btn.light:hover, .info-btn.light.on { background: #fff; color: var(--ink); }
+/* zone tactile plus large sur mobile sans agrandir le rond */
+@media (pointer: coarse) { .info-btn { position: relative; } .info-btn::after { content: ''; position: absolute; inset: -10px; } }
+.info-pop {
+  position: fixed; z-index: 80; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.22); padding: 0.75rem 0.9rem 0.8rem; font-size: 0.86rem; line-height: 1.45;
+  text-transform: none; letter-spacing: normal; font-weight: 400; text-align: left; white-space: normal; animation: pop 0.14s ease-out;
+}
+.info-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
+.info-head b { font-size: 0.92rem; color: var(--accent); }
+.info-close { border: 0; background: #eef1f5; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; color: var(--ink-2); font-size: 0.75rem; flex-shrink: 0; }
+.info-pop p { margin: 0; color: var(--ink-2); }
+.info-example { margin-top: 0.5rem !important; background: var(--accent-soft); border-radius: 8px; padding: 0.45rem 0.6rem; color: var(--ink) !important; }
+.info-example span { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); margin-bottom: 0.1rem; }
+.chip-with-tip { display: inline-flex; align-items: center; gap: 0.2rem; }
+.kpis small { display: inline-flex; align-items: center; gap: 0.2rem; }

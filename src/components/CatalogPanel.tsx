@@ -4,6 +4,7 @@ import { norm } from '../lib/detect';
 import { exportCatalogXlsx } from '../lib/exporters';
 import { mergeCatalog, uid } from '../lib/normalize';
 import ItemEditor from './ItemEditor';
+import InfoTip from './InfoTip';
 import BoxIcon from './BoxIcon';
 import { packLabel, useLang } from '../lib/i18n';
 import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
@@ -123,7 +124,8 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
         <div>
           <h2>Base d'articles</h2>
           <p className="hint">
-            {catalog.length} articles · {withVariants} avec plusieurs emballages · {toCheck} à vérifier
+            {catalog.length} articles · {withVariants} avec plusieurs emballages <InfoTip k="variants" /> · {toCheck} à
+            vérifier <InfoTip k="toCheck" />
           </p>
         </div>
         <div className="row wrap">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
+import InfoTip from './InfoTip';
 import { packLabel, useLang } from '../lib/i18n';
 
 interface Props {
@@ -81,8 +82,18 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
 
           <h4>
             Emballage de référence
-            {draft.manual && <span className="chip chip-accent">corrigé à la main</span>}
-            {draft.mixed && !draft.manual && <span className="chip chip-warn">estimé (colis mixte)</span>}
+            {draft.manual && (
+              <span className="chip-with-tip">
+                <span className="chip chip-accent">corrigé à la main</span>
+                <InfoTip k="manual" />
+              </span>
+            )}
+            {draft.mixed && !draft.manual && (
+              <span className="chip-with-tip">
+                <span className="chip chip-warn">estimé (colis mixte)</span>
+                <InfoTip k="mixed" />
+              </span>
+            )}
           </h4>
           <div className="form-grid">{PACK.map(input)}</div>
           {draft.manual && variants.length > 1 && (
@@ -99,7 +110,9 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
 
           {variants.length > 1 && (
             <>
-              <h4>Emballages observés dans vos PL ({variants.length})</h4>
+              <h4>
+                Emballages observés dans vos PL ({variants.length}) <InfoTip k="variants" />
+              </h4>
               <p className="hint">
                 À la génération, l'application choisit automatiquement l'emballage le plus compact pour la quantité
                 demandée{draft.manual ? ' — sauf si la fiche est corrigée à la main' : ''}.

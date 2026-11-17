@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { uid } from '../lib/normalize';
+import InfoTip from './InfoTip';
 
 interface Props {
   /** fiche existante (article connu mais incertain) ou null pour un code introuvable */
@@ -121,7 +122,7 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
         </header>
         <div className="modal-body">
           <p className="hint">
-            Indiquez les mesures d'<b>une unité emballée</b>, telle qu'elle part chez le client. Chaque unité devient un colis ;
+            Indiquez les mesures d'<b>une unité emballée</b> <InfoTip k="unitPacked" />, telle qu'elle part chez le client. Chaque unité devient un colis ;
             les petites unités sont regroupées sur un carton ou une palette.
           </p>
           <label className="wide">
@@ -136,7 +137,9 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
             {input('height', 'Hauteur', 'cm')}
           </div>
 
-          <h4>Poids d'une unité</h4>
+          <h4>
+            Poids d'une unité <InfoTip k="netGross" />
+          </h4>
           <div className="dims-grid two">
             {input('net', 'Poids net', 'kg')}
             {input('gross', 'Poids brut', 'kg')}

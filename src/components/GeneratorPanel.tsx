@@ -11,6 +11,8 @@ import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
 import QuickItemForm from './QuickItemForm';
 import LoadPlanPanel from './LoadPlanPanel';
+import InfoTip from './InfoTip';
+import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
@@ -42,8 +44,11 @@ const CONF: Record<string, [string, string, string]> = {
 function ConfidenceChip({ c }: { c: string }) {
   const [label, cls, title] = CONF[c] ?? CONF.estimated;
   return (
-    <span className={`chip ${cls}`} title={title}>
-      {label}
+    <span className="chip-with-tip">
+      <span className={`chip ${cls}`} title={title}>
+        {label}
+      </span>
+      <InfoTip k={(c in CONF ? c : 'estimated') as GlossaryKey} />
     </span>
   );
 }
@@ -189,7 +194,10 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                       )
                     ) : (
                       <>
-                        <span className="chip chip-danger">introuvable dans la base</span>
+                        <span className="chip-with-tip">
+                          <span className="chip chip-danger">introuvable dans la base</span>
+                          <InfoTip k="unknown" />
+                        </span>
                         <button className="link-btn" onClick={() => setQuick({ item: null, code: l.code, pn: l.pn })}>
                           Saisir dimensions et poids
                         </button>
@@ -279,7 +287,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         <input type="checkbox" checked={consolidate} onChange={(e) => setConsolidate(e.target.checked)} />
         <span className="switch" aria-hidden />
         <span>
-          <b>Regrouper les petits articles</b>
+          <b>
+            Regrouper les petits articles <InfoTip k="consolidate" />
+          </b>
           <small>Carton ou palette commune pour les colis de moins de 0,15 m³ et 60 kg</small>
         </span>
       </label>
@@ -293,7 +303,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                 <b>{pl.totals.packages}</b>
               </div>
               <div>
-                <small>Brut</small>
+                <small>
+                  Brut <InfoTip k="netGross" light />
+                </small>
                 <b>{fmt(pl.totals.grossWeight, 1)} kg</b>
               </div>
               <div>
@@ -301,7 +313,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                 <b>{fmt(pl.totals.netWeight, 1)} kg</b>
               </div>
               <div>
-                <small>Volume</small>
+                <small>
+                  Volume <InfoTip k="volume" light />
+                </small>
                 <b>{fmt(pl.totals.volume, 3)} m³</b>
               </div>
             </div>
@@ -326,14 +340,16 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
           </div>
 
           <div className="reliability">
-            <b>Fiabilité de la proposition</b>
+            <b>
+              Fiabilité de la proposition <InfoTip k="reliability" />
+            </b>
             <div className="rel-items">
               {reliability.observed > 0 && <span><ConfidenceChip c="observed" /> <span>{reliability.observed} ligne(s) identique(s) à des envois réels</span></span>}
               {reliability.interpolated > 0 && <span><ConfidenceChip c="interpolated" /> <span>{reliability.interpolated} calculée(s) entre deux envois réels</span></span>}
               {reliability.estimated > 0 && <span><ConfidenceChip c="estimated" /> <span>{reliability.estimated} extrapolée(s) d'un seul envoi : à vérifier</span></span>}
               {reliability.mixed > 0 && <span><ConfidenceChip c="mixed" /> <span>{reliability.mixed} vue(s) seulement en colis mixte : à vérifier</span></span>}
               {reliability.manual > 0 && <span><ConfidenceChip c="manual" /> <span>{reliability.manual} selon votre fiche corrigée</span></span>}
-              {unknown > 0 && <span><span className="chip chip-danger">introuvable</span> <span>{unknown} article(s) sans données : ni poids ni colis</span></span>}
+              {unknown > 0 && <span><span className="chip-with-tip"><span className="chip chip-danger">introuvable</span><InfoTip k="unknown" /></span> <span>{unknown} article(s) sans données : ni poids ni colis</span></span>}
             </div>
           </div>
 
