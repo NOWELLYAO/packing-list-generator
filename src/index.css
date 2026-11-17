@@ -396,3 +396,5 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
   .confirm-backdrop { place-items: center; padding: 1rem; }
   .modal.confirm { border-radius: 18px; }
 }
+
+.update-banner { display: flex; align-items: center; justify-content: center; gap: 0.8rem; flex-wrap: wrap; background: var(--accent-soft); border-bottom: 1px solid var(--accent-line); padding: 0.55rem 1rem; font-size: 0.9rem; font-weight: 500; }

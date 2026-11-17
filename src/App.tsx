@@ -6,6 +6,7 @@ import { DEFAULT_ACCENT } from './lib/exporters';
 import { LangContext } from './lib/i18n';
 import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
 import ConfirmDialog from './components/ConfirmDialog';
+import { installUpdateHandlers } from './lib/updates';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
@@ -53,6 +54,9 @@ export default function App() {
     },
     [confirmState],
   );
+
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => installUpdateHandlers(() => setUpdateReady(true)), []);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', settings.accent || DEFAULT_ACCENT);
@@ -105,6 +109,15 @@ export default function App() {
           ))}
         </nav>
       </header>
+
+      {updateReady && (
+        <div className="update-banner">
+          <span>Une nouvelle version est disponible.</span>
+          <button className="btn small primary" onClick={() => window.location.reload()}>
+            Mettre à jour
+          </button>
+        </div>
+      )}
 
       <main>
         {tab === 'generate' && (

@@ -11,6 +11,7 @@ import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
+import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
 
 interface Props {
   catalog: CatalogItem[];
@@ -98,7 +99,11 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
       onSaved({ id: uid(), createdAt: new Date().toISOString(), reference: '', requests: active, totals: pl.totals });
     } catch (e) {
       console.error(e);
-      toast(`Erreur : ${(e as Error).message}`);
+      if (isChunkLoadError(e)) {
+        // onglet ouvert sur une ancienne version : on recharge (la PL en cours est conservée)
+        toast('Mise à jour de l’application… relancez l’export après le rechargement');
+        if (!reloadForUpdate()) toast('Rechargez la page (nouvelle version en ligne), puis relancez l’export');
+      } else toast(`Erreur : ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
