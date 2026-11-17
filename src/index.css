@@ -404,3 +404,16 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
 .rel-items { display: grid; gap: 0.35rem; color: var(--ink-2); }
 .rel-items > span { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 0.6rem; }
 .rel-items > span > .chip { justify-self: start; }
+
+/* ---------- Saisie rapide des dimensions ---------- */
+.link-btn { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 0.8rem; font-weight: 600; padding: 0.1rem 0.2rem; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.modal.quick { width: min(520px, 100%); }
+.modal.quick label.wide { margin-top: 0.4rem; }
+.dims-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.dims-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.with-unit { position: relative; display: flex; align-items: center; }
+.with-unit input { padding-right: 2.4rem; font-weight: 600; }
+.with-unit em { position: absolute; right: 0.7rem; font-style: normal; color: var(--muted); font-size: 0.85rem; pointer-events: none; }
+label.has-error input { border-color: var(--danger); }
+.field-error { color: var(--danger); font-size: 0.75rem; }
+.quick-preview { margin-top: 1rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; background: var(--accent-soft); border-radius: 10px; padding: 0.65rem 0.85rem; font-size: 0.9rem; }

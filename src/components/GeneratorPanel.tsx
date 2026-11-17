@@ -9,12 +9,14 @@ import { parseNumber } from '../lib/parseValues';
 import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
+import QuickItemForm from './QuickItemForm';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
 import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
 
 interface Props {
   catalog: CatalogItem[];
+  setCatalog: (c: CatalogItem[]) => void;
   settings: Settings;
   setSettings: (s: Settings) => void;
   lines: RequestLine[];
@@ -44,9 +46,10 @@ function ConfidenceChip({ c }: { c: string }) {
   );
 }
 
-export default function GeneratorPanel({ catalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
+export default function GeneratorPanel({ catalog, setCatalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [quick, setQuick] = useState<{ item: CatalogItem | null; code: string; pn: string } | null>(null);
   const lang = settings.lang ?? 'fr';
   const { ask, notify } = useSafety();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -183,9 +186,19 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
                         </span>
                       )
                     ) : (
-                      <span className="chip chip-danger">introuvable dans la base</span>
+                      <>
+                        <span className="chip chip-danger">introuvable dans la base</span>
+                        <button className="link-btn" onClick={() => setQuick({ item: null, code: l.code, pn: l.pn })}>
+                          Saisir dimensions et poids
+                        </button>
+                      </>
                     )}
                     {choice && l.quantity > 0 && <ConfidenceChip c={choice.confidence} />}
+                    {it && choice && ['estimated', 'mixed', 'manual'].includes(choice.confidence) && (
+                      <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
+                        {choice.confidence === 'manual' ? 'Modifier les dimensions' : 'Saisir les dimensions réelles'}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="stepper">
@@ -325,6 +338,22 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
           <PackingListView pl={pl} />
           <FreightPanel pl={pl} />
         </>
+      )}
+
+      {quick && (
+        <QuickItemForm
+          item={quick.item}
+          code={quick.code}
+          pn={quick.pn}
+          onClose={() => setQuick(null)}
+          onSave={(saved) => {
+            const before = catalog;
+            const exists = catalog.some((c) => c.id === saved.id);
+            setCatalog(exists ? catalog.map((c) => (c.id === saved.id ? saved : c)) : [saved, ...catalog]);
+            setQuick(null);
+            notify(exists ? 'Dimensions enregistrées dans la fiche article' : 'Article ajouté à la base', () => setCatalog(before));
+          }}
+        />
       )}
     </div>
   );

@@ -123,6 +123,7 @@ export default function App() {
         {tab === 'generate' && (
           <GeneratorPanel
             catalog={catalog}
+            setCatalog={setCatalog}
             settings={settings}
             setSettings={setSettings}
             lines={lines}
