@@ -42,7 +42,12 @@ export interface SapDocument {
 }
 
 export function looksLikeSapPackingList(text: string): boolean {
-  return /Hand\.?\s*unit/i.test(text) && /Material/i.test(text) && /(Gross|Nett?)\.?\s*wt/i.test(text);
+  // version anglaise (Packing list) ou française (Note de colisage)
+  return (
+    /Hand\.?\s*unit|Colis\s*N[°o]/i.test(text) &&
+    /Material|Mat[ée]riel/i.test(text) &&
+    /(Gross|Nett?)\.?\s*wt|Poids\s*(Brut|Net)/i.test(text)
+  );
 }
 
 /** Corrige les confusions OCR courantes dans un jeton censé être numérique */
@@ -110,7 +115,7 @@ function parseHuRest(rest: string) {
   return { packType, gross: nums[0] ?? NaN, net: nums[1] ?? NaN, volume: nums[2] ?? NaN, dims };
 }
 
-function parsePosRest(rest: string): { description: string; custMat: string; qty: number; lineNet: number } {
+function parsePosRest(rest: string): { description: string; custMat: string; qty: number; lineNet: number; orderTail: string } {
   const tokens = rest.split(' ').filter(Boolean);
   // Retirer le n° de commande client et le n° de commande de vente en fin de ligne
   let end = tokens.length;
@@ -124,7 +129,7 @@ function parsePosRest(rest: string): { description: string; custMat: string; qty
       break;
     }
   }
-  if (qIdx === -1) return { description: tokens.slice(0, end).join(' '), custMat: '', qty: NaN, lineNet: NaN };
+  if (qIdx === -1) return { description: tokens.slice(0, end).join(' '), custMat: '', qty: NaN, lineNet: NaN, orderTail: '' };
   const qty = sapNum(tokens[qIdx].replace(/\.$/, ''));
   let descTokens = tokens.slice(0, qIdx);
   // poids net de ligne éventuel juste avant la quantité (colonne "Net Wt/KG.")
@@ -134,24 +139,26 @@ function parsePosRest(rest: string): { description: string; custMat: string; qty
     lineNet = sapNum(last);
     descTokens = descTokens.slice(0, -1);
   }
-  return { description: descTokens.join(' ').replace(/\s*[.:,;]$/, ''), custMat: '', qty, lineNet };
+  const orderTail = tokens.slice(qIdx + 1, end).join(' ');
+  return { description: descTokens.join(' ').replace(/\s*[.:,;]$/, ''), custMat: '', qty, lineNet, orderTail };
 }
 
 export function parseSapPackingList(rawLines: string[]): SapDocument {
   const doc: SapDocument = { number: '', globalOrigin: '', hus: [], warnings: [] };
   let hu: SapHU | null = null;
   let lastPos: SapPosition | null = null;
+  let lastOrderTail = '';
   let inTable = false;
 
   for (const raw of rawLines) {
     const line = cleanLine(raw);
     if (!line) continue;
-    const num = line.match(/Packing\s*list\s*(\d{6,12})/i);
+    const num = line.match(/(?:Packing\s*list|Note\s*de\s*colisage)\s*(\d{6,12})/i);
     if (num && !doc.number) doc.number = num[1];
     const go = line.match(/COUNTRY OF ORIGIN\s*[:;]\s*([A-Z][A-Za-z ]+)$/);
     if (go && !hu) doc.globalOrigin = go[1].trim();
 
-    if (/Hand\.?\s*unit/i.test(line)) {
+    if (/Hand\.?\s*unit|^Colis\s*N[°o]/i.test(line)) {
       inTable = true;
       continue;
     }
@@ -162,7 +169,7 @@ export function parseSapPackingList(rawLines: string[]): SapDocument {
       lastPos = null;
       continue;
     }
-    if (/^Pos\b|Cust\.?\s*ord|^no\.?:?$/i.test(line)) continue;
+    if (/^Pos\b|^Poste|Cust\.?\s*ord|R[ée]f\.?\s*Cde|^no\.?:?$|^livraison|^client\b|^KG/i.test(line)) continue;
 
     const coo = line.match(/Country\s*of\s*Origin\s*[:;]?\s*([A-Z]{2})\b/i);
     if (coo) {
@@ -172,7 +179,8 @@ export function parseSapPackingList(rawLines: string[]): SapDocument {
 
     const pm = line.match(POS_RE);
     if (pm && hu) {
-      const { description, qty, lineNet } = parsePosRest(pm[3]);
+      const { description, qty, lineNet, orderTail } = parsePosRest(pm[3]);
+      lastOrderTail = orderTail;
       const p: SapPosition = {
         pos: fixDigits(pm[1]),
         material: fixDigits(pm[2]),
@@ -198,7 +206,9 @@ export function parseSapPackingList(rawLines: string[]): SapDocument {
     }
 
     // Suite de description (ligne courte juste après un article)
-    if (/Packing\s*list|^Page\b/i.test(line)) continue;
+    if (/Packing\s*list|Note\s*de\s*colisage|^Page\b/i.test(line)) continue;
+    // suite d'une réf. de commande en mots ("PROJECT" / "DANGA" / "PARK") : ce n'est pas la désignation
+    if (/^[A-Z]{3,}$/.test(lastOrderTail) && /^[A-Z]+$/.test(line)) continue;
     if (lastPos && !/^\d{5,}$/.test(line) && !/:/.test(line)) {
       // retirer les morceaux de n° de commande client ("1734-SEG", "_Civ-Os", "0826cim_Civ-")
       const kept = line

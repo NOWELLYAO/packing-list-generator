@@ -77,46 +77,48 @@ export interface RequestLine {
   quantity: number;
 }
 
+/** Ligne article de la Packing List générée */
 export interface PLLine {
   lineNo: number;
-  caseFrom: number;
-  caseTo: number;
   code: string;
   pn: string;
   description: string;
   quantity: number;
   unit: string;
-  packages: number;
-  packageType: string;
-  length: number;
-  width: number;
-  height: number;
+  /** n° des colis contenant l'article, ex. "1-3" ou "5" */
+  cases: string;
   netWeight: number;
   grossWeight: number;
-  volume: number; // m3
   hsCode: string;
   origin: string;
   found: boolean;
   warning?: string;
 }
 
-export interface PLHeader {
-  plNumber: string;
-  date: string;
-  invoiceNumber: string;
-  shipper: string;
-  consignee: string;
-  notify: string;
-  transport: string;
-  portLoading: string;
-  portDischarge: string;
-  marks: string;
-  remarks: string;
+/** Colis physique (palette, caisse, carton) avec ses dimensions calculées */
+export interface PLPackage {
+  no: number;
+  type: string;
+  length: number; // cm
+  width: number;
+  height: number;
+  volume: number; // m3
+  netWeight: number;
+  grossWeight: number;
+  contents: { code: string; quantity: number }[];
+  /** comment les dimensions ont été obtenues */
+  basis: 'reference' | 'partial' | 'grouped';
+}
+
+export interface GenerateOptions {
+  /** regrouper les petits articles sur un carton / une palette commune */
+  consolidate: boolean;
 }
 
 export interface PackingList {
-  header: PLHeader;
+  date: string;
   lines: PLLine[];
+  packages: PLPackage[];
   totals: {
     quantity: number;
     packages: number;

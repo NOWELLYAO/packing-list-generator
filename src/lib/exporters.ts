@@ -1,107 +1,87 @@
 import * as XLSX from 'xlsx';
-import type { CatalogItem, PackingList } from '../types';
+import type { CatalogItem, PackingList, PLPackage } from '../types';
 
-const dims = (l: { length: number; width: number; height: number }) =>
-  l.length && l.width && l.height ? `${l.length} x ${l.width} x ${l.height}` : '';
-const cases = (l: { caseFrom: number; caseTo: number }) =>
-  !l.caseFrom ? '' : l.caseFrom === l.caseTo ? `${l.caseFrom}` : `${l.caseFrom} - ${l.caseTo}`;
+const fileName = (pl: PackingList) => `packing_list_${pl.date.replace(/-/g, '')}`;
+const frDate = (d: string) => new Date(d).toLocaleDateString('fr-FR');
+const dimsOf = (p: PLPackage) => (p.length ? `${p.length} x ${p.width} x ${p.height}` : '');
+const contentsOf = (p: PLPackage) => p.contents.map((c) => `${c.code} x ${c.quantity}`).join(', ');
 
-const fileSafe = (s: string) => s.replace(/[^\w\-]+/g, '_') || 'packing_list';
+const PKG_COLS = ['Colis N°', 'Emballage', 'Dimensions L x l x H (cm)', 'Volume (m³)', 'Poids net (kg)', 'Poids brut (kg)', 'Contenu'];
+const LINE_COLS = ['N°', 'Code article', 'PN', 'Désignation', 'Qté', 'Unité', 'Colis N°', 'Poids net (kg)', 'Poids brut (kg)', 'Origine'];
 
-export const PL_COLUMNS = [
-  'N°', 'Colis N°', 'Code article', 'PN', 'Désignation', 'Qté', 'Unité', 'Nb colis', 'Emballage',
-  'Dimensions (cm)', 'Poids net (kg)', 'Poids brut (kg)', 'Volume (m³)', 'Code SH', 'Origine',
-];
-
-function plRows(pl: PackingList) {
-  return pl.lines.map((l) => [
-    l.lineNo, cases(l), l.code, l.pn, l.description, l.quantity, l.unit, l.packages, l.packageType,
-    dims(l), l.netWeight, l.grossWeight, l.volume, l.hsCode, l.origin,
-  ]);
-}
+const pkgRows = (pl: PackingList) =>
+  pl.packages.map((p) => [p.no, p.type, dimsOf(p), p.volume, p.netWeight, p.grossWeight, contentsOf(p)]);
+const lineRows = (pl: PackingList) =>
+  pl.lines.map((l) => [l.lineNo, l.code, l.pn, l.description, l.quantity, l.unit, l.cases, l.netWeight, l.grossWeight, l.origin]);
 
 export function exportPackingListXlsx(pl: PackingList) {
-  const h = pl.header;
+  const t = pl.totals;
   const aoa: (string | number)[][] = [
     ['PACKING LIST'],
+    ['Date', frDate(pl.date)],
     [],
-    ['N° Packing List', h.plNumber, '', 'Date', h.date],
-    ['N° Facture', h.invoiceNumber, '', 'Transport', h.transport],
-    ['Expéditeur', h.shipper, '', 'Port de chargement', h.portLoading],
-    ['Destinataire', h.consignee, '', 'Port de déchargement', h.portDischarge],
-    ['Notify', h.notify, '', 'Marquage', h.marks],
+    ['Nombre de colis', t.packages, '', 'Poids net (kg)', t.netWeight],
+    ['Volume total (m³)', t.volume, '', 'Poids brut (kg)', t.grossWeight],
     [],
-    PL_COLUMNS,
-    ...plRows(pl),
+    ['COLISAGE'],
+    PKG_COLS,
+    ...pkgRows(pl),
+    ['TOTAL', `${t.packages} colis`, '', t.volume, t.netWeight, t.grossWeight],
     [],
-    ['', '', '', '', 'TOTAL', pl.totals.quantity, '', pl.totals.packages, '', '', pl.totals.netWeight, pl.totals.grossWeight, pl.totals.volume],
+    ['ARTICLES'],
+    LINE_COLS,
+    ...lineRows(pl),
   ];
-  if (h.remarks) aoa.push([], ['Remarques', h.remarks]);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [6, 10, 16, 16, 40, 8, 7, 9, 12, 18, 13, 13, 12, 12, 10].map((wch) => ({ wch }));
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 14 } }];
+  ws['!cols'] = [10, 18, 24, 40, 14, 14, 40, 14, 14, 10].map((wch) => ({ wch }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Packing List');
-  XLSX.writeFile(wb, `${fileSafe(h.plNumber || 'packing_list')}.xlsx`);
+  XLSX.writeFile(wb, `${fileName(pl)}.xlsx`);
 }
 
 export async function exportPackingListPdf(pl: PackingList) {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const h = pl.header;
   const W = doc.internal.pageSize.getWidth();
+  const t = pl.totals;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.text('PACKING LIST', W / 2, 14, { align: 'center' });
-  doc.setFontSize(9);
-
-  const info: [string, string][] = [
-    ['N° PL', h.plNumber], ['Date', h.date], ['N° Facture', h.invoiceNumber], ['Transport', h.transport],
-    ['Port de chargement', h.portLoading], ['Port de déchargement', h.portDischarge], ['Marquage', h.marks],
-  ];
-  let y = 22;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Expéditeur', 14, y);
-  doc.text('Destinataire', 90, y);
-  doc.text('Notify', 166, y);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const wrap = (t: string, x: number) => doc.text(doc.splitTextToSize(t || '-', 70), x, y + 5);
-  wrap(h.shipper, 14);
-  wrap(h.consignee, 90);
-  wrap(h.notify, 166);
-  let iy = 22;
-  for (const [k, v] of info) {
-    if (!v) continue;
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${k} :`, 232, iy);
-    doc.setFont('helvetica', 'normal');
-    doc.text(String(v), 283, iy, { align: 'right' });
-    iy += 4.5;
-  }
-  y = Math.max(48, iy + 2);
-
+  doc.text(`Date : ${frDate(pl.date)}`, W / 2, 20, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(
+    `${t.packages} colis  —  Poids net ${t.netWeight.toFixed(2)} kg  —  Poids brut ${t.grossWeight.toFixed(2)} kg  —  Volume ${t.volume.toFixed(3)} m3`,
+    W / 2,
+    27,
+    { align: 'center' },
+  );
+  const head = { fillColor: [30, 58, 95] as [number, number, number], textColor: 255 };
   autoTable(doc, {
-    startY: y,
-    head: [PL_COLUMNS],
-    body: plRows(pl).map((r) => r.map((c) => String(c ?? ''))),
-    foot: [[
-      '', '', '', '', 'TOTAL', String(pl.totals.quantity), '', String(pl.totals.packages), '', '',
-      pl.totals.netWeight.toFixed(2), pl.totals.grossWeight.toFixed(2), pl.totals.volume.toFixed(3), '', '',
-    ]],
-    styles: { fontSize: 7, cellPadding: 1.2 },
-    headStyles: { fillColor: [30, 58, 95], textColor: 255 },
+    startY: 33,
+    head: [PKG_COLS.map((c) => c.replace('m³', 'm3'))],
+    body: pkgRows(pl).map((r) => r.map(String)),
+    foot: [['TOTAL', `${t.packages} colis`, '', t.volume.toFixed(3), t.netWeight.toFixed(2), t.grossWeight.toFixed(2), '']],
+    styles: { fontSize: 8, cellPadding: 1.4 },
+    headStyles: head,
     footStyles: { fillColor: [230, 236, 245], textColor: 20, fontStyle: 'bold' },
-    columnStyles: { 4: { cellWidth: 50 } },
-    margin: { left: 8, right: 8 },
+    columnStyles: { 6: { cellWidth: 90 } },
+    margin: { left: 10, right: 10 },
   });
   // @ts-expect-error propriété ajoutée par jspdf-autotable
-  const endY: number = doc.lastAutoTable?.finalY ?? y;
-  doc.setFontSize(9);
-  const summary = `Total : ${pl.totals.packages} colis — Poids net ${pl.totals.netWeight.toFixed(2)} kg — Poids brut ${pl.totals.grossWeight.toFixed(2)} kg — Volume ${pl.totals.volume.toFixed(3)} m³`;
-  doc.text(summary, 8, endY + 8);
-  if (h.remarks) doc.text(doc.splitTextToSize(`Remarques : ${h.remarks}`, W - 16), 8, endY + 14);
-  doc.save(`${fileSafe(h.plNumber || 'packing_list')}.pdf`);
+  const y: number = doc.lastAutoTable?.finalY ?? 60;
+  autoTable(doc, {
+    startY: y + 8,
+    head: [LINE_COLS],
+    body: lineRows(pl).map((r) => r.map((c) => String(c ?? ''))),
+    styles: { fontSize: 8, cellPadding: 1.4 },
+    headStyles: head,
+    columnStyles: { 3: { cellWidth: 60 } },
+    margin: { left: 10, right: 10 },
+  });
+  doc.save(`${fileName(pl)}.pdf`);
 }
 
 export function exportCatalogXlsx(catalog: CatalogItem[]) {

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import type { CatalogItem, PackingList, PLHeader, RequestLine } from '../types';
+import type { CatalogItem, PackingList, RequestLine } from '../types';
 import { findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
 import { exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate } from '../lib/exporters';
 import { uid } from '../lib/normalize';
@@ -9,38 +9,10 @@ import { detectHeaderRow, detectMapping } from '../lib/detect';
 import { parseNumber } from '../lib/parseValues';
 import PackingListView from './PackingListView';
 
-const today = () => new Date().toISOString().slice(0, 10);
-const emptyHeader = (): PLHeader => ({
-  plNumber: `PL-${today().replace(/-/g, '')}-01`,
-  date: today(),
-  invoiceNumber: '',
-  shipper: '',
-  consignee: '',
-  notify: '',
-  transport: 'Maritime',
-  portLoading: '',
-  portDischarge: '',
-  marks: '',
-  remarks: '',
-});
 const newLine = (): RequestLine => ({ id: uid(), code: '', pn: '', quantity: 1 });
 
-const HEADER_FIELDS: { key: keyof PLHeader; label: string; area?: boolean; type?: string }[] = [
-  { key: 'plNumber', label: 'N° Packing List' },
-  { key: 'date', label: 'Date', type: 'date' },
-  { key: 'invoiceNumber', label: 'N° Facture' },
-  { key: 'transport', label: 'Mode de transport' },
-  { key: 'portLoading', label: 'Port / lieu de chargement' },
-  { key: 'portDischarge', label: 'Port / lieu de déchargement' },
-  { key: 'shipper', label: 'Expéditeur', area: true },
-  { key: 'consignee', label: 'Destinataire', area: true },
-  { key: 'notify', label: 'Notify party', area: true },
-  { key: 'marks', label: 'Marquage colis' },
-  { key: 'remarks', label: 'Remarques' },
-];
-
 export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) {
-  const [header, setHeader] = usePersistent<PLHeader>('header', emptyHeader());
+  const [consolidate, setConsolidate] = usePersistent<boolean>('consolidate', true);
   const [lines, setLines] = usePersistent<RequestLine[]>('requests', [newLine()]);
   const [paste, setPaste] = useState('');
   const [result, setResult] = useState<PackingList | null>(null);
@@ -95,7 +67,7 @@ export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) 
   };
 
   const generate = () => {
-    const pl = generatePackingList(catalog, lines, header);
+    const pl = generatePackingList(catalog, lines, { consolidate });
     if (!pl.lines.length) return alert('Saisissez au moins un article avec une quantité.');
     setResult(pl);
     setTimeout(() => document.getElementById('pl-result')?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -107,31 +79,6 @@ export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) 
       {catalog.length === 0 && (
         <p className="warn">⚠️ La base d'articles est vide : importez d'abord vos Packing Lists existantes.</p>
       )}
-
-      <div className="card">
-        <div className="row between">
-          <h3>En-tête</h3>
-          <button className="ghost" onClick={() => setHeader(emptyHeader())}>
-            Réinitialiser
-          </button>
-        </div>
-        <div className="header-grid">
-          {HEADER_FIELDS.map((f) => (
-            <label key={f.key} className={f.area ? 'area' : ''}>
-              {f.label}
-              {f.area ? (
-                <textarea rows={3} value={header[f.key]} onChange={(e) => setHeader({ ...header, [f.key]: e.target.value })} />
-              ) : (
-                <input
-                  type={f.type ?? 'text'}
-                  value={header[f.key]}
-                  onChange={(e) => setHeader({ ...header, [f.key]: e.target.value })}
-                />
-              )}
-            </label>
-          ))}
-        </div>
-      </div>
 
       <div className="card">
         <div className="row between wrap">
@@ -224,6 +171,14 @@ export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) 
           </button>
         </details>
       </div>
+
+      <label className="option">
+        <input type="checkbox" checked={consolidate} onChange={(e) => setConsolidate(e.target.checked)} />
+        <span>
+          <b>Regrouper les petits articles</b> sur un carton ou une palette commune (colis de moins de 0,15 m³ et 60 kg).
+          Les palettes incomplètes sont toujours recalculées (hauteur et poids selon la quantité).
+        </span>
+      </label>
 
       <div className="row center">
         <button className="primary big" onClick={generate}>
