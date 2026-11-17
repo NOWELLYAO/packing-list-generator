@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { CatalogItem } from '../types';
 import { norm } from '../lib/detect';
+import { packLabel, useLang } from '../lib/i18n';
 
 interface Props {
   catalog: CatalogItem[];
@@ -69,6 +70,7 @@ export default function ArticleSearch({ catalog, onPick, onPickUnknown }: Props)
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lang = useLang();
 
   const results = useMemo(() => searchCatalog(catalog, q), [catalog, q]);
 
@@ -138,7 +140,7 @@ export default function ArticleSearch({ catalog, onPick, onPickUnknown }: Props)
                 </span>
               </div>
               <span className="sr-pack">
-                {it.qtyPerPackage} / {it.packageType}
+                {it.qtyPerPackage} / {packLabel(it.packageType, lang)}
                 {(it.variants?.length ?? 0) > 1 && <em> +{(it.variants?.length ?? 1) - 1}</em>}
               </span>
             </li>

@@ -9,10 +9,12 @@ import { parseNumber } from '../lib/parseValues';
 import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
+import { packLabel } from '../lib/i18n';
 
 interface Props {
   catalog: CatalogItem[];
   settings: Settings;
+  setSettings: (s: Settings) => void;
   lines: RequestLine[];
   setLines: (l: RequestLine[]) => void;
   consolidate: boolean;
@@ -23,9 +25,10 @@ interface Props {
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export default function GeneratorPanel({ catalog, settings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
+export default function GeneratorPanel({ catalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const lang = settings.lang ?? 'fr';
   const fileRef = useRef<HTMLInputElement>(null);
   const active = lines.filter((l) => (l.code || l.pn) && l.quantity > 0);
 
@@ -139,7 +142,7 @@ export default function GeneratorPanel({ catalog, settings, lines, setLines, con
                     {it ? (
                       packing && (
                         <span className="chip">
-                          {packing.qtyPerPackage} / {packing.packageType}
+                          {packing.qtyPerPackage} / {packLabel(packing.packageType, lang)}
                           {packing.length ? ` · ${packing.length}×${packing.width}×${packing.height}` : ''}
                         </span>
                       )
@@ -239,6 +242,13 @@ export default function GeneratorPanel({ catalog, settings, lines, setLines, con
               </div>
             </div>
             <div className="actions">
+              <div className="lang-toggle" role="group" aria-label="Langue du document">
+                {(['fr', 'en'] as const).map((l) => (
+                  <button key={l} className={lang === l ? 'on' : ''} onClick={() => setSettings({ ...settings, lang: l })}>
+                    {l.toUpperCase()}
+                  </button>
+                ))}
+              </div>
               <button className="btn primary" disabled={!!busy} onClick={() => run('pdf', () => exportPackingListPdf(pl, settings))}>
                 {busy === 'pdf' ? '…' : 'PDF'}
               </button>

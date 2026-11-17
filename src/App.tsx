@@ -3,6 +3,7 @@ import type { CatalogItem, HistoryEntry, RequestLine, Settings } from './types';
 import { usePersistent } from './lib/storage';
 import { mergeCatalog } from './lib/normalize';
 import { DEFAULT_ACCENT } from './lib/exporters';
+import { LangContext } from './lib/i18n';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
@@ -67,6 +68,7 @@ export default function App() {
   ];
 
   return (
+    <LangContext.Provider value={settings.lang ?? 'fr'}>
     <div className="app">
       <header className="topbar">
         <div className="brand">
@@ -94,6 +96,7 @@ export default function App() {
           <GeneratorPanel
             catalog={catalog}
             settings={settings}
+            setSettings={setSettings}
             lines={lines}
             setLines={setLines}
             consolidate={consolidate}
@@ -120,5 +123,6 @@ export default function App() {
 
       {toastMsg && <div className="toast">{toastMsg}</div>}
     </div>
+    </LangContext.Provider>
   );
 }

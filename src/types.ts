@@ -160,6 +160,8 @@ export interface Settings {
   logo: string;
   /** palette de couleurs des documents */
   accent: string;
+  /** langue des documents et des libellés d'emballage */
+  lang?: 'fr' | 'en';
 }
 
 /** PL générée, conservée dans l'historique */

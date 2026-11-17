@@ -1,10 +1,12 @@
 import type { PackingList } from '../types';
 import BoxIcon from './BoxIcon';
+import { packLabel, useLang } from '../lib/i18n';
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Aperçu du colisage et des articles (mis à jour en direct) */
 export default function PackingListView({ pl }: { pl: PackingList }) {
+  const lang = useLang();
   return (
     <div className="pl-view">
       <section>
@@ -19,7 +21,7 @@ export default function PackingListView({ pl }: { pl: PackingList }) {
                 <div>
                   <div className="pkg-no">Colis {p.no}</div>
                   <div className="pkg-type">
-                    {p.type}
+                    {packLabel(p.type, lang)}
                     {p.basis === 'grouped' && <span className="chip chip-accent">groupé</span>}
                     {p.basis === 'partial' && <span className="chip chip-warn">incomplet</span>}
                   </div>

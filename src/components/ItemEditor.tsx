@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
+import { packLabel, useLang } from '../lib/i18n';
 
 interface Props {
   item: CatalogItem;
@@ -34,6 +35,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
   const [draft, setDraft] = useState<CatalogItem>(item);
   const [packChanged, setPackChanged] = useState(false);
   const variants = variantsOf(item);
+  const lang = useLang();
 
   const set = (f: Field, v: string) => {
     setDraft({ ...draft, [f.key]: f.num ? Number(v.replace(',', '.')) || 0 : v });
@@ -107,14 +109,14 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
                     <BoxIcon l={v.length} w={v.width} h={v.height} size={34} />
                     <div className="variant-info">
                       <b>
-                        {v.qtyPerPackage} / {v.packageType}
+                        {v.qtyPerPackage} / {packLabel(v.packageType, lang)}
                       </b>
                       <span>
                         {v.length ? `${v.length}×${v.width}×${v.height} cm` : `${v.volumePerPackage} m³`} · brut{' '}
                         {v.grossWeightPerUnit} kg/u
                       </span>
                       <span className="hint">
-                        vu {v.count}× {v.mixed ? '· colis mixte' : ''} · {v.source}
+                        code « {v.packageType} » · vu {v.count}× {v.mixed ? '· colis mixte' : ''} · {v.source}
                       </span>
                     </div>
                     <button

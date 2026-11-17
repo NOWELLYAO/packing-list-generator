@@ -92,6 +92,26 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
+        <h4>Langue des documents</h4>
+        <p className="hint">
+          PDF, Excel et libellés d'emballage (PALPLATE → Palette à plateau / Pallet with top plate). Les désignations des
+          articles restent celles du fournisseur.
+        </p>
+        <div className="segmented">
+          {(
+            [
+              ['fr', 'Français'],
+              ['en', 'English'],
+            ] as const
+          ).map(([l, label]) => (
+            <button key={l} className={(settings.lang ?? 'fr') === l ? 'on' : ''} onClick={() => setSettings({ ...settings, lang: l })}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
         <h4>Couleur des documents</h4>
         <div className="swatches">
           {PRESETS.map((c) => (

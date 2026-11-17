@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
+import { DOC, packLabel, type Lang } from './i18n';
 
 /* ------------------------------------------------------------------ */
 /* Outils communs                                                      */
@@ -9,11 +10,13 @@ export const DEFAULT_ACCENT = '#0B4F8A';
 
 const fileName = (pl: PackingList) =>
   `packing_list_${pl.date.replace(/-/g, '')}${pl.reference ? '_' + pl.reference.replace(/[^\w-]+/g, '_') : ''}`;
-const frDate = (d: string) => new Date(d).toLocaleDateString('fr-FR');
-const nf = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/\u202f/g, ' ');
+const fmtDate = (d: string, lang: Lang = 'fr') => new Date(d).toLocaleDateString(DOC[lang].locale);
+let numLocale = 'fr-FR';
+const nf = (n: number, d = 2) => n.toLocaleString(numLocale, { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/[\u202f\u00a0]/g, ' ');
 const dimsOf = (p: PLPackage) => (p.length ? `${p.length} × ${p.width} × ${p.height}` : '—');
 const contentsOf = (p: PLPackage) => p.contents.map((c) => `${c.code} × ${c.quantity}`).join('\n');
-const basisLabel = (p: PLPackage) => (p.basis === 'grouped' ? ' (groupé)' : p.basis === 'partial' ? ' (incomplet)' : '');
+const basisLabel = (p: PLPackage, lang: Lang) => (p.basis === 'grouped' ? '' : p.basis === 'partial' ? ` (${DOC[lang].partial})` : '');
+const typeOf = (p: PLPackage, lang: Lang) => packLabel(p.type, lang) + basisLabel(p, lang);
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = (hex || DEFAULT_ACCENT).replace('#', '');
@@ -49,6 +52,9 @@ function download(blob: Blob, name: string) {
 export async function buildPackingListPdf(pl: PackingList, settings: Settings): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
+  const lang: Lang = settings.lang ?? 'fr';
+  const T = DOC[lang];
+  numLocale = T.locale;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -87,19 +93,19 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(...accent);
-  doc.text('PACKING LIST', W - M, 19, { align: 'right' });
+  doc.text(T.title, W - M, 19, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(...muted);
-  doc.text(`Date : ${frDate(pl.date)}`, W - M, 25.5, { align: 'right' });
-  if (pl.reference) doc.text(`Réf. : ${pl.reference}`, W - M, 30.5, { align: 'right' });
+  doc.text(`${T.date} : ${fmtDate(pl.date, lang)}`, W - M, 25.5, { align: 'right' });
+  if (pl.reference) doc.text(`${T.ref} : ${pl.reference}`, W - M, 30.5, { align: 'right' });
 
   // Cartes de synthèse
   const cards: [string, string][] = [
-    ['COLIS', String(t.packages)],
-    ['POIDS NET', `${nf(t.netWeight)} kg`],
-    ['POIDS BRUT', `${nf(t.grossWeight)} kg`],
-    ['VOLUME', `${nf(t.volume, 3)} m3`],
+    [T.packages.toUpperCase(), String(t.packages)],
+    [T.net.toUpperCase(), `${nf(t.netWeight)} kg`],
+    [T.gross.toUpperCase(), `${nf(t.grossWeight)} kg`],
+    [T.volume.toUpperCase(), `${nf(t.volume, 3)} m3`],
   ];
   const top = Math.max(38, leftY + 4);
   const gap = 4;
@@ -139,13 +145,13 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     margin: { left: M, right: M, top: 14, bottom: 16 },
   };
 
-  let y = section('COLISAGE', top + 27);
+  let y = section(T.packing, top + 27);
   autoTable(doc, {
     ...tableStyle,
     startY: y,
-    head: [['N°', 'Emballage', 'Dimensions L × l × H (cm)', 'Vol. (m3)', 'Net (kg)', 'Brut (kg)', 'Contenu']],
-    body: pl.packages.map((p) => [String(p.no), p.type + basisLabel(p), dimsOf(p), nf(p.volume, 3), nf(p.netWeight), nf(p.grossWeight), contentsOf(p)]),
-    foot: [['', `${t.packages} colis`, '', nf(t.volume, 3), nf(t.netWeight), nf(t.grossWeight), '']],
+    head: [[T.no, T.packType, T.dims, T.vol, T.netKg, T.grossKg, T.contents]],
+    body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), dimsOf(p), nf(p.volume, 3), nf(p.netWeight), nf(p.grossWeight), contentsOf(p)]),
+    foot: [['', T.nPackages(t.packages), '', nf(t.volume, 3), nf(t.netWeight), nf(t.grossWeight), '']],
     columnStyles: {
       0: { halign: 'center', cellWidth: 9 },
       1: { cellWidth: 34 },
@@ -162,11 +168,11 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     doc.addPage();
     y = 18;
   }
-  y = section('ARTICLES', y);
+  y = section(T.articles, y);
   autoTable(doc, {
     ...tableStyle,
     startY: y,
-    head: [['N°', 'Code / PN', 'Désignation', 'Qté', 'Colis N°', 'Net (kg)', 'Brut (kg)', 'Orig.']],
+    head: [[T.no, T.codePn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.origin]],
     body: pl.lines.map((l) => [
       String(l.lineNo),
       l.code === l.pn || !l.pn ? l.code : `${l.code}\n${l.pn}`,
@@ -198,8 +204,8 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...muted);
-    doc.text(`${settings.companyName ? settings.companyName + ' — ' : ''}Packing List du ${frDate(pl.date)}`, M, H - 6.5);
-    doc.text(`Page ${i} / ${pages}`, W - M, H - 6.5, { align: 'right' });
+    doc.text(`${settings.companyName ? settings.companyName + ' — ' : ''}${T.footer(fmtDate(pl.date, lang))}`, M, H - 6.5);
+    doc.text(T.page(i, pages), W - M, H - 6.5, { align: 'right' });
   }
   return doc.output('blob');
 }
@@ -231,13 +237,15 @@ export async function sharePackingListPdf(pl: PackingList, settings: Settings): 
 
 export async function exportPackingListXlsx(pl: PackingList, settings: Settings) {
   const ExcelJS = (await import('exceljs')).default;
+  const lang: Lang = settings.lang ?? 'fr';
+  const T = DOC[lang];
   const wb = new ExcelJS.Workbook();
   wb.creator = settings.companyName || 'PL Generator';
   wb.created = new Date();
   const ws = wb.addWorksheet('Packing List', {
     pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
     views: [{ showGridLines: false }],
-    headerFooter: { oddFooter: '&L&8Packing List&R&8Page &P / &N' },
+    headerFooter: { oddFooter: lang === 'fr' ? '&L&8Packing List&R&8Page &P / &N' : '&L&8Packing List&R&8Page &P of &N' },
   });
   const accent = (settings.accent || DEFAULT_ACCENT).replace('#', '').toUpperCase();
   const [r, g, b] = tint(hexToRgb(settings.accent), 0.9);
@@ -267,16 +275,16 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     }
   }
   ws.mergeCells('F2:I2');
-  Object.assign(ws.getCell('F2'), { value: 'PACKING LIST' });
+  ws.getCell('F2').value = T.title;
   ws.getCell('F2').font = { name: 'Calibri', size: 22, bold: true, color: { argb: 'FF' + accent } };
   ws.getCell('F2').alignment = { horizontal: 'right', vertical: 'middle' };
   ws.mergeCells('F3:I3');
-  ws.getCell('F3').value = `Date : ${frDate(pl.date)}`;
+  ws.getCell('F3').value = `${T.date} : ${fmtDate(pl.date, lang)}`;
   ws.getCell('F3').alignment = { horizontal: 'right' };
   ws.getCell('F3').font = { size: 10, color: { argb: 'FF6E7887' } };
   if (pl.reference) {
     ws.mergeCells('F4:I4');
-    ws.getCell('F4').value = `Réf. : ${pl.reference}`;
+    ws.getCell('F4').value = `${T.ref} : ${pl.reference}`;
     ws.getCell('F4').alignment = { horizontal: 'right' };
     ws.getCell('F4').font = { size: 10, color: { argb: 'FF6E7887' } };
   }
@@ -289,10 +297,10 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   // Synthèse
   const sumRow = 7;
   const cards: [string, string | number, string, string][] = [
-    ['Colis', t.packages, '0', 'A7:B7'],
-    ['Poids net (kg)', t.netWeight, '#,##0.00', 'C7:C7'],
-    ['Poids brut (kg)', t.grossWeight, '#,##0.00', 'D7:D7'],
-    ['Volume (m³)', t.volume, '0.000', 'E7:G7'],
+    [T.packages, t.packages, '0', 'A7:B7'],
+    [T.netKgLong, t.netWeight, '#,##0.00', 'C7:C7'],
+    [T.grossKgLong, t.grossWeight, '#,##0.00', 'D7:D7'],
+    [T.volXl, t.volume, '0.000', 'E7:G7'],
   ];
   ws.getRow(sumRow).height = 20;
   ws.getRow(sumRow + 1).height = 30;
@@ -351,19 +359,19 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
 
   // Colisage
   let row = 10;
-  sectionTitle(row, 'COLISAGE');
+  sectionTitle(row, T.packing);
   row++;
-  header(row, ['N°', 'Emballage', 'L × l × H (cm)', 'Contenu', 'Volume (m³)', 'Net (kg)', 'Brut (kg)']);
+  header(row, [T.no, T.packType, T.dimsShort, T.contents, T.volXl, T.netKg, T.grossKg]);
   const pkgAlign: HAlign[] = ['center', 'left', 'center', 'left', 'right', 'right', 'right'];
   const pkgStart = row + 1;
   pl.packages.forEach((p, i) => {
     row++;
-    bodyRow(row, [p.no, p.type + basisLabel(p), dimsOf(p), contentsOf(p), p.volume, p.netWeight, p.grossWeight], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], i % 2 === 1, pkgAlign);
+    bodyRow(row, [p.no, typeOf(p, lang), dimsOf(p), contentsOf(p), p.volume, p.netWeight, p.grossWeight], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], i % 2 === 1, pkgAlign);
     ws.getRow(row).height = Math.max(18, 14 * p.contents.length);
   });
   row++;
   const totRow = row;
-  bodyRow(row, ['', `${t.packages} colis`, '', 'TOTAL', 0, 0, 0], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], false, pkgAlign);
+  bodyRow(row, ['', T.nPackages(t.packages), '', T.total, 0, 0, 0], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], false, pkgAlign);
   // formules : le total reste juste si l'utilisateur modifie une ligne dans Excel
   ws.getCell(totRow, 5).value = { formula: `SUM(E${pkgStart}:E${totRow - 1})`, result: t.volume };
   ws.getCell(totRow, 6).value = { formula: `SUM(F${pkgStart}:F${totRow - 1})`, result: t.netWeight };
@@ -376,9 +384,9 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
 
   // Articles
   row += 2;
-  sectionTitle(row, 'ARTICLES');
+  sectionTitle(row, T.articles);
   row++;
-  header(row, ['N°', 'Code article', 'PN', 'Désignation', 'Qté', 'Colis N°', 'Net (kg)', 'Brut (kg)', 'Origine']);
+  header(row, [T.no, T.code, T.pn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.originLong]);
   pl.lines.forEach((l, i) => {
     row++;
     bodyRow(row, [l.lineNo, l.code, l.pn, l.description, l.quantity, l.cases, l.netWeight, l.grossWeight, l.origin], [undefined, '@', '@', undefined, '0.###', undefined, '#,##0.00', '#,##0.00', undefined], i % 2 === 1, ['center', 'left', 'left', 'left', 'right', 'center', 'right', 'right', 'center']);

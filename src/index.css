@@ -195,6 +195,9 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-
 .actions { display: flex; gap: 0.45rem; }
 .summary-bar .btn { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.08); color: #fff; }
 .summary-bar .btn.primary { background: var(--accent); border-color: var(--accent); }
+.lang-toggle { display: inline-flex; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px; padding: 2px; }
+.lang-toggle button { border: 0; background: transparent; color: #a9b4c4; font: inherit; font-size: 0.78rem; font-weight: 700; padding: 0 0.6rem; border-radius: 8px; cursor: pointer; }
+.lang-toggle button.on { background: #fff; color: var(--ink); }
 
 /* ---------- Aperçu : colis ---------- */
 .pl-view { display: flex; flex-direction: column; gap: 1.4rem; }
@@ -357,6 +360,7 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
   .kpis { justify-content: space-between; gap: 0.5rem; }
   .kpis b { font-size: 0.98rem; }
   .actions .btn { flex: 1; }
+  .lang-toggle button { padding: 0 0.5rem; }
   .item-row { grid-template-columns: auto 1fr; }
   .item-pack { grid-column: 2; align-items: flex-start; }
   .item-flags { grid-column: 2; justify-content: flex-start; }

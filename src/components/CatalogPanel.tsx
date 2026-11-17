@@ -5,6 +5,7 @@ import { exportCatalogXlsx } from '../lib/exporters';
 import { mergeCatalog, uid } from '../lib/normalize';
 import ItemEditor from './ItemEditor';
 import BoxIcon from './BoxIcon';
+import { packLabel, useLang } from '../lib/i18n';
 
 interface Props {
   catalog: CatalogItem[];
@@ -23,6 +24,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [limit, setLimit] = useState(PAGE);
   const [editing, setEditing] = useState<{ item: CatalogItem; isNew: boolean } | null>(null);
   const backupRef = useRef<HTMLInputElement>(null);
+  const lang = useLang();
 
   const filtered = useMemo(() => {
     const tokens = norm(q).split(' ').filter(Boolean);
@@ -181,7 +183,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               </div>
               <div className="item-pack">
                 <span>
-                  {c.qtyPerPackage} / {c.packageType}
+                  {c.qtyPerPackage} / {packLabel(c.packageType, lang)}
                 </span>
                 <span className="hint">
                   {c.length ? `${c.length}×${c.width}×${c.height}` : c.volumePerPackage ? `${c.volumePerPackage} m³` : '—'} ·{' '}
