@@ -10,6 +10,7 @@ import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
 import { packLabel } from '../lib/i18n';
+import { useSafety } from '../lib/safety';
 
 interface Props {
   catalog: CatalogItem[];
@@ -29,6 +30,7 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const lang = settings.lang ?? 'fr';
+  const { ask, notify } = useSafety();
   const fileRef = useRef<HTMLInputElement>(null);
   const active = lines.filter((l) => (l.code || l.pn) && l.quantity > 0);
 
@@ -46,7 +48,11 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
     } else setLines([...lines, { id: uid(), code, pn, quantity }]);
   };
   const setQty = (id: string, q: number) => setLines(lines.map((l) => (l.id === id ? { ...l, quantity: Math.max(0, q) } : l)));
-  const remove = (id: string) => setLines(lines.filter((l) => l.id !== id));
+  const remove = (id: string) => {
+    const before = lines;
+    setLines(lines.filter((l) => l.id !== id));
+    notify('Article retiré', () => setLines(before));
+  };
 
   const addPasted = () => {
     const parsed = parsePastedRequests(paste);
@@ -205,7 +211,20 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
           />
         </details>
         {lines.length > 0 && (
-          <button className="btn ghost danger" onClick={() => confirm('Retirer tous les articles ?') && setLines([])}>
+          <button
+            className="btn ghost danger"
+            onClick={async () => {
+              const ok = await ask({
+                title: 'Retirer tous les articles ?',
+                message: `Les ${lines.length} lignes de la PL en cours seront retirées (la base d'articles n'est pas touchée).`,
+                confirmLabel: 'Tout retirer',
+              });
+              if (!ok) return;
+              const before = lines;
+              setLines([]);
+              notify('PL vidée', () => setLines(before));
+            }}
+          >
             Tout effacer
           </button>
         )}

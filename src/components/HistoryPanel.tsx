@@ -1,4 +1,5 @@
 import type { HistoryEntry } from '../types';
+import { useSafety } from '../lib/safety';
 
 interface Props {
   history: HistoryEntry[];
@@ -9,6 +10,7 @@ interface Props {
 const fmt = (n: number, d = 1) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 export default function HistoryPanel({ history, setHistory, onOpen }: Props) {
+  const { ask, notify } = useSafety();
   return (
     <div className="page">
       <div className="page-head">
@@ -17,7 +19,21 @@ export default function HistoryPanel({ history, setHistory, onOpen }: Props) {
           <p className="hint">Chaque PL exportée ou partagée est conservée ici ({history.length}).</p>
         </div>
         {history.length > 0 && (
-          <button className="btn ghost danger" onClick={() => confirm("Effacer tout l'historique ?") && setHistory([])}>
+          <button
+            className="btn ghost danger"
+            onClick={async () => {
+              const ok = await ask({
+                title: "Effacer tout l'historique ?",
+                message: `Les ${history.length} PL enregistrées seront effacées de cet appareil.`,
+                confirmLabel: 'Effacer',
+                typeToConfirm: history.length > 5 ? 'EFFACER' : undefined,
+              });
+              if (!ok) return;
+              const before = history;
+              setHistory([]);
+              notify('Historique effacé', () => setHistory(before));
+            }}
+          >
             Tout effacer
           </button>
         )}
@@ -61,7 +77,15 @@ export default function HistoryPanel({ history, setHistory, onOpen }: Props) {
                   <button className="btn small" onClick={() => onOpen(h)}>
                     Rouvrir
                   </button>
-                  <button className="icon-btn" aria-label="Supprimer" onClick={() => setHistory(history.filter((x) => x.id !== h.id))}>
+                  <button
+                    className="icon-btn"
+                    aria-label="Supprimer"
+                    onClick={() => {
+                      const before = history;
+                      setHistory(history.filter((x) => x.id !== h.id));
+                      notify('PL retirée de l’historique', () => setHistory(before));
+                    }}
+                  >
                     ✕
                   </button>
                 </div>

@@ -34,6 +34,7 @@ const PACK: Field[] = [
 export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: Props) {
   const [draft, setDraft] = useState<CatalogItem>(item);
   const [packChanged, setPackChanged] = useState(false);
+  const [error, setError] = useState('');
   const variants = variantsOf(item);
   const lang = useLang();
 
@@ -54,7 +55,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
   );
 
   const save = () => {
-    if (!draft.code.trim() && !draft.pn.trim()) return alert('Renseignez un code article ou un PN.');
+    if (!draft.code.trim() && !draft.pn.trim()) return setError('Renseignez un code article ou un PN.');
     onSave({ ...draft, manual: draft.manual || packChanged, updatedAt: new Date().toISOString() });
   };
 
@@ -135,9 +136,10 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
           )}
         </div>
 
+        {error && <div className="form-error">{error}</div>}
         <footer className="modal-foot">
           {!isNew && (
-            <button className="btn ghost danger" onClick={() => confirm('Supprimer cet article ?') && onDelete()}>
+            <button className="btn ghost danger" onClick={onDelete}>
               Supprimer
             </button>
           )}

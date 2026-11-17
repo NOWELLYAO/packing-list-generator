@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogItem, HistoryEntry, RequestLine, Settings } from './types';
 import { usePersistent } from './lib/storage';
 import { mergeCatalog } from './lib/normalize';
 import { DEFAULT_ACCENT } from './lib/exporters';
 import { LangContext } from './lib/i18n';
+import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
+import ConfirmDialog from './components/ConfirmDialog';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
@@ -29,16 +31,28 @@ export default function App() {
   const [lines, setLines] = usePersistent<RequestLine[]>('requests', []);
   const [consolidate, setConsolidate] = usePersistent<boolean>('consolidate', true);
   const [tab, setTab] = useState<Tab>(catalog.length ? 'generate' : 'import');
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ msg: string; undo?: () => void } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
+  const [confirmState, setConfirmState] = useState<{ o: ConfirmOptions; resolve: (b: boolean) => void } | null>(null);
   const latest = useRef(catalog);
   latest.current = catalog;
 
-  const toast = (msg: string) => {
-    setToastMsg(msg);
+  const notify = useCallback((msg: string, undo?: () => void) => {
+    setToastMsg({ msg, undo });
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToastMsg(null), 2600);
-  };
+    // plus de temps quand une annulation est possible
+    toastTimer.current = window.setTimeout(() => setToastMsg(null), undo ? 10000 : 2600);
+  }, []);
+  const toast = (msg: string) => notify(msg);
+  const ask = useCallback((o: ConfirmOptions) => new Promise<boolean>((resolve) => setConfirmState({ o, resolve })), []);
+  const safety = useMemo<Safety>(() => ({ ask, notify }), [ask, notify]);
+  const answer = useCallback(
+    (ok: boolean) => {
+      confirmState?.resolve(ok);
+      setConfirmState(null);
+    },
+    [confirmState],
+  );
 
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', settings.accent || DEFAULT_ACCENT);
@@ -69,6 +83,7 @@ export default function App() {
 
   return (
     <LangContext.Provider value={settings.lang ?? 'fr'}>
+    <SafetyContext.Provider value={safety}>
     <div className="app">
       <header className="topbar">
         <div className="brand">
@@ -121,8 +136,26 @@ export default function App() {
         {tab === 'settings' && <SettingsPanel settings={settings} setSettings={setSettings} toast={toast} />}
       </main>
 
-      {toastMsg && <div className="toast">{toastMsg}</div>}
+      {toastMsg && (
+        <div className="toast">
+          <span>{toastMsg.msg}</span>
+          {toastMsg.undo && (
+            <button
+              className="toast-undo"
+              onClick={() => {
+                toastMsg.undo?.();
+                setToastMsg(null);
+                notify('Action annulée');
+              }}
+            >
+              Annuler
+            </button>
+          )}
+        </div>
+      )}
+      {confirmState && <ConfirmDialog options={confirmState.o} onAnswer={answer} />}
     </div>
+    </SafetyContext.Provider>
     </LangContext.Provider>
   );
 }

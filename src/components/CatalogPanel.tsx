@@ -6,6 +6,7 @@ import { mergeCatalog, uid } from '../lib/normalize';
 import ItemEditor from './ItemEditor';
 import BoxIcon from './BoxIcon';
 import { packLabel, useLang } from '../lib/i18n';
+import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
 
 interface Props {
   catalog: CatalogItem[];
@@ -25,6 +26,9 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [editing, setEditing] = useState<{ item: CatalogItem; isNew: boolean } | null>(null);
   const backupRef = useRef<HTMLInputElement>(null);
   const lang = useLang();
+  const { ask, notify } = useSafety();
+  const [snapKey, setSnapKey] = useState(0);
+  const snapshots = useMemo(() => listSnapshots(), [snapKey, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     const tokens = norm(q).split(' ').filter(Boolean);
@@ -39,6 +43,37 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   }, [catalog, q, filter]);
   const toCheck = useMemo(() => catalog.filter(needsCheck).length, [catalog]);
   const withVariants = useMemo(() => catalog.filter((c) => (c.variants?.length ?? 0) > 1).length, [catalog]);
+
+  const clearAll = async () => {
+    const ok = await ask({
+      title: 'Vider toute la base ?',
+      message: `Les ${catalog.length} articles seront supprimés de cet appareil. Une sauvegarde automatique est faite avant, et vous pourrez annuler juste après.`,
+      confirmLabel: 'Vider la base',
+      typeToConfirm: 'VIDER',
+    });
+    if (!ok) return;
+    const before = catalog;
+    snapshotCatalog(before, 'avant « Vider la base »');
+    setSnapKey((k) => k + 1);
+    setCatalog([]);
+    notify(`${before.length} articles supprimés`, () => setCatalog(before));
+  };
+
+  const restoreSnapshot = async (id: string) => {
+    const s = listSnapshots().find((x) => x.id === id);
+    if (!s) return;
+    const ok = await ask({
+      title: 'Restaurer cette sauvegarde ?',
+      message: `La base actuelle (${catalog.length} articles) sera remplacée par la sauvegarde du ${new Date(s.createdAt).toLocaleString('fr-FR')} (${s.catalog.length} articles). La base actuelle est elle-même sauvegardée avant.`,
+      confirmLabel: 'Restaurer',
+    });
+    if (!ok) return;
+    const before = catalog;
+    snapshotCatalog(before, 'avant restauration');
+    setSnapKey((k) => k + 1);
+    setCatalog(s.catalog);
+    notify(`Base restaurée (${s.catalog.length} articles)`, () => setCatalog(before));
+  };
 
   const save = (item: CatalogItem) => {
     const exists = catalog.some((c) => c.id === item.id);
@@ -71,9 +106,12 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
         setCatalog(data);
         return toast(`${data.length} articles chargés`);
       }
+      const before = catalog;
+      snapshotCatalog(before, 'avant chargement JSON');
+      setSnapKey((k) => k + 1);
       const r = mergeCatalog(catalog, data);
       setCatalog(r.catalog);
-      toast(`${r.added} ajoutés, ${r.updated} complétés`);
+      notify(`${r.added} ajoutés, ${r.updated} complétés`, () => setCatalog(before));
     } catch {
       toast('Fichier de base invalide');
     }
@@ -107,19 +145,23 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           />
           <details className="menu">
             <summary className="btn ghost">Plus…</summary>
-            <div className="menu-list">
+            <div className="menu-list" onClick={(e) => ((e.currentTarget.closest('details') as HTMLDetailsElement).open = false)}>
               <button onClick={downloadBackup} disabled={!catalog.length}>
                 Sauvegarder la base (JSON)
               </button>
               <button onClick={() => exportCatalogXlsx(catalog)} disabled={!catalog.length}>
                 Exporter en Excel
               </button>
-              <button
-                className="danger"
-                disabled={!catalog.length}
-                onClick={() => confirm('Vider complètement la base d’articles ?') && setCatalog([])}
-              >
-                Vider la base
+              {snapshots.length > 0 && <div className="menu-sep">Sauvegardes automatiques</div>}
+              {snapshots.map((s) => (
+                <button key={s.id} onClick={() => restoreSnapshot(s.id)}>
+                  Restaurer : {s.catalog.length} articles · {new Date(s.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                  <small className="hint"> ({s.reason})</small>
+                </button>
+              ))}
+              <div className="menu-sep danger">Zone sensible</div>
+              <button className="danger" disabled={!catalog.length} onClick={() => void clearAll()}>
+                Vider la base…
               </button>
             </div>
           </details>
@@ -211,10 +253,18 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           item={editing.item}
           isNew={editing.isNew}
           onSave={save}
-          onDelete={() => {
-            setCatalog(catalog.filter((c) => c.id !== editing.item.id));
+          onDelete={async () => {
+            const it = editing.item;
+            const ok = await ask({
+              title: 'Supprimer cet article ?',
+              message: `« ${it.description || it.code} » (${it.code}) et ses ${it.variants?.length ?? 1} emballage(s) enregistré(s) seront retirés de la base.`,
+              confirmLabel: 'Supprimer',
+            });
+            if (!ok) return;
+            const before = catalog;
+            setCatalog(catalog.filter((c) => c.id !== it.id));
             setEditing(null);
-            toast('Article supprimé');
+            notify('Article supprimé', () => setCatalog(before));
           }}
           onClose={() => setEditing(null)}
         />

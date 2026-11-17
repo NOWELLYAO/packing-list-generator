@@ -372,3 +372,27 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
   .toast { bottom: auto; top: calc(0.8rem + env(safe-area-inset-top)); }
   .brand small { display: none; }
 }
+
+/* ---------- Confirmations, annulation ---------- */
+.confirm-backdrop { z-index: 70; }
+.modal.confirm { width: min(420px, 100%); padding: 1.4rem 1.4rem 1.2rem; text-align: center; align-items: center; gap: 0.4rem; }
+.confirm-icon { width: 46px; height: 46px; border-radius: 50%; background: var(--danger-soft); color: var(--danger); display: grid; place-items: center; font-weight: 800; font-size: 1.4rem; margin-bottom: 0.3rem; }
+.confirm h2 { font-size: 1.15rem; }
+.confirm-msg { color: var(--ink-2); font-size: 0.92rem; margin: 0.2rem 0 0.6rem; line-height: 1.45; }
+.confirm-type { width: 100%; text-align: left; margin-bottom: 0.4rem; }
+.confirm-type span { color: var(--ink-2); font-size: 0.85rem; }
+.confirm-type b { color: var(--danger); letter-spacing: 0.08em; }
+.confirm-type input { text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; text-align: center; }
+.confirm-actions { display: flex; gap: 0.6rem; width: 100%; margin-top: 0.4rem; }
+.confirm-actions .btn { flex: 1; }
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-solid:disabled { opacity: 0.35; }
+.toast { display: flex; align-items: center; gap: 0.9rem; }
+.toast-undo { border: 0; background: transparent; color: #8ec5ff; font: inherit; font-weight: 700; cursor: pointer; padding: 0.2rem 0.3rem; text-transform: uppercase; font-size: 0.82rem; letter-spacing: 0.04em; }
+.menu-sep { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0.6rem 0.8rem 0.2rem; border-top: 1px solid var(--line); margin-top: 0.3rem; }
+.menu-sep.danger { color: var(--danger); }
+.form-error { margin: 0 1.2rem; background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 0.55rem 0.8rem; font-size: 0.88rem; }
+@media (max-width: 760px) {
+  .confirm-backdrop { place-items: center; padding: 1rem; }
+  .modal.confirm { border-radius: 18px; }
+}

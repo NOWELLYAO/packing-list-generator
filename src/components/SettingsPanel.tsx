@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { Settings } from '../types';
 import { DEFAULT_ACCENT } from '../lib/exporters';
+import { useSafety } from '../lib/safety';
 
 interface Props {
   settings: Settings;
@@ -34,6 +35,7 @@ function resizeImage(file: File): Promise<string> {
 
 export default function SettingsPanel({ settings, setSettings, toast }: Props) {
   const logoRef = useRef<HTMLInputElement>(null);
+  const { notify } = useSafety();
   return (
     <div className="page narrow">
       <div className="page-head">
@@ -57,7 +59,14 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
               {settings.logo ? 'Changer' : 'Choisir une image'}
             </button>
             {settings.logo && (
-              <button className="btn ghost danger" onClick={() => setSettings({ ...settings, logo: '' })}>
+              <button
+                className="btn ghost danger"
+                onClick={() => {
+                  const before = settings;
+                  setSettings({ ...settings, logo: '' });
+                  notify('Logo retiré', () => setSettings(before));
+                }}
+              >
                 Retirer
               </button>
             )}
