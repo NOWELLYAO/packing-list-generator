@@ -3,6 +3,7 @@ import type { CatalogItem } from '../types';
 import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
 import { readUserNumber } from '../lib/validate';
+import { itemIssues } from '../lib/quality';
 import InfoTip from './InfoTip';
 import { packLabel, useLang } from '../lib/i18n';
 
@@ -109,6 +110,21 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
         </header>
 
         <div className="modal-body">
+          {itemIssues(item).length > 0 && !item.manual && (
+            <div className={`quality ${itemIssues(item).some((i) => i.severity === 'error') ? 'error' : ''}`}>
+              <b>Contrôle qualité</b>
+              <ul>
+                {itemIssues(item).map((i) => (
+                  <li key={i.code}>
+                    {i.severity === 'error' ? '⛔' : '⚠️'} {i.message}
+                  </li>
+                ))}
+              </ul>
+              <span className="hint">
+                Corrigez les valeurs ci-dessous avec les mesures réelles : la fiche passera en « corrigée à la main » et sera prioritaire.
+              </span>
+            </div>
+          )}
           <h4>Identification</h4>
           <div className="form-grid">{IDENT.map(input)}</div>
 

@@ -9,6 +9,8 @@ import BoxIcon from './BoxIcon';
 import { packLabel, useLang } from '../lib/i18n';
 import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
 import { sanitizeCatalog } from '../lib/validate';
+import { hasError, itemIssues, needsCheck } from '../lib/quality';
+import { downloadCatalogBackup } from '../lib/backup';
 
 interface Props {
   catalog: CatalogItem[];
@@ -16,10 +18,9 @@ interface Props {
   toast: (msg: string) => void;
 }
 
-type Filter = 'all' | 'check' | 'variants';
+type Filter = 'all' | 'errors' | 'check' | 'variants';
 const PAGE = 60;
 
-const needsCheck = (c: CatalogItem) => !!c.mixed || !(c.length || c.volumePerPackage) || !c.grossWeightPerUnit;
 
 export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [q, setQ] = useState('');
@@ -35,7 +36,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const filtered = useMemo(() => {
     const tokens = norm(q).split(' ').filter(Boolean);
     return catalog
-      .filter((c) => (filter === 'check' ? needsCheck(c) : filter === 'variants' ? (c.variants?.length ?? 0) > 1 : true))
+      .filter((c) => (filter === 'errors' ? hasError(c) : filter === 'check' ? needsCheck(c) : filter === 'variants' ? (c.variants?.length ?? 0) > 1 : true))
       .filter((c) => {
         if (!tokens.length) return true;
         const hay = norm(`${c.code} ${c.pn} ${c.description}`);
@@ -44,6 +45,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
       .sort((a, b) => String(a.description || a.code || '').localeCompare(String(b.description || b.code || '')));
   }, [catalog, q, filter]);
   const toCheck = useMemo(() => catalog.filter(needsCheck).length, [catalog]);
+  const errorsCount = useMemo(() => catalog.filter(hasError).length, [catalog]);
   const withVariants = useMemo(() => catalog.filter((c) => (c.variants?.length ?? 0) > 1).length, [catalog]);
 
   const clearAll = async () => {
@@ -91,12 +93,8 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   });
 
   const downloadBackup = () => {
-    const blob = new Blob([JSON.stringify(catalog)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `base_articles_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadCatalogBackup(catalog);
+    toast('Base sauvegardée : gardez le fichier dans vos Fichiers ou sur un cloud');
   };
 
   const restoreBackup = async (f: File | undefined) => {
@@ -188,6 +186,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           {(
             [
               ['all', 'Tous'],
+              ...(errorsCount ? ([['errors', `Données suspectes (${errorsCount})`]] as [Filter, string][]) : []),
               ['check', `À vérifier (${toCheck})`],
               ['variants', `Multi-emballages (${withVariants})`],
             ] as [Filter, string][]
@@ -239,7 +238,13 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               <div className="item-flags">
                 {(c.variants?.length ?? 0) > 1 && <span className="chip">{c.variants!.length} emb.</span>}
                 {c.manual && <span className="chip chip-accent">manuel</span>}
-                {needsCheck(c) && <span className="chip chip-warn">à vérifier</span>}
+                {hasError(c) ? (
+                  <span className="chip chip-danger" title={itemIssues(c).filter((i) => i.severity === 'error').map((i) => i.message).join(' ; ')}>
+                    données suspectes
+                  </span>
+                ) : (
+                  needsCheck(c) && <span className="chip chip-warn">à vérifier</span>
+                )}
               </div>
             </button>
           ))}

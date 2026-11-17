@@ -128,3 +128,29 @@ Total HU/Weight/Volume: 2 1.729,000 KG`;
     expect(items[1].item.volumePerPackage).toBeCloseTo(0.168);
   });
 });
+
+describe('contrôle qualité des données (point 9)', () => {
+  it('signale une densité impossible et un emballage non pesé, pas un article normal', async () => {
+    const { itemIssues, hasError } = await import('../lib/quality');
+    const { PUMP, PART_A } = await import('./fixtures');
+    const dense = { ...PART_A, id: 'd', length: 15, width: 20, height: 13, netWeightPerUnit: 80, grossWeightPerUnit: 81 };
+    expect(hasError(dense)).toBe(true);
+    expect(itemIssues(dense).some((i) => i.code === 'density')).toBe(true);
+    const noTare = { ...PUMP, id: 't', qtyPerPackage: 1, packageType: 'Pallet', netWeightPerUnit: 900, grossWeightPerUnit: 900, variants: undefined };
+    expect(itemIssues(noTare).some((i) => i.code === 'tare')).toBe(true);
+    expect(hasError(PUMP)).toBe(false);
+    expect(hasError(PART_A)).toBe(false);
+  });
+});
+
+describe('export des schémas en image (point 13)', () => {
+  it('produit un SVG autonome et valide', async () => {
+    const { pictureToSvg, packageDrawing } = await import('../lib/drawing');
+    const { PUMP } = await import('./fixtures');
+    const svg = pictureToSvg(packageDrawing({ no: 1, type: 'PALPLATE', length: 120, width: 80, height: 117, grossWeight: 474 }, '#0B4F8A', { cm: 'cm', kg: 'kg', packageWord: 'Colis', locale: 'fr-FR' }));
+    expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+    expect(svg).toContain('120 cm');
+    expect(svg).not.toMatch(/NaN|undefined/);
+    expect(PUMP.code).toBe('P-100');
+  });
+});

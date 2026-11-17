@@ -297,3 +297,27 @@ export function formatNos(nos: number[], to = 'à'): string {
   }
   return parts.join(', ');
 }
+
+/** Schéma → texte SVG autonome (pour le convertir en image PNG, par ex. dans l'Excel) */
+export function pictureToSvg(pic: Picture): string {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const body = pic.shapes
+    .map((s) => {
+      switch (s.kind) {
+        case 'poly':
+          return `<polygon points="${s.pts.map((p) => p.map((n) => n.toFixed(2)).join(',')).join(' ')}" fill="${s.fill}"${s.opacity !== undefined ? ` fill-opacity="${s.opacity}"` : ''} stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}" stroke-linejoin="round"/>`;
+        case 'line':
+          return `<line x1="${s.a[0].toFixed(2)}" y1="${s.a[1].toFixed(2)}" x2="${s.b[0].toFixed(2)}" y2="${s.b[1].toFixed(2)}" stroke="${s.stroke}" stroke-width="${s.sw}"${s.dash ? ' stroke-dasharray="3 2"' : ''}/>`;
+        case 'circle':
+          return `<circle cx="${s.c[0].toFixed(2)}" cy="${s.c[1].toFixed(2)}" r="${Math.max(0.1, s.r).toFixed(2)}" fill="${s.fill}" stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}"/>`;
+        case 'text': {
+          const anchor = s.anchor ?? 'start';
+          const rot = s.rotate ? ` transform="rotate(${s.rotate} ${s.at[0].toFixed(2)} ${s.at[1].toFixed(2)})"` : '';
+          const halo = s.halo ? ' stroke="#fff" stroke-width="3" paint-order="stroke"' : '';
+          return `<text x="${s.at[0].toFixed(2)}" y="${s.at[1].toFixed(2)}" font-size="${s.size}" fill="${s.color}" text-anchor="${anchor}" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-weight="${s.bold ? 700 : 400}"${rot}${halo}>${esc(s.text)}</text>`;
+        }
+      }
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pic.w} ${pic.h}" width="${pic.w}" height="${pic.h}"><rect width="100%" height="100%" fill="#fff"/>${body}</svg>`;
+}

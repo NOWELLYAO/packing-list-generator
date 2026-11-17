@@ -62,6 +62,7 @@ export default function HistoryPanel({ history, setHistory, onOpen }: Props) {
                     {h.requests.length} article{h.requests.length > 1 ? 's' : ''} · {h.totals.packages} colis
                   </b>
                   <span className="hint">
+                    {h.proposal && `${h.proposal === 'grundfos' ? 'Selon Grundfos' : 'Optimisée'} · ${(h.lang ?? 'fr').toUpperCase()} · ${{ sea: 'Maritime', road: 'Routier', air: 'Aérien' }[h.transportMode ?? 'sea']} — `}
                     {h.requests
                       .slice(0, 4)
                       .map((r) => `${r.code || r.pn} ×${r.quantity}`)

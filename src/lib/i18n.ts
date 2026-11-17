@@ -78,6 +78,8 @@ export const DOC = {
     ldm: 'Mètres de plancher (LDM)',
     cog: 'Centre de gravité',
     unit: 'unité(s)',
+    reliability: 'Fiabilité',
+    conf: { observed: 'Déjà expédié', interpolated: 'Interpolé', estimated: 'Estimé', mixed: 'Colis mixte', manual: 'Fiche manuelle', unknown: 'Introuvable' } as Record<string, string>,
     locale: 'fr-FR',
   },
   en: {
@@ -125,6 +127,8 @@ export const DOC = {
     ldm: 'Loading metres (LDM)',
     cog: 'Centre of gravity',
     unit: 'unit(s)',
+    reliability: 'Reliability',
+    conf: { observed: 'Shipped as is before', interpolated: 'Interpolated', estimated: 'Estimated', mixed: 'Mixed package', manual: 'Manual data', unknown: 'Not found' } as Record<string, string>,
     locale: 'en-GB',
   },
 };

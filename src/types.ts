@@ -189,4 +189,8 @@ export interface HistoryEntry {
   reference: string;
   requests: RequestLine[];
   totals: PackingList['totals'];
+  /** réglages utilisés lors de l'export, restaurés à la réouverture */
+  proposal?: 'grundfos' | 'smart';
+  lang?: 'fr' | 'en';
+  transportMode?: 'sea' | 'road' | 'air';
 }

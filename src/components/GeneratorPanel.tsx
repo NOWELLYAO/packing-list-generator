@@ -18,6 +18,7 @@ import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
 import { usePersistent } from '../lib/storage';
 import { isPieceUnit } from '../lib/validate';
+import { hasError, itemIssues } from '../lib/quality';
 import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
 
 interface Props {
@@ -155,7 +156,16 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
     setBusy(label);
     try {
       await fn();
-      onSaved({ id: uid(), createdAt: new Date().toISOString(), reference: '', requests: active, totals: pl.totals });
+      onSaved({
+        id: uid(),
+        createdAt: new Date().toISOString(),
+        reference: '',
+        requests: active,
+        totals: pl.totals,
+        proposal,
+        lang: settings.lang ?? 'fr',
+        transportMode: settings.transportMode ?? 'sea',
+      });
     } catch (e) {
       console.error(e);
       if (isChunkLoadError(e)) {
@@ -170,6 +180,10 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
 
   const unknown = pl?.lines.filter((l) => !l.found).length ?? 0;
   const byConf = (c: string) => pl?.lines.filter((l) => l.found && l.confidence === c).length ?? 0;
+  const suspicious = active.filter((l) => {
+    const it = resolved.items.get(l.id);
+    return it && hasError(it);
+  }).length;
   const reliability = {
     observed: byConf('observed'),
     interpolated: byConf('interpolated'),
@@ -239,6 +253,16 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                       </>
                     )}
                     {choice && l.quantity > 0 && <ConfidenceChip c={choice.confidence} />}
+                    {it && hasError(it) && (
+                      <span className="chip-with-tip">
+                        <span className="chip chip-danger" title={itemIssues(it).filter((i) => i.severity === 'error').map((i) => i.message).join(' ; ')}>
+                          données suspectes
+                        </span>
+                        <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
+                          Corriger
+                        </button>
+                      </span>
+                    )}
                     {resolved.dupOf.has(l.id) && (
                       <span className="chip chip-warn">doublon : additionné à la ligne {resolved.dupOf.get(l.id)! + 1}</span>
                     )}
@@ -402,6 +426,12 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               {reliability.estimated > 0 && <span><ConfidenceChip c="estimated" /> <span>{reliability.estimated} extrapolée(s) d'un seul envoi : à vérifier</span></span>}
               {reliability.mixed > 0 && <span><ConfidenceChip c="mixed" /> <span>{reliability.mixed} vue(s) seulement en colis mixte : à vérifier</span></span>}
               {reliability.manual > 0 && <span><ConfidenceChip c="manual" /> <span>{reliability.manual} selon votre fiche corrigée</span></span>}
+              {suspicious > 0 && (
+                <span>
+                  <span className="chip chip-danger">données suspectes</span>
+                  <span>{suspicious} article(s) aux valeurs impossibles : poids ou dimensions à corriger avant envoi</span>
+                </span>
+              )}
               {unknown > 0 && <span><span className="chip-with-tip"><span className="chip chip-danger">introuvable</span><InfoTip k="unknown" /></span> <span>{unknown} article(s) sans données : ni poids ni colis</span></span>}
             </div>
           </div>

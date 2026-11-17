@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogItem, HistoryEntry, RequestLine, Settings } from './types';
-import { usePersistent } from './lib/storage';
+import { requestPersistence, save, STORAGE_ERROR_EVENT, usePersistent } from './lib/storage';
+import { backupReminderDue, daysSinceBackup, downloadCatalogBackup, snoozeBackupReminder } from './lib/backup';
 import { mergeCatalog } from './lib/normalize';
 import { DEFAULT_ACCENT } from './lib/exporters';
 import { LangContext } from './lib/i18n';
 import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
 import ConfirmDialog from './components/ConfirmDialog';
-import { installUpdateHandlers } from './lib/updates';
+import { installUpdateHandlers, updateNow } from './lib/updates';
 import { sanitizeCatalog } from './lib/validate';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
@@ -62,6 +63,15 @@ export default function App() {
   );
 
   const [updateReady, setUpdateReady] = useState(false);
+  // Sauvegardes locales : alerte si elles échouent, stockage protégé, rappel de sauvegarde de la base
+  const [storageError, setStorageError] = useState(false);
+  const [showBackup, setShowBackup] = useState(() => backupReminderDue(catalog.length));
+  useEffect(() => {
+    void requestPersistence();
+    const onErr = () => setStorageError(true);
+    window.addEventListener(STORAGE_ERROR_EVENT, onErr);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onErr);
+  }, []);
   useEffect(() => installUpdateHandlers(() => setUpdateReady(true)), []);
 
   useEffect(() => {
@@ -116,10 +126,50 @@ export default function App() {
         </nav>
       </header>
 
+      {storageError && (
+        <div className="update-banner danger-banner">
+          <span>
+            ⛔ Le navigateur refuse d'enregistrer les dernières modifications (stockage plein ou navigation privée). Sauvegardez la
+            base maintenant pour ne rien perdre.
+          </span>
+          <button className="btn small primary" onClick={() => downloadCatalogBackup(catalog)}>
+            Sauvegarder la base
+          </button>
+        </div>
+      )}
+      {showBackup && !storageError && (
+        <div className="update-banner">
+          <span>
+            {daysSinceBackup() === null
+              ? 'Votre base d’articles n’a jamais été sauvegardée.'
+              : `Dernière sauvegarde de la base il y a ${daysSinceBackup()} jours.`}{' '}
+            Elle n'existe que dans ce navigateur.
+          </span>
+          <button
+            className="btn small primary"
+            onClick={() => {
+              downloadCatalogBackup(catalog);
+              setShowBackup(false);
+              toast('Base sauvegardée');
+            }}
+          >
+            Sauvegarder
+          </button>
+          <button
+            className="btn small ghost"
+            onClick={() => {
+              snoozeBackupReminder();
+              setShowBackup(false);
+            }}
+          >
+            Plus tard
+          </button>
+        </div>
+      )}
       {updateReady && (
         <div className="update-banner">
           <span>Une nouvelle version est disponible.</span>
-          <button className="btn small primary" onClick={() => window.location.reload()}>
+          <button className="btn small primary" onClick={() => void updateNow()}>
             Mettre à jour
           </button>
         </div>
@@ -148,8 +198,11 @@ export default function App() {
             setHistory={setHistory}
             onOpen={(h) => {
               setLines(h.requests.map((r) => ({ ...r })));
+              // mêmes réglages qu'à l'export : proposition, langue, mode de transport
+              if (h.proposal) save('proposal', h.proposal);
+              setSettings({ ...settings, lang: h.lang ?? settings.lang, transportMode: h.transportMode ?? settings.transportMode });
               setTab('generate');
-              toast('PL rouverte');
+              toast('PL rouverte avec ses réglages d’origine');
             }}
           />
         )}

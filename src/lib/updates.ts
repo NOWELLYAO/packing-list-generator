@@ -44,7 +44,24 @@ export async function newVersionAvailable(): Promise<boolean> {
   }
 }
 
+import { registerSW } from 'virtual:pwa-register';
+
+/** Active la nouvelle version (service hors ligne) puis recharge ; à défaut, simple rechargement */
+let applyUpdate: (() => Promise<void>) | null = null;
+export async function updateNow() {
+  if (applyUpdate) await applyUpdate();
+  else window.location.reload();
+}
+
 export function installUpdateHandlers(onNewVersion: () => void) {
+  // Service hors ligne : l'application reste utilisable sans réseau une fois ouverte une première fois
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    const update = registerSW({
+      onNeedRefresh: () => onNewVersion(),
+      onOfflineReady: () => {},
+    });
+    applyUpdate = () => update(true);
+  }
   // Vite signale ici l'échec de chargement d'un module à la demande
   window.addEventListener('vite:preloadError', (event) => {
     if (reloadForUpdate()) event.preventDefault();

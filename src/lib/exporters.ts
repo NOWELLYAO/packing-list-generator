@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
-import { formatNos, groupIdentical, packageDrawing, scaleStrip, type Picture } from './drawing';
+import { formatNos, groupIdentical, packageDrawing, pictureToSvg, scaleStrip, type Picture } from './drawing';
 import { loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
 
@@ -96,6 +96,31 @@ function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: num
         angle: sh.rotate ? -sh.rotate : 0,
       });
     }
+  }
+}
+
+/** Schéma → image PNG (base64) pour l'Excel, via un canevas du navigateur */
+async function pictureToPng(pic: Picture, scale = 2): Promise<{ data: string; w: number; h: number } | null> {
+  try {
+    const svg = pictureToSvg(pic);
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const img = new Image();
+    await new Promise<void>((ok, ko) => {
+      img.onload = () => ok();
+      img.onerror = () => ko(new Error('image'));
+      img.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(pic.w * scale);
+    canvas.height = Math.round(pic.h * scale);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    return { data: canvas.toDataURL('image/png'), w: pic.w, h: pic.h };
+  } catch {
+    return null;
   }
 }
 
@@ -502,7 +527,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   const light = [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase();
   const t = pl.totals;
   ws.columns = [
-    { width: 6 }, { width: 22 }, { width: 18 }, { width: 36 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 10 },
+    { width: 6 }, { width: 22 }, { width: 18 }, { width: 36 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 10 }, { width: 16 },
   ];
   const thin = { style: 'thin' as const, color: { argb: 'FFE1E6EC' } };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
@@ -636,11 +661,88 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   row += 2;
   sectionTitle(row, T.articles);
   row++;
-  header(row, [T.no, T.code, T.pn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.originLong]);
+  header(row, [T.no, T.code, T.pn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.originLong, T.reliability]);
   pl.lines.forEach((l, i) => {
     row++;
-    bodyRow(row, [l.lineNo, l.code, l.pn, l.description, l.quantity, l.cases, l.netWeight, l.grossWeight, l.origin], [undefined, '@', '@', undefined, '0.###', undefined, '#,##0.00', '#,##0.00', undefined], i % 2 === 1, ['center', 'left', 'left', 'left', 'right', 'center', 'right', 'right', 'center']);
+    bodyRow(
+      row,
+      [l.lineNo, l.code, l.pn, l.description, l.quantity, l.cases, l.netWeight, l.grossWeight, l.origin, l.found ? T.conf[l.confidence ?? 'estimated'] : T.conf.unknown],
+      [undefined, '@', '@', undefined, '0.###', undefined, '#,##0.00', '#,##0.00', undefined, undefined],
+      i % 2 === 1,
+      ['center', 'left', 'left', 'left', 'right', 'center', 'right', 'right', 'center', 'left'],
+    );
   });
+
+  // ---- Feuille « Schémas » : un dessin par groupe de colis identiques ----
+  const accentHex = settings.accent || DEFAULT_ACCENT;
+  const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: T.locale };
+  const drawable = pl.packages.filter((p) => p.length > 0 && p.width > 0 && p.height > 0);
+  if (drawable.length) {
+    const ws2 = wb.addWorksheet(lang === 'fr' ? 'Schémas' : 'Drawings', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }, views: [{ showGridLines: false }] });
+    ws2.columns = Array.from({ length: 9 }, () => ({ width: 11 }));
+    ws2.getCell('A1').value = T.schemas;
+    ws2.getCell('A1').font = { bold: true, size: 13, color: { argb: 'FF' + accent } };
+    const strip = await pictureToPng(scaleStrip(drawable, accentHex, labels, 640));
+    if (strip) {
+      ws2.addImage(wb.addImage({ base64: strip.data, extension: 'png' }), { tl: { col: 0, row: 1.3 }, ext: { width: 620, height: (620 * strip.h) / strip.w } });
+    }
+    let r = 2 + Math.ceil(strip ? (620 * strip.h) / strip.w / 20 : 0) + 1;
+    ws2.getCell(r, 1).value = T.scaleView;
+    ws2.getCell(r, 1).font = { size: 9, color: { argb: 'FF6E7887' } };
+    r += 2;
+    let col = 0;
+    for (const { first: p, nos } of groupIdentical(drawable)) {
+      const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
+      const img = await pictureToPng(packageDrawing(p, accentHex, labels, title));
+      ws2.getCell(r, col * 3 + 1).value = typeOf(p, lang);
+      ws2.getCell(r, col * 3 + 1).font = { size: 9, color: { argb: 'FF6E7887' } };
+      if (img) ws2.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: col * 3, row: r }, ext: { width: 230, height: (230 * img.h) / img.w } });
+      col++;
+      if (col === 3) {
+        col = 0;
+        r += 11;
+      }
+    }
+  }
+
+  // ---- Feuille « Plan de chargement » ----
+  const tmode = settings.transportMode ?? 'sea';
+  const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
+  if (plan) {
+    const ws3 = wb.addWorksheet(lang === 'fr' ? 'Plan de chargement' : 'Loading plan', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }, views: [{ showGridLines: false }] });
+    ws3.columns = [{ width: 30 }, { width: 40 }, ...Array.from({ length: 6 }, () => ({ width: 11 }))];
+    ws3.getCell('A1').value = T.loadPlan;
+    ws3.getCell('A1').font = { bold: true, size: 13, color: { argb: 'FF' + accent } };
+    const facts: [string, string | number][] = [
+      [T.vehicle, lang === 'fr' ? plan.summary : plan.summaryEn],
+      [T.lengthUsed, plan.bins.map((b) => `${nf(b.usedLength / 100, 2)} m`).join(' + ')],
+      [T.floorUsed, plan.bins.map((b) => `${nf(b.floorPct, 1)} %`).join(' + ')],
+      [T.ldm, plan.ldm],
+    ];
+    facts.forEach(([k, v], i) => {
+      ws3.getCell(3 + i, 1).value = k;
+      ws3.getCell(3 + i, 1).font = { color: { argb: 'FF6E7887' } };
+      ws3.getCell(3 + i, 2).value = v;
+      ws3.getCell(3 + i, 2).font = { bold: true };
+    });
+    let r = 8;
+    for (const [i, b] of plan.bins.entries()) {
+      ws3.getCell(r, 1).value = `${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn}${plan.bins.length > 1 ? ` n° ${i + 1}` : ''} — ${nf(b.weight, 0)} kg`;
+      ws3.getCell(r, 1).font = { bold: true };
+      const img = await pictureToPng(loadPlanDrawing(b, accentHex, lang, 640));
+      if (img) {
+        const h = (720 * img.h) / img.w;
+        ws3.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: 0, row: r }, ext: { width: 720, height: h } });
+        r += Math.ceil(h / 20) + 2;
+      } else r += 2;
+    }
+    ws3.getCell(r, 1).value = T.loadNote;
+    ws3.getCell(r, 1).font = { size: 9, color: { argb: 'FF6E7887' } };
+    for (const [i, w] of plan.warnings.entries()) {
+      ws3.getCell(r + 1 + i, 1).value = `⚠ ${w}`;
+      ws3.getCell(r + 1 + i, 1).font = { size: 9, color: { argb: 'FFB45309' } };
+    }
+  }
 
   const buf = await wb.xlsx.writeBuffer();
   download(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileName(pl)}.xlsx`);
