@@ -273,34 +273,50 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     },
   });
 
+  // ---- Mise en page continue : chaque section suit la précédente, nouvelle page seulement si elle ne tient pas ----
+  // @ts-expect-error propriété ajoutée par jspdf-autotable
+  let yy: number = (doc.lastAutoTable?.finalY ?? 40) + 11;
+  const bottom = H - 16;
+  const ensure = (need: number) => {
+    if (yy + need > bottom) {
+      doc.addPage();
+      yy = 18;
+    }
+  };
+
   // ---- Schémas des colis ----
   const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: T.locale };
   const drawable = pl.packages.filter((p) => p.length > 0 && p.width > 0 && p.height > 0);
   if (drawable.length) {
-    doc.addPage();
-    let yy = section(T.schemas, 18);
-    const strip = scaleStrip(drawable.map((p) => ({ ...p, type: p.type })), settings.accent || DEFAULT_ACCENT, labels, 640);
-    const stripW = Math.min(W - 2 * M, (strip.w / 640) * (W - 2 * M));
-    drawPicturePdf(doc, strip, M, yy, stripW);
-    yy += (strip.h * stripW) / strip.w + 1;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...muted);
-    doc.text(T.scaleView, M, yy + 2);
-    yy += 7;
+    const groups = groupIdentical(drawable);
+    // peu de colis : schémas plus grands (2 par ligne) ; sinon 3 par ligne
     const cols = 3;
     const cellW = (W - 2 * M) / cols;
+    const strip = scaleStrip(drawable.map((p) => ({ ...p, type: p.type })), settings.accent || DEFAULT_ACCENT, labels, 640);
+    const showStrip = groups.length > 1; // un seul type de colis : la vue comparative n'apporte rien
+    const stripW = Math.min(W - 2 * M, (strip.w / 640) * (W - 2 * M)) * (groups.length <= 2 ? 0.5 : 0.85);
+    const stripH = showStrip ? (strip.h * stripW) / strip.w + 8 : 0;
+    const firstPic = packageDrawing({ ...groups[0].first }, settings.accent || DEFAULT_ACCENT, labels);
+    const cellH0 = (firstPic.h * cellW) / firstPic.w;
+    ensure(6 + stripH + cellH0 + 8); // titre + vue à l'échelle + au moins une rangée de schémas
+    yy = section(T.schemas, yy);
+    if (showStrip) {
+      drawPicturePdf(doc, strip, M, yy, stripW);
+      yy += (strip.h * stripW) / strip.w + 1;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...muted);
+      doc.text(T.scaleView, M, yy + 2);
+      yy += 6;
+    }
     let col = 0;
+    let rowH = 0;
     // un schéma par groupe de colis identiques (sinon des dizaines de pages pour des palettes toutes pareilles)
-    for (const { first: p, nos } of groupIdentical(drawable)) {
+    for (const { first: p, nos } of groups) {
       const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
       const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title);
       const cellH = (pic.h * cellW) / pic.w;
-      if (yy + cellH + 8 > H - 16) {
-        doc.addPage();
-        yy = 18;
-        col = 0;
-      }
+      if (col === 0) ensure(cellH + 8);
       const cx = M + col * cellW;
       doc.setDrawColor(230, 235, 241);
       doc.setLineWidth(0.25);
@@ -310,19 +326,29 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       doc.setTextColor(...muted);
       doc.text(typeOf(p, lang), cx + 4, yy + 4.5);
       drawPicturePdf(doc, pic, cx + 1, yy + 5, cellW - 2);
+      rowH = Math.max(rowH, cellH + 9);
       col++;
       if (col === cols) {
         col = 0;
-        yy += cellH + 9;
+        yy += rowH;
+        rowH = 0;
       }
     }
+    if (col !== 0) yy += rowH;
+    yy += 4;
 
     // ---- Plan de chargement ----
     const tmode = settings.transportMode ?? 'sea';
     const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
     if (plan) {
-      doc.addPage();
-      yy = section(T.loadPlan, 18);
+      const firstPlan = loadPlanDrawing(plan.bins[0], settings.accent || DEFAULT_ACCENT, lang, 640);
+      // hauteur du dessin : 50 mm, réduite jusqu’à 32 mm si cela évite une page presque vide
+      const tail = 3 + 6 + plan.warnings.length * 4.5; // espace sous le dessin + légende + alertes
+      const room = bottom - yy - (6 + 18 + tail) - 0.5;
+      const PLAN_MAX_H = plan.bins.length === 1 && room >= 32 && room < 50 ? room : 50;
+      const planW = (pic: { w: number; h: number }) => Math.min(W - 2 * M, (PLAN_MAX_H * pic.w) / pic.h);
+      ensure(6 + 18 + (firstPlan.h * planW(firstPlan)) / firstPlan.w + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier plan
+      yy = section(T.loadPlan, yy);
       const vName = lang === 'fr' ? plan.summary : plan.summaryEn;
       const facts: [string, string][] = [
         [T.vehicle, vName],
@@ -344,14 +370,12 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
         doc.setTextColor(...ink);
         doc.text(doc.splitTextToSize(v2, fw - 5)[0], x0 + 3, yy + 11);
       });
-      yy += 20;
+      yy += 18;
       for (const [i, b] of plan.bins.entries()) {
         const pic = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
-        const ph = (pic.h * (W - 2 * M)) / pic.w;
-        if (yy + ph + 10 > H - 16) {
-          doc.addPage();
-          yy = 18;
-        }
+        const pw = planW(pic);
+        const ph = (pic.h * pw) / pic.w;
+        ensure(ph + (plan.bins.length > 1 ? 6 : 2));
         if (plan.bins.length > 1) {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
@@ -359,9 +383,10 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
           doc.text(`${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
           yy += 4;
         }
-        drawPicturePdf(doc, pic, M, yy, W - 2 * M);
-        yy += ph + 6;
+        drawPicturePdf(doc, pic, M + (W - 2 * M - pw) / 2, yy, pw);
+        yy += ph + 3;
       }
+      ensure(6 + plan.warnings.length * 4.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(...muted);
@@ -369,7 +394,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       yy += 5;
       for (const wmsg of plan.warnings) {
         doc.setTextColor(180, 83, 9);
-        doc.text(`⚠ ${wmsg}`.replace('⚠ ', '! '), M, yy);
+        doc.text(`! ${wmsg}`, M, yy);
         yy += 4.5;
       }
     }
