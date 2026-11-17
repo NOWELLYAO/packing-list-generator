@@ -71,12 +71,18 @@ function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: num
       doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], sh.stroke ? 'FD' : 'F', true);
       if (gs) doc.restoreGraphicsState();
     } else if (sh.kind === 'line') {
+      const lgs = sh.opacity !== undefined && doc.GState;
+      if (lgs) {
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ 'stroke-opacity': sh.opacity, opacity: sh.opacity }));
+      }
       doc.setDrawColor(sh.stroke);
       doc.setLineWidth(sh.sw * s);
       if (sh.dash) doc.setLineDashPattern([1.2, 0.8], 0);
       const [a, b] = [P(sh.a), P(sh.b)];
       doc.line(a[0], a[1], b[0], b[1]);
       if (sh.dash) doc.setLineDashPattern([], 0);
+      if (lgs) doc.restoreGraphicsState();
     } else if (sh.kind === 'circle') {
       const c = P(sh.c);
       doc.setFillColor(sh.fill);

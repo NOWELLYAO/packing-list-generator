@@ -7,7 +7,7 @@
 export type Pt = [number, number];
 export type Shape =
   | { kind: 'poly'; pts: Pt[]; fill: string; stroke?: string; sw?: number; opacity?: number }
-  | { kind: 'line'; a: Pt; b: Pt; stroke: string; sw: number; dash?: boolean }
+  | { kind: 'line'; a: Pt; b: Pt; stroke: string; sw: number; dash?: boolean; opacity?: number }
   | { kind: 'circle'; c: Pt; r: number; fill: string; stroke?: string; sw?: number }
   | {
       kind: 'text';
@@ -51,7 +51,6 @@ export function familyOf(type: string): Family {
   return 'other';
 }
 
-const WOOD = '#c99a62';
 const KRAFT = '#d2b48c';
 const INK = '#2b3442';
 
@@ -62,14 +61,262 @@ const INK = '#2b3442';
 const C30 = Math.cos(Math.PI / 6);
 const iso = (a: number, b: number, z: number): Pt => [(a - b) * C30, (a + b) * 0.5 - z];
 
-/** Faces visibles d'un parallélépipède [a0..a1]×[b0..b1]×[z0..z1] */
-function boxFaces(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, base: string, stroke: string): Shape[] {
-  const P = iso;
+
+
+/* ---------- primitives de rendu réaliste (repère modèle, en cm) ---------- */
+type V3 = [number, number, number];
+const I3 = (p: V3) => iso(p[0], p[1], p[2]);
+const add3 = (p: V3, q: V3, f = 1): V3 => [p[0] + q[0] * f, p[1] + q[1] * f, p[2] + q[2] * f];
+type Push = (s: Shape[]) => void;
+
+/** Quadrilatère plan o, o+u, o+u+v, o+v */
+function quad(o: V3, u: V3, v: V3, fill: string, stroke?: string, sw?: number, opacity?: number): Shape {
+  return { kind: 'poly', pts: [I3(o), I3(add3(o, u)), I3(add3(add3(o, u), v)), I3(add3(o, v))], fill, stroke, sw, opacity };
+}
+/** Face avec dégradé (bandes successives le long de u) */
+function gradQuad(o: V3, u: V3, v: V3, base: string, k0: number, k1: number, n: number): Shape[] {
+  const out: Shape[] = [];
+  for (let i = 0; i < n; i++) {
+    const c = shade(base, n === 1 ? k0 : k0 + ((k1 - k0) * i) / (n - 1));
+    out.push(quad(add3(o, u, i / n), [u[0] / n, u[1] / n, u[2] / n], v, c, c, 0.25));
+  }
+  return out;
+}
+/** Arêtes visibles d'un pavé */
+function edges(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, stroke: string, sw: number): Shape[] {
+  const L = (p: V3, q: V3): Shape => ({ kind: 'line', a: I3(p), b: I3(q), stroke, sw });
   return [
-    { kind: 'poly', pts: [P(a0, b1, z0), P(a1, b1, z0), P(a1, b1, z1), P(a0, b1, z1)], fill: shade(base, -0.08), stroke, sw: 0.6 }, // face avant gauche (b = b1)
-    { kind: 'poly', pts: [P(a1, b0, z0), P(a1, b1, z0), P(a1, b1, z1), P(a1, b0, z1)], fill: shade(base, -0.24), stroke, sw: 0.6 }, // face avant droite (a = a1)
-    { kind: 'poly', pts: [P(a0, b0, z1), P(a1, b0, z1), P(a1, b1, z1), P(a0, b1, z1)], fill: shade(base, 0.18), stroke, sw: 0.6 }, // dessus
+    L([a0, b1, z0], [a1, b1, z0]), L([a1, b1, z0], [a1, b0, z0]),
+    L([a0, b1, z0], [a0, b1, z1]), L([a1, b1, z0], [a1, b1, z1]), L([a1, b0, z0], [a1, b0, z1]),
+    L([a0, b0, z1], [a1, b0, z1]), L([a1, b0, z1], [a1, b1, z1]), L([a1, b1, z1], [a0, b1, z1]), L([a0, b1, z1], [a0, b0, z1]),
   ];
+}
+/** Pavé plein éclairé en haut à gauche, avec dégradés */
+function solid(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, base: string, stroke: string, n = 1, sw = 0.45): Shape[] {
+  return [
+    ...gradQuad([a0, b1, z0], [a1 - a0, 0, 0], [0, 0, z1 - z0], base, -0.02, -0.16, n),
+    ...gradQuad([a1, b0, z0], [0, b1 - b0, 0], [0, 0, z1 - z0], base, -0.24, -0.36, Math.max(1, Math.ceil(n / 2))),
+    quad([a0, b0, z1], [a1 - a0, 0, 0], [0, b1 - b0, 0], shade(base, 0.2)),
+    ...edges(a0, a1, b0, b1, z0, z1, stroke, sw),
+  ];
+}
+/** variation de teinte déterministe (planches) */
+const tone = (i: number) => [0.03, -0.05, 0.06, -0.02, 0.0, -0.07, 0.04][i % 7];
+
+const WOOD_PALLET = '#d4ad7a';
+
+function drawPallet(push: Push, L: number, l: number, H: number, px: number) {
+  const pb = Math.min(14.4, H * 0.35); // socle
+  const t = pb * 0.16; // épaisseur des planches
+  const dark = shade(WOOD_PALLET, -0.55);
+  const bw = Math.min(l * 0.14, 14.5);
+  const blkA = Math.min(L * 0.12, 14.5);
+  const blkB = Math.min(l * 0.16, 14.5);
+  const rows = [0, (l - bw) / 2, l - bw];
+  const brows = [0, (l - blkB) / 2, l - blkB];
+  const cols = [0, (L - blkA) / 2, L - blkA];
+  const byDepth = (xs: { a: number; b: number; s: Shape[] }[]) => xs.sort((p, q) => p.a + p.b - (q.a + q.b)).forEach((x) => push(x.s));
+  // semelles
+  byDepth(rows.map((b, i) => ({ a: 0, b, s: solid(0, L, b, b + bw, 0, t, shade(WOOD_PALLET, tone(i)), dark, 1, 0.35) })));
+  // dés
+  byDepth(cols.flatMap((a, i) => brows.map((b, j) => ({ a, b, s: solid(a, a + blkA, b, b + blkB, t, pb - 2 * t, shade(WOOD_PALLET, -0.06 + tone(i + j) * 0.8), dark, 1, 0.35) }))));
+  // traverses
+  byDepth(cols.map((a, i) => ({ a, b: 0, s: solid(a, a + blkA, 0, l, pb - 2 * t, pb - t, shade(WOOD_PALLET, tone(i + 3)), dark, 1, 0.35) })));
+  // planches de dessus
+  const nd = Math.max(3, Math.min(9, Math.round(L / 16)));
+  const dw = (L / nd) * 0.8;
+  const deck: { a: number; b: number; s: Shape[] }[] = [];
+  for (let i = 0; i < nd; i++) {
+    const a = (i * (L - dw)) / (nd - 1);
+    deck.push({ a, b: 0, s: solid(a, a + dw, 0, l, pb - t, pb, shade(WOOD_PALLET, 0.04 + tone(i)), dark, 1, 0.35) });
+  }
+  byDepth(deck);
+  // clous visibles sur la face avant des dés
+  for (const a of cols) push([{ kind: 'circle', c: iso(a + blkA / 2, l, pb / 2), r: 0.55, fill: '#5b4630' }]);
+
+  const hl = H - pb;
+  if (hl > 0.5) drawLoad(push, L, l, pb, H, px);
+}
+
+/** Charge de palette : cartons empilés sous film étirable */
+function drawLoad(push: Push, L: number, l: number, z0: number, H: number, px: number) {
+  const hl = H - z0;
+  const nx = Math.max(1, Math.min(4, Math.round(L / 42)));
+  const ny = Math.max(1, Math.min(3, Math.round(l / 42)));
+  const nz = Math.max(1, Math.min(5, Math.round(hl / 32)));
+  const cx = L / nx;
+  const cy = l / ny;
+  const cz = hl / nz;
+  const g = Math.min(0.6, cx * 0.02);
+  for (let kz = 0; kz < nz; kz++) {
+    const cells: [number, number][] = [];
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i === nx - 1 || j === ny - 1 || kz === nz - 1) cells.push([i, j]);
+    cells.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
+    for (const [i, j] of cells) {
+      const a0 = i * cx + g;
+      const b0 = j * cy + g;
+      const zz = z0 + kz * cz;
+      const base = shade(KRAFT, tone(i * 3 + j + kz * 2) * 0.7);
+      push(solid(a0, (i + 1) * cx - g, b0, (j + 1) * cy - g, zz, zz + cz - g * 0.5, base, shade(KRAFT, -0.45), 6, 0.3));
+      // ruban sur le dessus des cartons du haut
+      if (kz === nz - 1) {
+        const tw = Math.min(cy * 0.08, 2.5);
+        const bm = b0 + (cy - 2 * g) / 2;
+        push([quad([a0, bm - tw, zz + cz - g * 0.5], [cx - 2 * g, 0, 0], [0, 2 * tw, 0], '#c79e63', undefined, undefined, 0.8)]);
+      }
+    }
+  }
+  // film étirable : voile clair + reflets
+  const film = (o: V3, u: V3, v: V3) => [quad(o, u, v, '#ffffff', undefined, undefined, 0.16)];
+  push([...film([0, l, z0], [L, 0, 0], [0, 0, hl]), ...film([L, 0, z0], [0, l, 0], [0, 0, hl])]);
+  const streak = (o: V3, u: V3, v: V3, f0: number, w: number) => quad(add3(add3(o, u, f0), v, 0), [u[0] * w, u[1] * w, u[2] * w], v, '#ffffff', undefined, undefined, 0.28);
+  push([
+    streak([0, l, z0], [L, 0, 0], [0, 0, hl], 0.18, 0.05),
+    streak([0, l, z0], [L, 0, 0], [0, 0, hl], 0.27, 0.02),
+    streak([0, l, z0], [L, 0, 0], [0, 0, hl], 0.7, 0.04),
+    streak([L, 0, z0], [0, l, 0], [0, 0, hl], 0.35, 0.05),
+  ]);
+  // spires de film
+  for (const f of [0.12, 0.3, 0.55, 0.8]) {
+    const z = z0 + hl * f;
+    push([
+      { kind: 'line', a: iso(0, l, z), b: iso(L, l, z + hl * 0.05), stroke: '#ffffff', sw: 0.5, opacity: 0.5 },
+      { kind: 'line', a: iso(L, 0, z + hl * 0.05), b: iso(L, l, z + hl * 0.05), stroke: '#ffffff', sw: 0.5, opacity: 0.5 },
+    ]);
+  }
+  void px;
+}
+
+const CRATE = '#d9b483';
+
+function drawCrate(push: Push, L: number, l: number, H: number, px: number) {
+  const dark = shade(CRATE, -0.55);
+  const sk = H >= 25 ? Math.min(9, H * 0.15) : 0; // patins (passage de fourches)
+  if (sk > 0) {
+    const sw = Math.min(9, l * 0.18);
+    const rows = l > 60 ? [0, (l - sw) / 2, l - sw] : [0, l - sw];
+    for (const b of rows) push(solid(0, L, b, b + sw, 0, sk, shade(CRATE, -0.22), dark, 1, 0.35));
+  }
+  const z0 = sk;
+  const h = H - z0;
+  // panneaux en planches
+  const np = Math.max(2, Math.min(12, Math.round(h / 14)));
+  for (let i = 0; i < np; i++) {
+    const za = z0 + (h * i) / np;
+    const dz = h / np;
+    push(gradQuad([0, l, za], [L, 0, 0], [0, 0, dz], shade(CRATE, tone(i)), -0.02, -0.14, 4));
+    push(gradQuad([L, 0, za], [0, l, 0], [0, 0, dz], shade(CRATE, tone(i + 2)), -0.24, -0.34, 2));
+    // veinage du bois
+    push([
+      { kind: 'line', a: iso(L * 0.05, l, za + dz * 0.45), b: iso(L * 0.42, l, za + dz * 0.52), stroke: '#8a6236', sw: 0.3, opacity: 0.25 },
+      { kind: 'line', a: iso(L * 0.5, l, za + dz * 0.3), b: iso(L * 0.93, l, za + dz * 0.38), stroke: '#8a6236', sw: 0.3, opacity: 0.2 },
+    ]);
+    if (i > 0) {
+      push([
+        { kind: 'line', a: iso(0, l, za), b: iso(L, l, za), stroke: shade(CRATE, -0.4), sw: 0.35, opacity: 0.7 },
+        { kind: 'line', a: iso(L, 0, za), b: iso(L, l, za), stroke: shade(CRATE, -0.5), sw: 0.35, opacity: 0.7 },
+      ]);
+    }
+  }
+  // dessus : planches dans la longueur
+  const nt = Math.max(2, Math.min(8, Math.round(l / 14)));
+  for (let i = 0; i < nt; i++) push([quad([0, (l * i) / nt, H], [L, 0, 0], [0, l / nt, 0], shade(CRATE, 0.2 + tone(i) * 0.8), shade(CRATE, -0.3), 0.3)]);
+  push(edges(0, L, 0, l, z0, H, dark, 0.5));
+
+  // cadre extérieur : lisses, montants, raidisseurs et écharpes (face longue)
+  const fr = Math.max(Math.min(9, h * 0.16, L * 0.08), 3);
+  const frame = shade(CRATE, 0.08);
+  const frameR = shade(CRATE, -0.18);
+  const fb = (a0: number, a1: number, za: number, zb: number) => quad([a0, l, za], [a1 - a0, 0, 0], [0, 0, zb - za], frame, shade(CRATE, -0.5), 0.35);
+  const fa = (b0: number, b1: number, za: number, zb: number) => quad([L, b0, za], [0, b1 - b0, 0], [0, 0, zb - za], frameR, shade(CRATE, -0.55), 0.35);
+  const nc = Math.max(0, Math.min(4, Math.round(L / 90) - 1));
+  const posts = [0, ...Array.from({ length: nc }, (_, i) => ((i + 1) * L) / (nc + 1) - fr / 2), L - fr];
+  // écharpes entre montants (si la caisse est assez haute)
+  if (h > 30) {
+    for (let i = 0; i < posts.length - 1; i++) {
+      const xa = posts[i] + fr;
+      const xb = posts[i + 1];
+      const zA = z0 + fr;
+      const zB = H - fr;
+      const w = fr * 1.25;
+      push([{ kind: 'poly', pts: [iso(xa, l, zA), iso(xa + w, l, zA), iso(xb, l, zB), iso(xb - w, l, zB)], fill: frame, stroke: shade(CRATE, -0.5), sw: 0.35 }]);
+    }
+  }
+  push([fb(0, L, z0, z0 + fr), fb(0, L, H - fr, H)]);
+  for (const x of posts) push([fb(x, x + fr, z0, H)]);
+  push([fa(0, l, z0, z0 + fr), fa(0, l, H - fr, H), fa(0, Math.min(fr, l / 3), z0, H), fa(l - Math.min(fr, l / 3), l, z0, H)]);
+  // ombre sous les lisses
+  push([{ kind: 'line', a: iso(0, l, H - fr - 0.4), b: iso(L, l, H - fr - 0.4), stroke: '#000', sw: 0.6, opacity: 0.12 }]);
+  // clous aux assemblages
+  const nail = (p: Pt): Shape => ({ kind: 'circle', c: p, r: 0.6, fill: '#4a3a28' });
+  for (const x of posts) {
+    push([nail(iso(x + fr / 2, l, z0 + fr / 2)), nail(iso(x + fr / 2, l, H - fr / 2))]);
+  }
+  // marquage « haut » (deux flèches) sur le petit côté
+  if (l > 15 && h > 20) {
+    const cxm = l / 2;
+    const s0 = Math.min(l, h) * 0.18;
+    for (const d of [-0.35, 0.35]) {
+      const bx = cxm + d * s0 * 1.6;
+      const zb = z0 + h * 0.35;
+      const ink = '#3c2a1a';
+      push([
+        { kind: 'poly', pts: [iso(L, bx - s0 * 0.12, zb), iso(L, bx + s0 * 0.12, zb), iso(L, bx + s0 * 0.12, zb + s0 * 0.7), iso(L, bx - s0 * 0.12, zb + s0 * 0.7)], fill: ink, opacity: 0.75 },
+        { kind: 'poly', pts: [iso(L, bx - s0 * 0.35, zb + s0 * 0.7), iso(L, bx + s0 * 0.35, zb + s0 * 0.7), iso(L, bx, zb + s0 * 1.15)], fill: ink, opacity: 0.75 },
+      ]);
+    }
+  }
+  void px;
+}
+
+function drawCarton(push: Push, L: number, l: number, H: number, px: number, z0: number) {
+  const dark = shade(KRAFT, -0.5);
+  push(solid(0, L, 0, l, z0, H, KRAFT, dark, 14, 0.5));
+  // cannelure visible (épaisseur du carton) sur les arêtes hautes
+  push([
+    { kind: 'line', a: iso(0, l, H - 0.35), b: iso(L, l, H - 0.35), stroke: shade(KRAFT, 0.35), sw: 0.6, opacity: 0.8 },
+    { kind: 'line', a: iso(L, 0, H - 0.35), b: iso(L, l, H - 0.35), stroke: shade(KRAFT, 0.25), sw: 0.6, opacity: 0.8 },
+  ]);
+  // rabats : jointure au centre du dessus
+  push([{ kind: 'line', a: iso(0, l / 2, H), b: iso(L, l / 2, H), stroke: shade(KRAFT, -0.4), sw: 0.45 }]);
+  // ruban adhésif sur la jointure, qui descend sur le petit côté
+  const t = Math.min(l * 0.09, 2.6);
+  const tape = '#c39a5f';
+  push([
+    quad([0, l / 2 - t, H], [L, 0, 0], [0, 2 * t, 0], tape, undefined, undefined, 0.85),
+    quad([L, l / 2 - t, H - (H - z0) * 0.24], [0, 2 * t, 0], [0, 0, (H - z0) * 0.24], shade(tape, -0.2), undefined, undefined, 0.85),
+    { kind: 'line', a: iso(0, l / 2 - t * 0.4, H), b: iso(L, l / 2 - t * 0.4, H), stroke: '#ffffff', sw: 0.4, opacity: 0.45 },
+  ]);
+  // étiquette d'expédition avec code-barres
+  const h = H - z0;
+  const lw = Math.min(L * 0.32, 22);
+  const lh = Math.min(h * 0.32, 15);
+  if (lw > 4 && lh > 3) {
+    const la = L * 0.92 - lw;
+    const lz = z0 + h * 0.18;
+    push([quad([la, l, lz], [lw, 0, 0], [0, 0, lh], '#fbfbf8', '#9a8f7d', 0.3)]);
+    const bars = 14;
+    for (let i = 0; i < bars; i++) {
+      if (i % 3 === 1) continue;
+      const x = la + lw * 0.1 + ((lw * 0.8) * i) / bars;
+      push([{ kind: 'line', a: iso(x, l, lz + lh * 0.12), b: iso(x, l, lz + lh * 0.45), stroke: '#222', sw: i % 2 ? 0.25 : 0.45 }]);
+    }
+    for (const f of [0.62, 0.78]) push([{ kind: 'line', a: iso(la + lw * 0.1, l, lz + lh * f), b: iso(la + lw * (f > 0.7 ? 0.6 : 0.85), l, lz + lh * f), stroke: '#888', sw: 0.4 }]);
+  }
+  // pictogramme « haut » imprimé
+  const s0 = Math.min(L, h) * 0.12;
+  if (s0 > 1.5) {
+    const ink = '#5a3e22';
+    for (const dx of [0, s0 * 0.9]) {
+      const bx = L * 0.1 + dx;
+      const zb = z0 + h * 0.58;
+      push([
+        { kind: 'poly', pts: [iso(bx - s0 * 0.1, l, zb), iso(bx + s0 * 0.1, l, zb), iso(bx + s0 * 0.1, l, zb + s0 * 0.6), iso(bx - s0 * 0.1, l, zb + s0 * 0.6)], fill: ink, opacity: 0.8 },
+        { kind: 'poly', pts: [iso(bx - s0 * 0.3, l, zb + s0 * 0.6), iso(bx + s0 * 0.3, l, zb + s0 * 0.6), iso(bx, l, zb + s0)], fill: ink, opacity: 0.8 },
+      ]);
+    }
+  }
+  void px;
 }
 
 export interface PackageLike {
@@ -92,7 +339,7 @@ export interface DrawLabels {
  * Colis en perspective isométrique, à l'échelle de ses propres dimensions,
  * avec cotes L / l / H et poids brut.
  */
-export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabels, title?: string): Picture {
+export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabels, title?: string): Picture {
   const W = 220;
   const Hh = 190;
   const L = Math.max(1, p.length || 40);
@@ -115,75 +362,20 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
     for (const sh of s) {
       if (sh.kind === 'poly') shapes.push({ ...sh, pts: sh.pts.map(T) });
       else if (sh.kind === 'line') shapes.push({ ...sh, a: T(sh.a), b: T(sh.b) });
+      else if (sh.kind === 'circle') shapes.push({ ...sh, c: T(sh.c) });
       else shapes.push(sh);
     }
   };
-  const stroke = shade(INK, 0.35);
 
-  // ombre portée
-  push([{ kind: 'poly', pts: [iso(0, 0, 0), iso(L, 0, 0), iso(L, l, 0), iso(0, l, 0)].map(([x, y]) => [x + 4 / k, y + 3 / k] as Pt), fill: '#000', opacity: 0.08 }]);
+  // ombre portée douce (plusieurs couches)
+  for (const [off, op] of [[7, 0.035], [4.5, 0.05], [2.5, 0.07]] as const)
+    push([{ kind: 'poly', pts: [iso(0, 0, 0), iso(L, 0, 0), iso(L, l, 0), iso(0, l, 0)].map(([x, y]) => [x + off / k, y + (off * 0.7) / k] as Pt), fill: '#1b2430', opacity: op }]);
 
-  if (fam === 'pallet') {
-    const pb = Math.min(15, H * 0.35); // socle
-    push(boxFaces(0, L, 0, l, 0, pb, WOOD, shade(WOOD, -0.45)));
-    // passages de fourches (3 dés visibles par face)
-    const gap = (u0: number, u1: number, face: 'a' | 'b') => {
-      const z0 = 0;
-      const z1 = pb * 0.62;
-      const pts: Pt[] =
-        face === 'b' ? [iso(u0, l, z0), iso(u1, l, z0), iso(u1, l, z1), iso(u0, l, z1)] : [iso(L, u0, z0), iso(L, u1, z0), iso(L, u1, z1), iso(L, u0, z1)];
-      return { kind: 'poly' as const, pts, fill: shade(WOOD, -0.62) };
-    };
-    push([gap(L * 0.13, L * 0.44, 'b'), gap(L * 0.56, L * 0.87, 'b'), gap(l * 0.13, l * 0.44, 'a'), gap(l * 0.56, l * 0.87, 'a')]);
-    if (H - pb > 0.5) {
-      // charge filmée
-      const load = shade(accent, 0.62);
-      push(boxFaces(0, L, 0, l, pb, H, load, shade(accent, -0.1)));
-      // bandes de film étirable
-      for (const f of [0.35, 0.7]) {
-        const z = pb + (H - pb) * f;
-        push([
-          { kind: 'line', a: iso(0, l, z), b: iso(L, l, z), stroke: shade(accent, 0.3), sw: 0.5 },
-          { kind: 'line', a: iso(L, 0, z), b: iso(L, l, z), stroke: shade(accent, 0.2), sw: 0.5 },
-        ]);
-      }
-    }
-  } else if (fam === 'crate') {
-    push(boxFaces(0, L, 0, l, 0, H, '#ddb98a', shade(WOOD, -0.5)));
-    // planches fines (≈ 12 cm) : des joints discrets, pour ne pas suggérer des colis superposés
-    const n = Math.max(3, Math.min(10, Math.round(H / 12)));
-    for (let i = 1; i < n; i++) {
-      const z = (H * i) / n;
-      push([
-        { kind: 'line', a: iso(0, l, z), b: iso(L, l, z), stroke: shade(WOOD, -0.12), sw: 0.3 },
-        { kind: 'line', a: iso(L, 0, z), b: iso(L, l, z), stroke: shade(WOOD, -0.18), sw: 0.3 },
-      ]);
-    }
-    // traverses verticales sur la grande face (une caisse est d'un seul tenant sur toute sa hauteur)
-    const nb = Math.max(1, Math.min(5, Math.round(L / 90)));
-    const bw = Math.min(L * 0.035, 7);
-    for (let i = 1; i <= nb; i++) {
-      const x = (L * i) / (nb + 1);
-      push([{ kind: 'poly', pts: [iso(x - bw / 2, l, 0), iso(x + bw / 2, l, 0), iso(x + bw / 2, l, H), iso(x - bw / 2, l, H)], fill: shade(WOOD, -0.08), stroke: shade(WOOD, -0.4), sw: 0.35 }]);
-    }
-    // montants d'angle
-    const e = Math.min(L, l) * 0.07;
-    push([
-      { kind: 'poly', pts: [iso(L - e, l, 0), iso(L, l, 0), iso(L, l, H), iso(L - e, l, H)], fill: shade(WOOD, -0.2), stroke: shade(WOOD, -0.5), sw: 0.4 },
-      { kind: 'poly', pts: [iso(0, l, 0), iso(e, l, 0), iso(e, l, H), iso(0, l, H)], fill: shade(WOOD, -0.2), stroke: shade(WOOD, -0.5), sw: 0.4 },
-      { kind: 'poly', pts: [iso(L, 0, 0), iso(L, e, 0), iso(L, e, H), iso(L, 0, H)], fill: shade(WOOD, -0.35), stroke: shade(WOOD, -0.5), sw: 0.4 },
-    ]);
-  } else if (fam === 'carton') {
-    push(boxFaces(0, L, 0, l, 0, H, KRAFT, shade(KRAFT, -0.45)));
-    // ruban adhésif sur le dessus et la face
-    const t = Math.min(l * 0.09, 6);
-    push([
-      { kind: 'poly', pts: [iso(0, l / 2 - t, H), iso(L, l / 2 - t, H), iso(L, l / 2 + t, H), iso(0, l / 2 + t, H)], fill: '#efe3c8', stroke: shade(KRAFT, -0.3), sw: 0.3 },
-      { kind: 'poly', pts: [iso(L, l / 2 - t, H), iso(L, l / 2 + t, H), iso(L, l / 2 + t, H * 0.78), iso(L, l / 2 - t, H * 0.78)], fill: '#e4d4b0', stroke: shade(KRAFT, -0.3), sw: 0.3 },
-    ]);
-  } else {
-    push(boxFaces(0, L, 0, l, 0, H, '#cfd6df', stroke));
-  }
+  const px = 1 / k; // 1 unité de dessin exprimée en cm du modèle
+  if (fam === 'pallet') drawPallet(push, L, l, H, px);
+  else if (fam === 'crate') drawCrate(push, L, l, H, px);
+  else if (fam === 'carton') drawCarton(push, L, l, H, px, 0);
+  else push(solid(0, L, 0, l, 0, H, '#c9d1db', shade('#c9d1db', -0.5), 8));
 
   // ---- cotes ----
   const d = Math.max(L, l, H) * 0.09;
@@ -208,7 +400,7 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
   const hb = T(iso(L + d, -d * 0.2, H));
   shapes.push({ kind: 'line', a: ha, b: hb, stroke: dimColor, sw: 0.6 });
   shapes.push({ kind: 'line', a: T(iso(L, 0, H)), b: T(iso(L + d * 1.3, -d * 0.2, H)), stroke: dimColor, sw: 0.35 });
-  shapes.push({ kind: 'text', at: [ha[0] + 5, (ha[1] + hb[1]) / 2], text: fmt(H), size: 8.5, color: INK, anchor: 'middle', rotate: -90, bold: true, halo: true });
+  shapes.push({ kind: 'text', at: [ha[0] + 6.5, (ha[1] + hb[1]) / 2], text: fmt(H), size: 8.5, color: INK, anchor: 'middle', rotate: -90, bold: true, halo: true });
 
   // poids
   shapes.push({
@@ -227,7 +419,7 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
 /* Vue de face de tous les colis à la même échelle                     */
 /* ------------------------------------------------------------------ */
 
-export function scaleStrip(pkgs: PackageLike[], accent: string, labels: DrawLabels, width = 640): Picture {
+export function scaleStrip(pkgs: PackageLike[], _accent: string, labels: DrawLabels, width = 640): Picture {
   const shapes: Shape[] = [];
   // un exemplaire par forme de colis (famille + dimensions), avec le nombre de colis identiques
   const groups = new Map<string, { p: PackageLike; n: number }>();
@@ -258,12 +450,38 @@ export function scaleStrip(pkgs: PackageLike[], accent: string, labels: DrawLabe
     const w = Math.max(p.length, p.width) * k;
     const h = p.height * k;
     const fam = familyOf(p.type);
-    const fill = fam === 'pallet' ? shade(accent, 0.62) : fam === 'crate' ? '#ddb98a' : fam === 'carton' ? KRAFT : '#cfd6df';
+    const rect = (x0: number, y0: number, x1: number, y1: number, fill: string, stroke?: string, sw?: number, opacity?: number): Shape => ({ kind: 'poly', pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], fill, stroke, sw, opacity });
+    const hline = (y: number, x0: number, x1: number, stroke: string, sw = 0.3, opacity?: number): Shape => ({ kind: 'line', a: [x0, y], b: [x1, y], stroke, sw, opacity });
     if (fam === 'pallet') {
-      const pb = Math.min(15, p.height * 0.35) * k;
-      shapes.push({ kind: 'poly', pts: [[x, base], [x + w, base], [x + w, base - pb], [x, base - pb]], fill: WOOD, stroke: shade(WOOD, -0.45), sw: 0.5 });
-      shapes.push({ kind: 'poly', pts: [[x, base - pb], [x + w, base - pb], [x + w, base - h], [x, base - h]], fill, stroke: shade(accent, -0.1), sw: 0.5 });
-    } else shapes.push({ kind: 'poly', pts: [[x, base], [x + w, base], [x + w, base - h], [x, base - h]], fill, stroke: shade(fill, -0.45), sw: 0.5 });
+      const pb = Math.min(14.4, p.height * 0.35) * k;
+      shapes.push(rect(x, base, x + w, base - pb, WOOD_PALLET, shade(WOOD_PALLET, -0.5), 0.4));
+      // passages de fourches entre les dés
+      const bl = Math.min(w * 0.12, 14.5 * k);
+      for (const [a0, a1] of [[x + bl, x + w / 2 - bl / 2], [x + w / 2 + bl / 2, x + w - bl]]) shapes.push(rect(a0, base - pb * 0.16, a1, base - pb * 0.68, shade(WOOD_PALLET, -0.6)));
+      // charge : cartons + film
+      const hl = h - pb;
+      if (hl > 0.5) {
+        shapes.push(rect(x, base - pb, x + w, base - h, KRAFT, shade(KRAFT, -0.45), 0.4));
+        const nx = Math.max(1, Math.min(4, Math.round(Math.max(p.length, p.width) / 42)));
+        const nz = Math.max(1, Math.min(5, Math.round((p.height - 14.4) / 32)));
+        for (let i = 1; i < nx; i++) shapes.push({ kind: 'line', a: [x + (w * i) / nx, base - pb], b: [x + (w * i) / nx, base - h], stroke: shade(KRAFT, -0.4), sw: 0.4 });
+        for (let j = 1; j < nz; j++) shapes.push(hline(base - pb - (hl * j) / nz, x, x + w, shade(KRAFT, -0.4), 0.4));
+        shapes.push(rect(x, base - pb, x + w, base - h, '#ffffff', undefined, undefined, 0.18));
+        shapes.push(rect(x + w * 0.2, base - pb, x + w * 0.26, base - h, '#ffffff', undefined, undefined, 0.3));
+      }
+    } else if (fam === 'crate') {
+      shapes.push(rect(x, base, x + w, base - h, CRATE, shade(CRATE, -0.5), 0.4));
+      const np = Math.max(2, Math.min(12, Math.round(p.height / 14)));
+      for (let i = 1; i < np; i++) shapes.push(hline(base - (h * i) / np, x, x + w, shade(CRATE, -0.35), 0.3, 0.7));
+      const fr = Math.max(Math.min(9 * k, h * 0.16, w * 0.08), 1);
+      shapes.push(rect(x, base, x + w, base - fr, shade(CRATE, 0.08), shade(CRATE, -0.5), 0.3));
+      shapes.push(rect(x, base - h + fr, x + w, base - h, shade(CRATE, 0.08), shade(CRATE, -0.5), 0.3));
+      shapes.push(rect(x, base, x + fr, base - h, shade(CRATE, 0.08), shade(CRATE, -0.5), 0.3));
+      shapes.push(rect(x + w - fr, base, x + w, base - h, shade(CRATE, 0.08), shade(CRATE, -0.5), 0.3));
+    } else if (fam === 'carton') {
+      shapes.push(rect(x, base, x + w, base - h, KRAFT, shade(KRAFT, -0.5), 0.4));
+      shapes.push(rect(x + w * 0.44, base - h, x + w * 0.56, base - h + h * 0.22, '#c39a5f', undefined, undefined, 0.85));
+    } else shapes.push(rect(x, base, x + w, base - h, '#c9d1db', shade('#c9d1db', -0.45), 0.5));
     shapes.push({ kind: 'text', at: [x + w / 2, base - h - 5], text: n > 1 ? `×${n}` : `n° ${p.no}`, size: 7.5, color: INK, anchor: 'middle', bold: true });
     x += w + gap;
   }
@@ -314,7 +532,7 @@ export function pictureToSvg(pic: Picture): string {
         case 'poly':
           return `<polygon points="${s.pts.map((p) => p.map((n) => n.toFixed(2)).join(',')).join(' ')}" fill="${s.fill}"${s.opacity !== undefined ? ` fill-opacity="${s.opacity}"` : ''} stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}" stroke-linejoin="round"/>`;
         case 'line':
-          return `<line x1="${s.a[0].toFixed(2)}" y1="${s.a[1].toFixed(2)}" x2="${s.b[0].toFixed(2)}" y2="${s.b[1].toFixed(2)}" stroke="${s.stroke}" stroke-width="${s.sw}"${s.dash ? ' stroke-dasharray="3 2"' : ''}/>`;
+          return `<line x1="${s.a[0].toFixed(2)}" y1="${s.a[1].toFixed(2)}" x2="${s.b[0].toFixed(2)}" y2="${s.b[1].toFixed(2)}" stroke="${s.stroke}" stroke-width="${s.sw}"${s.opacity !== undefined ? ` stroke-opacity="${s.opacity}"` : ''}${s.dash ? ' stroke-dasharray="3 2"' : ''}/>`;
         case 'circle':
           return `<circle cx="${s.c[0].toFixed(2)}" cy="${s.c[1].toFixed(2)}" r="${Math.max(0.1, s.r).toFixed(2)}" fill="${s.fill}" stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}"/>`;
         case 'text': {
