@@ -7,6 +7,7 @@ import { LangContext } from './lib/i18n';
 import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
 import ConfirmDialog from './components/ConfirmDialog';
 import { installUpdateHandlers } from './lib/updates';
+import { sanitizeCatalog } from './lib/validate';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
@@ -27,6 +28,11 @@ const DEFAULT_SETTINGS: Settings = { companyName: '', logo: '', accent: DEFAULT_
 
 export default function App() {
   const [catalog, setCatalog] = usePersistent<CatalogItem[]>('catalog', []);
+  // nettoyage au démarrage : fiches corrompues (ancien import, fichier invalide) écartées
+  useEffect(() => {
+    const { items, rejected } = sanitizeCatalog(catalog);
+    if (rejected || items.length !== catalog.length) setCatalog(items);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settings, setSettings] = usePersistent<Settings>('settings', DEFAULT_SETTINGS);
   const [history, setHistory] = usePersistent<HistoryEntry[]>('history', []);
   const [lines, setLines] = usePersistent<RequestLine[]>('requests', []);

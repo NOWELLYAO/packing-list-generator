@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { CatalogItem, HistoryEntry, RequestLine, Settings } from '../types';
 import { chooseVariant, findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
@@ -9,15 +9,15 @@ import { detectHeaderRow, detectMapping } from '../lib/detect';
 import { parseNumber } from '../lib/parseValues';
 import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
-import FreightPanel from './FreightPanel';
 import QuickItemForm from './QuickItemForm';
-import LoadPlanPanel from './LoadPlanPanel';
+import TransportPanel from './TransportPanel';
 import InfoTip from './InfoTip';
 import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
 import { usePersistent } from '../lib/storage';
+import { isPieceUnit } from '../lib/validate';
 import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
 
 interface Props {
@@ -77,6 +77,23 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   );
   const pl = proposal === 'grundfos' ? plGrundfos : plSmart;
 
+  // Article de chaque ligne, résolu une seule fois (la recherche dans la base est coûteuse sur 60 lignes)
+  const resolved = useMemo(() => {
+    const items = new Map<string, CatalogItem | undefined>();
+    const firstIdx = new Map<string, number>();
+    const dupOf = new Map<string, number>();
+    lines.forEach((l, i) => {
+      const it = findItem(catalog, l.code, l.pn);
+      items.set(l.id, it);
+      const key = it ? `id:${it.id}` : `txt:${(l.code || l.pn).toLowerCase()}`;
+      if (firstIdx.has(key)) dupOf.set(l.id, firstIdx.get(key)!);
+      else firstIdx.set(key, i);
+    });
+    return { items, dupOf };
+  }, [catalog, lines]);
+  // les sections lourdes (schémas, plan) suivent avec un léger différé : la saisie reste fluide
+  const deferredPl = useDeferredValue(pl);
+
   const addItem = (code: string, pn: string, quantity = 1) => {
     const existing = lines.find((l) => (code && l.code === code) || (pn && l.pn === pn && l.pn));
     if (existing) {
@@ -84,7 +101,12 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
       toast(`Quantité augmentée : ${code || pn}`);
     } else setLines([...lines, { id: uid(), code, pn, quantity }]);
   };
-  const setQty = (id: string, q: number) => setLines(lines.map((l) => (l.id === id ? { ...l, quantity: Math.max(0, q) } : l)));
+  /** pièces, jeux, unités : quantité entière ; autres unités (m, kg…) : décimales permises */
+  const cleanQty = (code: string, pn: string, q: number) => {
+    const n = Number.isFinite(q) ? Math.max(0, q) : 0;
+    return isPieceUnit(findItem(catalog, code, pn)?.unit) ? Math.round(n) : Math.round(n * 1000) / 1000;
+  };
+  const setQty = (id: string, q: number) => setLines(lines.map((l) => (l.id === id ? { ...l, quantity: cleanQty(l.code, l.pn, q) } : l)));
   const remove = (id: string) => {
     const before = lines;
     setLines(lines.filter((l) => l.id !== id));
@@ -98,7 +120,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
       ...lines,
       ...parsed.map((p) => {
         const it = findItem(catalog, p.code, p.pn);
-        return { ...p, code: it ? it.code : p.code, pn: it ? it.pn : p.pn, id: uid() };
+        return { ...p, quantity: cleanQty(p.code, p.pn, p.quantity), code: it ? it.code : p.code, pn: it ? it.pn : p.pn, id: uid() };
       }),
     ]);
     setPaste('');
@@ -121,7 +143,8 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
       const code = m.code !== undefined ? r[m.code] ?? '' : '';
       const pn = m.pn !== undefined ? r[m.pn] ?? '' : '';
       const qty = parseNumber(r[m.quantity]);
-      if ((code || pn) && qty > 0) parsed.push({ id: uid(), code, pn, quantity: qty });
+      const q = cleanQty(code, pn, qty);
+      if ((code || pn) && q > 0) parsed.push({ id: uid(), code, pn, quantity: q });
     }
     setLines([...lines, ...parsed]);
     toast(`${parsed.length} ligne(s) importée(s)`);
@@ -184,7 +207,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
       ) : (
         <div className="lines">
           {lines.map((l) => {
-            const it = findItem(catalog, l.code, l.pn);
+            const it = resolved.items.get(l.id);
             const smartChoice = it ? chooseVariant(it, l.quantity || 1) : null;
             // en mode « selon Grundfos », la fiabilité affichée est celle de cette proposition
             const gLine = proposal === 'grundfos' ? plGrundfos?.lines.find((x) => x.code === it?.code) : undefined;
@@ -216,6 +239,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                       </>
                     )}
                     {choice && l.quantity > 0 && <ConfidenceChip c={choice.confidence} />}
+                    {resolved.dupOf.has(l.id) && (
+                      <span className="chip chip-warn">doublon : additionné à la ligne {resolved.dupOf.get(l.id)! + 1}</span>
+                    )}
                     {it && choice && ['estimated', 'mixed', 'manual'].includes(choice.confidence) && (
                       <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
                         {choice.confidence === 'manual' ? 'Modifier les dimensions' : 'Saisir les dimensions réelles'}
@@ -361,6 +387,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                 toast(p === 'grundfos' ? 'Proposition « Selon Grundfos » affichée' : 'Proposition optimisée affichée');
               }}
               busy={!!busy}
+              mode={settings.transportMode ?? 'sea'}
               onExportComparison={() => void run('cmp', () => exportComparisonPdf(plGrundfos, plSmart, settings))}
             />
           )}
@@ -379,9 +406,13 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             </div>
           </div>
 
-          <PackingListView pl={pl} accent={settings.accent || DEFAULT_ACCENT} />
-          <LoadPlanPanel pl={pl} accent={settings.accent || DEFAULT_ACCENT} />
-          <FreightPanel pl={pl} />
+          {deferredPl && <PackingListView pl={deferredPl} accent={settings.accent || DEFAULT_ACCENT} />}
+          <TransportPanel
+            pl={deferredPl ?? pl}
+            accent={settings.accent || DEFAULT_ACCENT}
+            mode={settings.transportMode ?? 'sea'}
+            setMode={(m) => setSettings({ ...settings, transportMode: m })}
+          />
         </>
       )}
 

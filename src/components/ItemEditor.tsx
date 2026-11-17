@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
+import { readUserNumber } from '../lib/validate';
 import InfoTip from './InfoTip';
 import { packLabel, useLang } from '../lib/i18n';
 
@@ -32,32 +33,63 @@ const PACK: Field[] = [
   { key: 'grossWeightPerUnit', label: 'Poids brut / unité (kg)', num: true },
 ];
 
+const NUM_FIELDS: Field[] = PACK.filter((f) => f.num);
+
 export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: Props) {
-  const [draft, setDraft] = useState<CatalogItem>(item);
+  const [draft, setDrafted] = useState<CatalogItem>(item);
+  // texte saisi dans les champs numériques (lu seulement à l'enregistrement : "1 234,5" ou "12," restent intacts)
+  const rawFrom = (d: CatalogItem) => Object.fromEntries(NUM_FIELDS.map((f) => [f.key, String(d[f.key] ?? '')])) as Record<string, string>;
+  const [raw, setRaw] = useState<Record<string, string>>(() => rawFrom(item));
+  const setDraft = (d: CatalogItem) => {
+    setDrafted(d);
+    setRaw(rawFrom(d));
+  };
   const [packChanged, setPackChanged] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const variants = variantsOf(item);
   const lang = useLang();
 
   const set = (f: Field, v: string) => {
-    setDraft({ ...draft, [f.key]: f.num ? Number(v.replace(',', '.')) || 0 : v });
+    if (f.num) setRaw({ ...raw, [f.key]: v });
+    else setDrafted({ ...draft, [f.key]: v });
     if (PACK.includes(f)) setPackChanged(true);
+    if (fieldErrors[f.key]) setFieldErrors({ ...fieldErrors, [f.key]: '' });
   };
   const input = (f: Field) => (
-    <label key={f.key} className={f.wide ? 'wide' : ''}>
+    <label key={f.key} className={`${f.wide ? 'wide' : ''} ${fieldErrors[f.key] ? 'has-error' : ''}`}>
       <span>{f.label}</span>
       <input
         className={f.mono ? 'mono' : ''}
         inputMode={f.num ? 'decimal' : undefined}
-        value={String(draft[f.key] ?? '')}
+        value={f.num ? raw[f.key] ?? '' : String(draft[f.key] ?? '')}
         onChange={(e) => set(f, e.target.value)}
       />
+      {fieldErrors[f.key] && <small className="field-error">{fieldErrors[f.key]}</small>}
     </label>
   );
 
   const save = () => {
     if (!draft.code.trim() && !draft.pn.trim()) return setError('Renseignez un code article ou un PN.');
-    onSave({ ...draft, manual: draft.manual || packChanged, updatedAt: new Date().toISOString() });
+    // lecture et contrôle des nombres
+    const errs: Record<string, string> = {};
+    const vals: Record<string, number> = {};
+    for (const f of NUM_FIELDS) {
+      const txt = (raw[f.key] ?? '').trim();
+      const n = txt === '' ? 0 : readUserNumber(txt);
+      if (!Number.isFinite(n)) errs[f.key] = 'Nombre invalide';
+      else if (n < 0) errs[f.key] = 'Doit être positif';
+      else vals[f.key] = n;
+    }
+    for (const k of ['length', 'width', 'height']) if (vals[k] > 1500) errs[k] = 'Max 1500 cm';
+    if (!errs.qtyPerPackage && !(vals.qtyPerPackage > 0)) errs.qtyPerPackage = 'Doit être supérieur à 0';
+    if (!errs.grossWeightPerUnit && !errs.netWeightPerUnit && vals.grossWeightPerUnit < vals.netWeightPerUnit)
+      errs.grossWeightPerUnit = 'Le brut doit être ≥ au net';
+    const dims = [vals.length, vals.width, vals.height];
+    if (dims.some((x) => x > 0) && dims.some((x) => !(x > 0))) for (const k of ['length', 'width', 'height']) if (!(vals[k] > 0)) errs[k] = 'Renseignez les 3 dimensions';
+    setFieldErrors(errs);
+    if (Object.values(errs).some(Boolean)) return setError('Corrigez les champs signalés en rouge.');
+    onSave({ ...draft, ...vals, manual: draft.manual || packChanged, updatedAt: new Date().toISOString() });
   };
 
   return (

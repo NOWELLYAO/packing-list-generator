@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { PackingList } from '../types';
 import { comparePL } from '../lib/compare';
 import { useLang } from '../lib/i18n';
@@ -12,14 +13,15 @@ interface Props {
   onSelect: (p: Proposal) => void;
   onExportComparison: () => void;
   busy: boolean;
+  mode: 'sea' | 'road' | 'air';
 }
 
 const nf = (n: number, d: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Les deux propositions côte à côte, avec les écarts et ce qui change */
-export default function ComparePanel({ g, s, selected, onSelect, onExportComparison, busy }: Props) {
+export default function ComparePanel({ g, s, selected, onSelect, onExportComparison, busy, mode }: Props) {
   const lang = useLang();
-  const c = comparePL(g, s, lang);
+  const c = useMemo(() => comparePL(g, s, lang, mode), [g, s, lang, mode]);
   const identical = c.rows.every((r) => Math.abs(r.g - r.s) < 1e-6) && c.changes.length === 0;
 
   return (

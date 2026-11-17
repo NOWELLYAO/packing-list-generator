@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
-import { packageDrawing, scaleStrip, type Picture } from './drawing';
+import { formatNos, groupIdentical, packageDrawing, scaleStrip, type Picture } from './drawing';
 import { loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
 
@@ -266,8 +266,10 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     const cols = 3;
     const cellW = (W - 2 * M) / cols;
     let col = 0;
-    for (const p of drawable) {
-      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels);
+    // un schéma par groupe de colis identiques (sinon des dizaines de pages pour des palettes toutes pareilles)
+    for (const { first: p, nos } of groupIdentical(drawable)) {
+      const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
+      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title);
       const cellH = (pic.h * cellW) / pic.w;
       if (yy + cellH + 8 > H - 16) {
         doc.addPage();
@@ -291,13 +293,14 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     }
 
     // ---- Plan de chargement ----
-    const plan = planLoad(pl.packages);
+    const tmode = settings.transportMode ?? 'sea';
+    const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
     if (plan) {
       doc.addPage();
       yy = section(T.loadPlan, 18);
-      const vName = lang === 'fr' ? plan.vehicle.name : plan.vehicle.nameEn;
+      const vName = lang === 'fr' ? plan.summary : plan.summaryEn;
       const facts: [string, string][] = [
-        [T.vehicle, `${plan.bins.length} × ${vName}`],
+        [T.vehicle, vName],
         [T.lengthUsed, plan.bins.map((b) => `${nf(b.usedLength / 100, 2)} m`).join(' + ')],
         [T.floorUsed, plan.bins.map((b) => `${nf(b.floorPct, 1)} %`).join(' + ')],
         [T.ldm, `${nf(plan.ldm, 2)}`],
@@ -318,7 +321,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       });
       yy += 20;
       for (const [i, b] of plan.bins.entries()) {
-        const pic = loadPlanDrawing(plan.vehicle, b, settings.accent || DEFAULT_ACCENT, lang, 640);
+        const pic = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
         const ph = (pic.h * (W - 2 * M)) / pic.w;
         if (yy + ph + 10 > H - 16) {
           doc.addPage();
@@ -328,7 +331,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
           doc.setTextColor(...ink);
-          doc.text(`${vName} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
+          doc.text(`${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
           yy += 4;
         }
         drawPicturePdf(doc, pic, M, yy, W - 2 * M);

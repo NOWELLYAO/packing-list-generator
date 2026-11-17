@@ -178,6 +178,8 @@ export interface Settings {
   accent: string;
   /** langue des documents et des libellés d'emballage */
   lang?: 'fr' | 'en';
+  /** mode de transport retenu pour le plan de chargement et les indicateurs */
+  transportMode?: 'sea' | 'road' | 'air';
 }
 
 /** PL générée, conservée dans l'historique */

@@ -8,8 +8,11 @@ import { round } from './parseValues';
  * placés vers l'avant, puis choix du moyen de transport le plus adapté.
  */
 
+export type TransportMode = 'sea' | 'road' | 'air';
+
 export interface Vehicle {
   id: string;
+  family: 'sea' | 'road';
   name: string;
   nameEn: string;
   length: number; // cm intérieur
@@ -19,10 +22,12 @@ export interface Vehicle {
 }
 
 export const VEHICLES: Vehicle[] = [
-  { id: '20', name: "Conteneur 20'", nameEn: "20' container", length: 589, width: 235, doorHeight: 228, payload: 28200 },
-  { id: '40', name: "Conteneur 40'", nameEn: "40' container", length: 1203, width: 235, doorHeight: 228, payload: 26700 },
-  { id: '40hc', name: "Conteneur 40' HC", nameEn: "40' HC container", length: 1203, width: 235, doorHeight: 258, payload: 26500 },
-  { id: 'semi', name: 'Semi-remorque 13,6 m', nameEn: '13.6 m semi-trailer', length: 1360, width: 245, doorHeight: 270, payload: 24000 },
+  // du plus petit au plus grand dans chaque famille
+  { id: '20', family: 'sea', name: "Conteneur 20'", nameEn: "20' container", length: 589, width: 235, doorHeight: 228, payload: 28200 },
+  { id: '40', family: 'sea', name: "Conteneur 40'", nameEn: "40' container", length: 1203, width: 235, doorHeight: 228, payload: 26700 },
+  { id: '40hc', family: 'sea', name: "Conteneur 40' HC", nameEn: "40' HC container", length: 1203, width: 235, doorHeight: 258, payload: 26500 },
+  { id: 'porteur', family: 'road', name: 'Porteur 7,2 m', nameEn: '7.2 m rigid truck', length: 720, width: 245, doorHeight: 250, payload: 7000 },
+  { id: 'semi', family: 'road', name: 'Semi-remorque 13,6 m', nameEn: '13.6 m semi-trailer', length: 1360, width: 245, doorHeight: 270, payload: 24000 },
 ];
 
 export interface Placement {
@@ -38,6 +43,8 @@ export interface Placement {
 }
 
 export interface Bin {
+  /** véhicule de ce chargement (un 20' peut compléter des 40') */
+  vehicle: Vehicle;
   placements: Placement[];
   usedLength: number; // cm
   floorPct: number;
@@ -49,6 +56,9 @@ export interface Bin {
 
 export interface LoadPlan {
   vehicle: Vehicle;
+  /** libellé de la solution, ex. "1 × Conteneur 40' + 1 × Conteneur 20'" */
+  summary: string;
+  summaryEn: string;
   bins: Bin[];
   /** mètres de plancher (camion) : longueur occupée sur toute la largeur */
   ldm: number;
@@ -131,6 +141,7 @@ function binStats(v: Vehicle, placed: Placement[]): Bin {
   const cx = weight ? placed.reduce((s, p) => s + (p.x + p.l / 2) * p.kg, 0) / weight : 0;
   const cy = weight ? placed.reduce((s, p) => s + (p.y + p.w / 2) * p.kg, 0) / weight : 0;
   return {
+    vehicle: v,
     placements: placed,
     usedLength,
     floorPct: round((area / (v.length * v.width)) * 100, 1),
@@ -177,14 +188,30 @@ function pack(v: Vehicle, pkgs: PLPackage[]): { bins: Bin[]; unplaced: number[] 
   return cands[0];
 }
 
-/** Choisit le transport le plus adapté et produit le plan */
-export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto'): LoadPlan | null {
+/** Libellé « 2 × Conteneur 40' + 1 × Conteneur 20' » */
+function describe(bins: Bin[], en: boolean): string {
+  const counts = new Map<string, { v: Vehicle; n: number }>();
+  for (const b of bins) {
+    const c = counts.get(b.vehicle.id);
+    if (c) c.n++;
+    else counts.set(b.vehicle.id, { v: b.vehicle, n: 1 });
+  }
+  return [...counts.values()].map(({ v, n }) => `${n} × ${en ? v.nameEn : v.name}`).join(' + ');
+}
+
+/**
+ * Choisit le transport le plus adapté dans la famille demandée (maritime : conteneurs ; routier : camions)
+ * et produit le plan. Critère : le moins de véhicules, puis le plus petit véhicule.
+ * Maritime : si le dernier conteneur d'une série de 40' peut être un 20', il est remplacé.
+ */
+export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', family: 'sea' | 'road' = 'sea'): LoadPlan | null {
   const items = pkgs.filter((p) => p.length > 0 && p.width > 0);
   if (!items.length) return null;
   const tallest = Math.max(...items.map((p) => p.height));
+  const fleet = VEHICLES.filter((v) => v.family === family);
   const alternatives: LoadPlan['alternatives'] = [];
   let chosen: { v: Vehicle; bins: Bin[]; unplaced: number[] } | null = null;
-  for (const v of VEHICLES) {
+  for (const v of fleet) {
     if (tallest > v.doorHeight) {
       alternatives.push({ vehicle: v, count: 0, feasible: false, reason: `colis de ${tallest} cm > porte ${v.doorHeight} cm` });
       continue;
@@ -195,19 +222,33 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto'): Loa
     if (mode !== 'auto' ? v.id === mode : feasible && (!chosen || r.bins.length < chosen.bins.length)) chosen = { v, bins: r.bins, unplaced: r.unplaced };
   }
   if (!chosen) {
-    const v = VEHICLES.find((x) => x.id === mode) ?? VEHICLES[VEHICLES.length - 1];
-    const r = pack(v, items);
-    chosen = { v, ...r };
+    const v = fleet.find((x) => x.id === mode) ?? fleet[fleet.length - 1];
+    chosen = { v, ...pack(v, items) };
+  }
+  // Compléter avec un véhicule plus petit pour le dernier chargement (ex. 40' + 20' au lieu de 2 × 40')
+  if (mode === 'auto' && chosen.bins.length > 1) {
+    const last = chosen.bins[chosen.bins.length - 1];
+    const lastItems = items.filter((p) => last.placements.some((q) => q.no === p.no));
+    const lastTallest = Math.max(...lastItems.map((p) => p.height));
+    for (const small of fleet.filter((v) => v.length * v.width < chosen!.v.length * chosen!.v.width && lastTallest <= v.doorHeight)) {
+      const r = pack(small, lastItems);
+      if (r.bins.length === 1 && !r.unplaced.length) {
+        chosen.bins = [...chosen.bins.slice(0, -1), r.bins[0]];
+        break;
+      }
+    }
   }
   const warnings: string[] = [];
   chosen.bins.forEach((b, i) => {
     const tag = chosen!.bins.length > 1 ? ` (n° ${i + 1})` : '';
-    if (Math.abs(b.cogX - 50) > 15 && b.usedLength > chosen!.v.length * 0.5)
+    if (Math.abs(b.cogX - 50) > 15 && b.usedLength > b.vehicle.length * 0.5)
       warnings.push(`Centre de gravité à ${b.cogX} % de la longueur${tag} : répartir les colis lourds pour équilibrer`);
     if (Math.abs(b.cogY - 50) > 10) warnings.push(`Charge décentrée en largeur (${b.cogY} %)${tag} : caler les colis`);
   });
   return {
     vehicle: chosen.v,
+    summary: describe(chosen.bins, false),
+    summaryEn: describe(chosen.bins, true),
     bins: chosen.bins,
     ldm: round(chosen.bins.reduce((s, b) => s + b.usedLength, 0) / 100, 2),
     unplaced: chosen.unplaced,
@@ -220,7 +261,8 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto'): Loa
 /* Dessin du plan (vue de dessus)                                      */
 /* ------------------------------------------------------------------ */
 
-export function loadPlanDrawing(v: Vehicle, bin: Bin, accent: string, lang: 'fr' | 'en', width = 640): Picture {
+export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', width = 640): Picture {
+  const v = bin.vehicle;
   const pad = 26;
   const k = (width - pad * 2) / v.length;
   const H = v.width * k;

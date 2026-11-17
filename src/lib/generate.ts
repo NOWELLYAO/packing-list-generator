@@ -351,11 +351,21 @@ export function generatePackingList(
   const lines: PLLine[] = [];
   const lineItems: (CatalogItem | undefined)[] = [];
   const allPieces: Piece[] = [];
+  // Un même article saisi sur plusieurs lignes (ou par code puis par PN) : quantités additionnées,
+  // sinon 3 + 3 pompes donneraient deux palettes incomplètes au lieu d'une palette pleine.
+  const merged: { req: RequestLine; qty: number; item?: CatalogItem }[] = [];
   for (const req of requests) {
     if (!req.code.trim() && !req.pn.trim()) continue;
     const qty = Number(req.quantity) || 0;
     if (qty <= 0) continue;
     const item = findItem(catalog, req.code, req.pn);
+    const same = merged.find((m) =>
+      item ? m.item?.id === item.id : !m.item && norm(m.req.code || m.req.pn) === norm(req.code || req.pn),
+    );
+    if (same) same.qty = round(same.qty + qty, 6);
+    else merged.push({ req, qty, item });
+  }
+  for (const { req, qty, item } of merged) {
     const lineIdx = lines.length;
     lineItems[lineIdx] = item;
     if (!item) {

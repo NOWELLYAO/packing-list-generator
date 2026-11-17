@@ -8,6 +8,7 @@ import InfoTip from './InfoTip';
 import BoxIcon from './BoxIcon';
 import { packLabel, useLang } from '../lib/i18n';
 import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
+import { sanitizeCatalog } from '../lib/validate';
 
 interface Props {
   catalog: CatalogItem[];
@@ -40,7 +41,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
         const hay = norm(`${c.code} ${c.pn} ${c.description}`);
         return tokens.every((t) => hay.includes(t));
       })
-      .sort((a, b) => (a.description || a.code).localeCompare(b.description || b.code));
+      .sort((a, b) => String(a.description || a.code || '').localeCompare(String(b.description || b.code || '')));
   }, [catalog, q, filter]);
   const toCheck = useMemo(() => catalog.filter(needsCheck).length, [catalog]);
   const withVariants = useMemo(() => catalog.filter((c) => (c.variants?.length ?? 0) > 1).length, [catalog]);
@@ -101,18 +102,19 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const restoreBackup = async (f: File | undefined) => {
     if (!f) return;
     try {
-      const data = JSON.parse(await f.text());
-      if (!Array.isArray(data)) throw new Error();
+      const { items: data, rejected } = sanitizeCatalog(JSON.parse(await f.text()));
+      if (!data.length) return toast("Ce fichier ne contient aucun article valide (code ou PN manquant)");
+      const skipped = rejected ? ` — ${rejected} élément(s) invalide(s) ignoré(s)` : '';
       if (!catalog.length) {
         setCatalog(data);
-        return toast(`${data.length} articles chargés`);
+        return toast(`${data.length} articles chargés${skipped}`);
       }
       const before = catalog;
       snapshotCatalog(before, 'avant chargement JSON');
       setSnapKey((k) => k + 1);
       const r = mergeCatalog(catalog, data);
       setCatalog(r.catalog);
-      notify(`${r.added} ajoutés, ${r.updated} complétés`, () => setCatalog(before));
+      notify(`${r.added} ajoutés, ${r.updated} complétés${skipped}`, () => setCatalog(before));
     } catch {
       toast('Fichier de base invalide');
     }

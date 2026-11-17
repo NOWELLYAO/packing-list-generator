@@ -92,7 +92,7 @@ export interface DrawLabels {
  * Colis en perspective isométrique, à l'échelle de ses propres dimensions,
  * avec cotes L / l / H et poids brut.
  */
-export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabels): Picture {
+export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabels, title?: string): Picture {
   const W = 220;
   const Hh = 190;
   const L = Math.max(1, p.length || 40);
@@ -207,7 +207,7 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
   shapes.push({
     kind: 'text',
     at: [W / 2, Hh - 8],
-    text: `${labels.packageWord} ${p.no} · ${p.grossWeight.toLocaleString(labels.locale, { maximumFractionDigits: 1 })} ${labels.kg}`,
+    text: `${title ?? `${labels.packageWord} ${p.no}`} · ${p.grossWeight.toLocaleString(labels.locale, { maximumFractionDigits: 1 })} ${labels.kg}`,
     size: 9.5,
     color: INK,
     anchor: 'middle',
@@ -222,22 +222,32 @@ export function packageDrawing(p: PackageLike, accent: string, labels: DrawLabel
 
 export function scaleStrip(pkgs: PackageLike[], accent: string, labels: DrawLabels, width = 640): Picture {
   const shapes: Shape[] = [];
-  const valid = pkgs.filter((p) => p.length > 0 && p.height > 0);
+  // un exemplaire par forme de colis (famille + dimensions), avec le nombre de colis identiques
+  const groups = new Map<string, { p: PackageLike; n: number }>();
+  for (const p of pkgs) {
+    if (!(p.length > 0 && p.height > 0)) continue;
+    const k = `${familyOf(p.type)}|${Math.max(p.length, p.width)}|${p.height}`;
+    const g = groups.get(k);
+    if (g) g.n++;
+    else groups.set(k, { p, n: 1 });
+  }
+  // les plus grands d'abord, 16 formes au plus pour rester lisible
+  const valid = [...groups.values()].sort((a, b) => Math.max(b.p.length, b.p.width) * b.p.height - Math.max(a.p.length, a.p.width) * a.p.height).slice(0, 16);
   if (!valid.length) return { shapes, w: width, h: 10 };
   const gap = 10;
-  const maxH = Math.max(...valid.map((p) => p.height), 180); // repère humain 180 cm
-  const totalL = valid.reduce((s, p) => s + Math.max(p.length, p.width), 0) + 60; // + silhouette
-  const k = Math.min((width - gap * (valid.length + 2)) / totalL, 120 / maxH);
+  const maxH = Math.max(...valid.map((g) => g.p.height), 180); // repère humain 180 cm
+  const totalL = valid.reduce((s, g) => s + Math.max(g.p.length, g.p.width), 0) + 60; // + silhouette
+  const k = Math.max(0.02, Math.min((width - gap * (valid.length + 3)) / totalL, 120 / maxH));
   const base = 140;
   let x = gap;
   // silhouette humaine 1,80 m (repère d'échelle)
   const hp = 180 * k;
   const head = hp * 0.07;
-  shapes.push({ kind: 'circle', c: [x + 14 * k + 6, base - hp + head], r: head, fill: '#b8c2cf' });
+  shapes.push({ kind: 'circle', c: [x + 14 * k + 6, base - hp + head], r: Math.max(0.5, head), fill: '#b8c2cf' });
   shapes.push({ kind: 'poly', pts: [[x + 6, base], [x + 6 + 28 * k, base], [x + 6 + 26 * k, base - hp + head * 2.2], [x + 6 + 2 * k, base - hp + head * 2.2]], fill: '#b8c2cf' });
   shapes.push({ kind: 'text', at: [x + 6 + 14 * k, base + 11], text: `${(1.8).toLocaleString(labels.locale)} m`, size: 7, color: '#7a8596', anchor: 'middle' });
   x += 30 * k + gap * 2;
-  for (const p of valid) {
+  for (const { p, n } of valid) {
     const w = Math.max(p.length, p.width) * k;
     const h = p.height * k;
     const fam = familyOf(p.type);
@@ -247,9 +257,43 @@ export function scaleStrip(pkgs: PackageLike[], accent: string, labels: DrawLabe
       shapes.push({ kind: 'poly', pts: [[x, base], [x + w, base], [x + w, base - pb], [x, base - pb]], fill: WOOD, stroke: shade(WOOD, -0.45), sw: 0.5 });
       shapes.push({ kind: 'poly', pts: [[x, base - pb], [x + w, base - pb], [x + w, base - h], [x, base - h]], fill, stroke: shade(accent, -0.1), sw: 0.5 });
     } else shapes.push({ kind: 'poly', pts: [[x, base], [x + w, base], [x + w, base - h], [x, base - h]], fill, stroke: shade(fill, -0.45), sw: 0.5 });
-    shapes.push({ kind: 'text', at: [x + w / 2, base - h - 4], text: String(p.no), size: 8, color: INK, anchor: 'middle', bold: true });
+    shapes.push({ kind: 'text', at: [x + w / 2, base - h - 5], text: n > 1 ? `×${n}` : `n° ${p.no}`, size: 7.5, color: INK, anchor: 'middle', bold: true });
     x += w + gap;
   }
   shapes.push({ kind: 'line', a: [4, base], b: [Math.min(width - 4, x), base], stroke: '#9aa5b4', sw: 0.8 });
   return { shapes, w: Math.max(width, x), h: base + 16 };
+}
+
+/** Regroupe les colis strictement identiques (emballage, dimensions, poids, contenu) */
+export interface PackageGroup<P> {
+  first: P;
+  nos: number[];
+}
+export function groupIdentical<P extends PackageLike & { netWeight: number; contents: { code: string; quantity: number }[]; basis?: string }>(pkgs: P[]): PackageGroup<P>[] {
+  const out: PackageGroup<P>[] = [];
+  const index = new Map<string, PackageGroup<P>>();
+  for (const p of pkgs) {
+    const key = JSON.stringify([p.type, p.length, p.width, p.height, p.grossWeight, p.netWeight, p.basis, p.contents]);
+    const g = index.get(key);
+    if (g) g.nos.push(p.no);
+    else {
+      const ng = { first: p, nos: [p.no] };
+      index.set(key, ng);
+      out.push(ng);
+    }
+  }
+  return out;
+}
+
+/** [3,4,5,9] -> "3 à 5, 9" */
+export function formatNos(nos: number[], to = 'à'): string {
+  const parts: string[] = [];
+  for (let i = 0; i < nos.length; i++) {
+    let j = i;
+    while (j + 1 < nos.length && nos[j + 1] === nos[j] + 1) j++;
+    parts.push(j - i >= 1 ? `${nos[i]} ${to} ${nos[j]}` : `${nos[i]}`);
+    if (j - i === 1) parts[parts.length - 1] = `${nos[i]}, ${nos[j]}`;
+    i = j;
+  }
+  return parts.join(', ');
 }

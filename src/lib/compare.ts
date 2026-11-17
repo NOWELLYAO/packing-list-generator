@@ -26,12 +26,13 @@ export interface Comparison {
 
 const dims = (p: PLPackage) => (p.length ? `${p.length}×${p.width}×${p.height}` : `${p.volume} m³`);
 
-export function comparePL(g: PackingList, s: PackingList, lang: Lang = 'fr'): Comparison {
-  const planG = planLoad(g.packages);
-  const planS = planLoad(s.packages);
+export function comparePL(g: PackingList, s: PackingList, lang: Lang = 'fr', mode: 'sea' | 'road' | 'air' = 'sea'): Comparison {
+  const fam = mode === 'road' ? 'road' : 'sea';
+  const planG = mode === 'air' ? null : planLoad(g.packages, 'auto', fam);
+  const planS = mode === 'air' ? null : planLoad(s.packages, 'auto', fam);
   const fG = freightInfo(g);
   const fS = freightInfo(s);
-  const vName = (p: ReturnType<typeof planLoad>) => (p ? `${p.bins.length} × ${lang === 'fr' ? p.vehicle.name : p.vehicle.nameEn}` : '—');
+  const vName = (p: ReturnType<typeof planLoad>) => (p ? (lang === 'fr' ? p.summary : p.summaryEn) : mode === 'air' ? 'Aérien' : '—');
   const rows: CompareRow[] = [
     { key: 'packages', label: 'Colis', short: 'Colis', g: g.totals.packages, s: s.totals.packages, unit: '', decimals: 0, lowerIsBetter: true },
     { key: 'volume', label: 'Volume', short: 'Volume', g: g.totals.volume, s: s.totals.volume, unit: 'm³', decimals: 3, lowerIsBetter: true },
