@@ -3,6 +3,7 @@ import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
 import { packageDrawing, scaleStrip, type Picture } from './drawing';
 import { loadPlanDrawing, planLoad } from './loadPlan';
+import { comparePL } from './compare';
 
 /* ------------------------------------------------------------------ */
 /* Outils communs                                                      */
@@ -381,6 +382,100 @@ export async function sharePackingListPdf(pl: PackingList, settings: Settings): 
   }
   download(blob, file.name);
   return 'downloaded';
+}
+
+/** PDF comparatif « selon Grundfos » / « optimisée » (document interne d'aide à la décision) */
+export async function exportComparisonPdf(g: PackingList, sm: PackingList, settings: Settings) {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
+  const lang: Lang = settings.lang ?? 'fr';
+  numLocale = 'fr-FR';
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const M = 14;
+  const accent = hexToRgb(settings.accent);
+  const light = tint(accent, 0.9);
+  const c = comparePL(g, sm, lang);
+  doc.setFillColor(...accent);
+  doc.rect(0, 0, W, 5, 'F');
+  if (settings.logo) {
+    const { w, h } = await imageSize(settings.logo);
+    if (w && h) {
+      const r = Math.min(40 / w, 15 / h);
+      doc.addImage(settings.logo, settings.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG', M, 10, w * r, h * r);
+    }
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  doc.setTextColor(...accent);
+  doc.text('COMPARAISON DES PROPOSITIONS', W - M, 17, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(110, 120, 135);
+  doc.text(`Date : ${fmtDate(g.date)} — document interne`, W - M, 23, { align: 'right' });
+  const style = {
+    theme: 'grid' as const,
+    styles: { fontSize: 8.5, cellPadding: 1.8, lineColor: [225, 230, 236] as [number, number, number], lineWidth: 0.2 },
+    headStyles: { fillColor: accent, textColor: 255, fontStyle: 'bold' as const },
+    alternateRowStyles: { fillColor: [248, 250, 252] as [number, number, number] },
+    margin: { left: M, right: M },
+  };
+  autoTable(doc, {
+    ...style,
+    startY: 32,
+    head: [['', 'Selon Grundfos', 'Optimisée', 'Écart']],
+    body: [
+      ...c.rows.map((r) => {
+        const d = r.s - r.g;
+        const same = Math.abs(d) < Math.pow(10, -r.decimals) / 2;
+        const pct = r.g ? ` (${d > 0 ? '+' : '-'}${nf(Math.abs((d / r.g) * 100), 0)} %)` : '';
+        return [r.label, `${nf(r.g, r.decimals)} ${r.unit}`.replace('m³', 'm3'), `${nf(r.s, r.decimals)} ${r.unit}`.replace('m³', 'm3'), same ? '=' : `${d > 0 ? '+' : '-'}${nf(Math.abs(d), r.decimals)}${pct}`];
+      }),
+      ['Transport proposé', c.transportG, c.transportS, c.transportG === c.transportS ? '=' : '≠'],
+    ],
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+    didParseCell: (d: { section: string; column: { index: number }; row: { index: number }; cell: { styles: { textColor: unknown } } }) => {
+      if (d.section !== 'body' || d.column.index !== 3) return;
+      const r = c.rows[d.row.index];
+      if (!r) return;
+      const diff = r.s - r.g;
+      if (Math.abs(diff) < Math.pow(10, -r.decimals) / 2) return;
+      d.cell.styles.textColor = (r.lowerIsBetter ? diff < 0 : diff > 0) ? [22, 121, 74] : [192, 38, 45];
+    },
+  });
+  // @ts-expect-error propriété ajoutée par jspdf-autotable
+  let y: number = doc.lastAutoTable.finalY + 8;
+  if (c.changes.length) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...accent);
+    doc.text('Ce qui change dans la proposition optimisée', M, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(33, 41, 54);
+    for (const t of c.changes) {
+      const lines = doc.splitTextToSize(`• ${t.replace('→', '->')}`, W - 2 * M);
+      doc.text(lines, M, y);
+      y += lines.length * 4.2;
+    }
+    y += 4;
+  }
+  for (const [title, pl] of [
+    ['SELON GRUNDFOS', g],
+    ['OPTIMISÉE', sm],
+  ] as const) {
+    autoTable(doc, {
+      ...style,
+      startY: y,
+      head: [[{ content: `${title} — ${pl.totals.packages} colis`, colSpan: 6, styles: { fillColor: light, textColor: accent } }], ['N°', 'Emballage', 'L × l × H (cm)', 'Vol. (m3)', 'Brut (kg)', 'Contenu']],
+      body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), dimsOf(p), nf(p.volume, 3), nf(p.grossWeight), contentsOf(p)]),
+      columnStyles: { 0: { cellWidth: 9, halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { fontSize: 7.5 } },
+    });
+    // @ts-expect-error propriété ajoutée par jspdf-autotable
+    y = doc.lastAutoTable.finalY + 7;
+  }
+  download(doc.output('blob'), `comparaison_${g.date.replace(/-/g, '')}.pdf`);
 }
 
 /* ------------------------------------------------------------------ */

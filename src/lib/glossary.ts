@@ -9,6 +9,11 @@ export interface GlossaryEntry {
 }
 
 export const GLOSSARY = {
+  proposals: {
+    title: 'Deux propositions',
+    text: "« Selon Grundfos » reprend uniquement ce que Grundfos a réellement fait dans vos PL : l'emballage le plus utilisé pour chaque article, et pour un reliquat un vrai colis Grundfos assez grand, sans recalcul ni regroupement. « Optimisée » applique l'intelligence de l'application : choix du meilleur emballage selon la quantité, palettes incomplètes recalculées, petits articles regroupés. Comparez puis choisissez celle à exporter.",
+    example: '1 CR10-10 en reliquat : Grundfos → palette réelle 120 × 80 × 85 ; optimisée → palette recalculée 120 × 80 × 37.',
+  },
   reliability: {
     title: 'Fiabilité de la proposition',
     text: "Pour chaque article, l'application indique sur quoi repose le colisage proposé : un envoi réel identique, un calcul entre deux envois réels, une estimation, ou vos propres mesures. Plus la donnée est proche d'un envoi réel, plus le résultat est sûr.",

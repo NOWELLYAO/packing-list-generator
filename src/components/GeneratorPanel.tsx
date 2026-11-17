@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { CatalogItem, HistoryEntry, RequestLine, Settings } from '../types';
 import { chooseVariant, findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
-import { exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate, sharePackingListPdf } from '../lib/exporters';
+import { exportComparisonPdf, exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate, sharePackingListPdf } from '../lib/exporters';
+import ComparePanel, { type Proposal } from './ComparePanel';
 import { uid } from '../lib/normalize';
 import { detectHeaderRow, detectMapping } from '../lib/detect';
 import { parseNumber } from '../lib/parseValues';
@@ -16,6 +17,7 @@ import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
+import { usePersistent } from '../lib/storage';
 import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
 
 interface Props {
@@ -63,10 +65,17 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   const active = lines.filter((l) => (l.code || l.pn) && l.quantity > 0);
 
   // Calcul en direct à chaque modification
-  const pl = useMemo(
-    () => (active.length ? generatePackingList(catalog, active, { consolidate }) : null),
+  // Deux propositions calculées en direct : « selon Grundfos » et « optimisée »
+  const [proposal, setProposal] = usePersistent<Proposal>('proposal', 'smart');
+  const plSmart = useMemo(
+    () => (active.length ? generatePackingList(catalog, active, { consolidate, strategy: 'smart' }) : null),
     [catalog, active, consolidate],
   );
+  const plGrundfos = useMemo(
+    () => (active.length ? generatePackingList(catalog, active, { consolidate: false, strategy: 'grundfos' }) : null),
+    [catalog, active],
+  );
+  const pl = proposal === 'grundfos' ? plGrundfos : plSmart;
 
   const addItem = (code: string, pn: string, quantity = 1) => {
     const existing = lines.find((l) => (code && l.code === code) || (pn && l.pn === pn && l.pn));
@@ -176,8 +185,11 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         <div className="lines">
           {lines.map((l) => {
             const it = findItem(catalog, l.code, l.pn);
-            const choice = it ? chooseVariant(it, l.quantity || 1) : null;
-            const packing = choice?.item ?? null;
+            const smartChoice = it ? chooseVariant(it, l.quantity || 1) : null;
+            // en mode « selon Grundfos », la fiabilité affichée est celle de cette proposition
+            const gLine = proposal === 'grundfos' ? plGrundfos?.lines.find((x) => x.code === it?.code) : undefined;
+            const choice = smartChoice ? { ...smartChoice, confidence: gLine?.confidence ?? smartChoice.confidence } : null;
+            const packing = proposal === 'grundfos' && it ? it : (choice?.item ?? null);
             return (
               <div key={l.id} className={`line-card ${it ? '' : 'unknown'}`}>
                 <div className="line-info">
@@ -290,7 +302,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
           <b>
             Regrouper les petits articles <InfoTip k="consolidate" />
           </b>
-          <small>Carton ou palette commune pour les colis de moins de 0,15 m³ et 60 kg</small>
+          <small>Carton ou palette commune pour les colis de moins de 0,15 m³ et 60 kg (proposition optimisée)</small>
         </span>
       </label>
 
@@ -338,6 +350,20 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               </button>
             </div>
           </div>
+
+          {plGrundfos && plSmart && (
+            <ComparePanel
+              g={plGrundfos}
+              s={plSmart}
+              selected={proposal}
+              onSelect={(p) => {
+                setProposal(p);
+                toast(p === 'grundfos' ? 'Proposition « Selon Grundfos » affichée' : 'Proposition optimisée affichée');
+              }}
+              busy={!!busy}
+              onExportComparison={() => void run('cmp', () => exportComparisonPdf(plGrundfos, plSmart, settings))}
+            />
+          )}
 
           <div className="reliability">
             <b>

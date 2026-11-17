@@ -457,3 +457,43 @@ label.has-error input { border-color: var(--danger); }
 .info-example span { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); margin-bottom: 0.1rem; }
 .chip-with-tip { display: inline-flex; align-items: center; gap: 0.2rem; }
 .kpis small { display: inline-flex; align-items: center; gap: 0.2rem; }
+
+/* ---------- Comparaison des propositions ---------- */
+.compare { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem 1rem 0.8rem; box-shadow: var(--shadow); display: grid; gap: 0.7rem; }
+.compare-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
+.compare-head .section-title { margin: 0; }
+.proposal-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.proposal-card { text-align: left; font: inherit; color: inherit; background: #f8fafc; border: 2px solid var(--line); border-radius: 14px; padding: 0.7rem 0.8rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.35rem; transition: border-color 0.15s, background 0.15s; }
+.proposal-card:hover { border-color: var(--accent-line); }
+.proposal-card.on { border-color: var(--accent); background: var(--accent-soft); }
+.pc-top { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.pc-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #b6c0cc; flex-shrink: 0; }
+.proposal-card.on .pc-radio { border-color: var(--accent); background: radial-gradient(var(--accent) 45%, transparent 50%); }
+.pc-sub { font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
+.pc-kpis { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 0.2rem 1rem; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+.pc-kpis small { display: block; font-weight: 500; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.compare-table { max-height: none; }
+.compare-table td:first-child { color: var(--ink-2); }
+td.delta { font-weight: 700; white-space: nowrap; }
+td.delta.good { color: var(--ok); }
+td.delta.bad { color: var(--danger); }
+td.delta small { font-weight: 500; }
+.changes { font-size: 0.86rem; }
+.changes ul { margin: 0.35rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; color: var(--ink-2); }
+@media (max-width: 760px) {
+  .proposal-cards { grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+  .proposal-card { padding: 0.6rem; }
+  .pc-sub { display: none; }
+  .pc-kpis { grid-template-columns: 1fr; gap: 0.15rem; font-size: 0.85rem; }
+}
+
+.lbl-short, .delta-inline { display: none; }
+@media (max-width: 760px) {
+  .compare-table .col-delta { display: none; }
+  .lbl-long { display: none; }
+  .lbl-short { display: inline; }
+  .delta-inline { display: block; font-size: 0.74rem; font-weight: 700; }
+  .delta-inline.good { color: var(--ok); }
+  .delta-inline.bad { color: var(--danger); }
+  .compare-table th, .compare-table td { padding: 0.5rem 0.55rem; }
+}

@@ -1,7 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
-import { applyVariant, variantsOf } from './variants';
+import { applyVariant, preferredVariant, variantsOf } from './variants';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
@@ -271,6 +271,64 @@ export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogIt
   return done(best!.item);
 }
 
+/**
+ * Proposition « selon Grundfos » : uniquement ce que le fournisseur a réellement fait.
+ * - quantité déjà expédiée telle quelle → cet envoi ;
+ * - sinon colis pleins de l'emballage le plus utilisé, et le reliquat dans un vrai colis
+ *   Grundfos observé (le plus petit qui le contient), sans recalcul de dimensions ;
+ * - pas de regroupement des petits articles.
+ */
+function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { pieces: Piece[]; confidence: Confidence; note: string } {
+  const all = variantsOf(item);
+  const dedicated = all.filter((v) => !v.mixed && (v.length || v.volumePerPackage));
+  const pool = dedicated.length ? dedicated : all;
+  const asItem = (v: (typeof pool)[number]) => applyVariant(item, v);
+  const mixed = !dedicated.length && all.some((v) => v.mixed);
+  const conf = (exact: boolean): Confidence => (item.manual ? 'manual' : mixed ? 'mixed' : exact ? 'observed' : 'estimated');
+  // 1) envoi identique
+  const exact = pool.filter((v) => Math.abs(v.qtyPerPackage - qty) < 1e-9).sort((a, b) => b.count - a.count)[0];
+  if (exact && !item.manual) {
+    const it = asItem(exact);
+    return { pieces: piecesFor(it, qty, lineIdx), confidence: conf(true), note: `${exact.qtyPerPackage} / ${exact.packageType}` };
+  }
+  // 2) emballage le plus utilisé
+  const main = item.manual ? null : preferredVariant(pool);
+  const ref = main ? asItem(main) : item;
+  const per = ref.qtyPerPackage > 0 ? ref.qtyPerPackage : qty;
+  if (per < 1) return { pieces: piecesFor(ref, qty, lineIdx), confidence: conf(true), note: `${per} / ${ref.packageType}` };
+  const full = Math.floor(round(qty / per, 6));
+  const rem = round(qty - full * per, 6);
+  const pieces = full > 0 ? piecesFor(ref, full * per, lineIdx) : [];
+  let exactAll = true;
+  if (rem > 0) {
+    // reliquat : le plus petit colis Grundfos réellement observé qui peut le contenir
+    const hasDims = (v: (typeof pool)[number]) => (v.length > 0 && v.width > 0 && v.height > 0 ? 0 : 1);
+    const holder = [...pool]
+      .filter((v) => v.qtyPerPackage >= rem)
+      .sort((a, b) => hasDims(a) - hasDims(b) || a.qtyPerPackage - b.qtyPerPackage || b.count - a.count)[0];
+    const h = holder ? asItem(holder) : ref;
+    const hv = h.length && h.width && h.height ? (h.length * h.width * h.height) / 1e6 : h.volumePerPackage || 0;
+    const tare = Math.max(0, h.grossWeightPerUnit - h.netWeightPerUnit) * h.qtyPerPackage;
+    const exactRem = Math.abs(h.qtyPerPackage - rem) < 1e-9;
+    if (!exactRem) exactAll = false;
+    pieces.push({
+      lineIdx,
+      code: item.code || item.pn,
+      qty: rem,
+      type: h.packageType || 'Colis',
+      l: h.length,
+      w: h.width,
+      h: h.height,
+      volume: hv,
+      net: rem * h.netWeightPerUnit,
+      gross: rem * h.netWeightPerUnit + tare,
+      basis: exactRem ? 'reference' : 'partial',
+      goodsVolume: hv,
+    });
+  }
+  return { pieces, confidence: conf(exactAll), note: `${per} / ${ref.packageType}` };
+}
+
 export function generatePackingList(
   catalog: CatalogItem[],
   requests: RequestLine[],
@@ -288,7 +346,9 @@ export function generatePackingList(
       lines.push({ lineNo: lineIdx + 1, code: req.code, pn: req.pn, description: '— Article introuvable dans la base —', quantity: qty, unit: '', cases: '', netWeight: 0, grossWeight: 0, hsCode: '', origin: '', found: false, warning: 'Introuvable' });
       continue;
     }
-    const { item: chosen, note, confidence } = chooseVariant(item, qty);
+    const grundfos = options.strategy === 'grundfos';
+    const gf = grundfos ? grundfosPieces(item, qty, lineIdx) : null;
+    const { item: chosen, note, confidence } = gf ? { item, note: gf.note, confidence: gf.confidence } : chooseVariant(item, qty);
     const warnings: string[] = [];
     if (!(chosen.length || chosen.volumePerPackage)) warnings.push('Dimensions manquantes');
     if (!chosen.grossWeightPerUnit) warnings.push('Poids manquant');
@@ -296,13 +356,14 @@ export function generatePackingList(
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
     lines[lineIdx].confidence = confidence;
-    allPieces.push(...piecesFor(chosen, qty, lineIdx));
+    allPieces.push(...(gf ? gf.pieces : piecesFor(chosen, qty, lineIdx)));
   }
 
   // Petits colis -> regroupés ; gros colis -> tels quels
   const isSmall = (p: Piece) => p.volume > 0 && p.volume < SMALL_PKG_M3 && p.gross < SMALL_PKG_KG;
-  const small = options.consolidate ? allPieces.filter(isSmall) : [];
-  const big = options.consolidate ? allPieces.filter((p) => !isSmall(p)) : allPieces;
+  const consolidateOn = options.consolidate && options.strategy !== 'grundfos';
+  const small = consolidateOn ? allPieces.filter(isSmall) : [];
+  const big = consolidateOn ? allPieces.filter((p) => !isSmall(p)) : allPieces;
   const doGroup = small.length >= 2;
 
   const packages: PLPackage[] = [];

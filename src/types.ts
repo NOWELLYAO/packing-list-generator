@@ -139,6 +139,8 @@ export interface PLPackage {
 export interface GenerateOptions {
   /** regrouper les petits articles sur un carton / une palette commune */
   consolidate: boolean;
+  /** 'grundfos' : uniquement les emballages réellement utilisés par le fournisseur ; 'smart' (défaut) : proposition optimisée */
+  strategy?: 'grundfos' | 'smart';
   /** référence libre (facultative) affichée sur le document */
   reference?: string;
 }
