@@ -398,3 +398,9 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
 }
 
 .update-banner { display: flex; align-items: center; justify-content: center; gap: 0.8rem; flex-wrap: wrap; background: var(--accent-soft); border-bottom: 1px solid var(--accent-line); padding: 0.55rem 1rem; font-size: 0.9rem; font-weight: 500; }
+
+.chip-ok { background: #e6f5ec; color: var(--ok); }
+.reliability { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.8rem 1rem; font-size: 0.88rem; display: grid; gap: 0.5rem; }
+.rel-items { display: grid; gap: 0.35rem; color: var(--ink-2); }
+.rel-items > span { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 0.6rem; }
+.rel-items > span > .chip { justify-self: start; }

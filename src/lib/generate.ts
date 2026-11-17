@@ -58,6 +58,45 @@ interface Piece {
 
 const sorted3 = (a: number, b: number, c: number) => [a, b, c].sort((x, y) => y - x);
 
+/** Vraie palette : emballage de type palette et surface au sol d'au moins 80 × 55 cm */
+function isPalletLike(item: Pick<CatalogItem, 'packageType' | 'length' | 'width'>): boolean {
+  const [a, b] = [item.length, item.width].sort((x, y) => y - x);
+  return PALLET_RE.test(item.packageType) && a >= 80 && b >= 55;
+}
+
+/** Jusqu'à 50 cm de chargement, les articles sont posés en une seule couche : la hauteur ne baisse pas */
+const SINGLE_LAYER_CM = 50;
+
+/**
+ * Hauteur d'une palette portant n unités (n < quantité de référence).
+ * 1) Entre deux envois réels du même article sur la même palette : interpolation.
+ * 2) Sinon, depuis l'envoi réel immédiatement supérieur :
+ *    - une couche (≤ 50 cm de chargement) : même hauteur ;
+ *    - plusieurs couches : hauteur de chargement proportionnelle.
+ * Règle calée sur vos PL : erreur moyenne ≈ 4 cm (contre 9 cm en proportionnel pur).
+ */
+function partialHeight(item: CatalogItem, n: number): number {
+  const anchors = (item.heightAnchors ?? []).filter((a) => a.n > 0 && a.h > 0).sort((a, b) => a.n - b.n);
+  if (!anchors.length || !anchors.some((a) => a.n === item.qtyPerPackage)) anchors.push({ n: item.qtyPerPackage, h: item.height });
+  anchors.sort((a, b) => a.n - b.n);
+  const exact = anchors.find((a) => Math.abs(a.n - n) < 1e-9);
+  if (exact) return exact.h;
+  const upper = anchors.find((a) => a.n > n)!;
+  const lower = [...anchors].reverse().find((a) => a.n < n);
+  if (lower) return Math.ceil(lower.h + ((upper.h - lower.h) * (n - lower.n)) / (upper.n - lower.n));
+  // Deux envois connus au-dessus : on prolonge la tendance observée (ex. 20 → 54 cm, 35 → 74 cm)
+  const above = anchors.filter((x) => x.n > n);
+  if (above.length >= 2) {
+    const [a1, a2] = above;
+    const slope = (a2.h - a1.h) / (a2.n - a1.n);
+    // pente nulle entre deux envois proches (19 et 21 unités → 130 cm) : pas d'information, règle ci-dessous
+    if (slope > 0) return Math.max(PALLET_BASE_CM + 10, Math.min(a1.h, Math.ceil(a1.h - slope * (a1.n - n))));
+  }
+  const load = Math.max(0, upper.h - PALLET_BASE_CM);
+  if (load <= SINGLE_LAYER_CM) return upper.h;
+  return Math.ceil(PALLET_BASE_CM + (load * n) / upper.n);
+}
+
 /** Découpe une ligne article en colis, en tenant compte du dernier colis incomplet */
 function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
   const perPkg = item.qtyPerPackage > 0 ? item.qtyPerPackage : qty;
@@ -93,16 +132,18 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
   const rem = round(qty - full * perPkg, 6);
   for (let i = 0; i < full; i++) out.push(mk(perPkg, item.height, 'reference', refVol, tare));
   if (rem > 0) {
-    const ratio = rem / perPkg;
-    if (hasDims && perPkg > 1 && PALLET_RE.test(item.packageType)) {
-      // palette incomplète : la hauteur de chargement diminue proportionnellement
-      const load = Math.max(0, item.height - PALLET_BASE_CM);
-      const h = Math.min(item.height, Math.ceil(PALLET_BASE_CM + load * ratio));
+    if (hasDims && perPkg > 1 && isPalletLike(item)) {
+      // palette incomplète : hauteur estimée d'après les envois réels de cet article
+      const h = Math.min(item.height, partialHeight(item, rem));
       const vol = (item.length * item.width * h) / 1e6;
-      // la tare de la palette reste entière ; celle des cartons diminue
-      out.push(mk(rem, h, 'partial', vol, tare * Math.max(ratio, 0.5)));
+      // le poids de la palette vide ne dépend pas du chargement (25 kg pour une 120×80, constaté dans vos PL)
+      out.push(mk(rem, h, 'partial', vol, tare));
+    } else if (hasDims && perPkg > 1) {
+      // carton incomplet : l'emballeur prend un carton plus bas (constaté : 4 DDC → 55 cm, 2 DDC → 27 cm)
+      const h = Math.min(item.height, Math.ceil(item.height * Math.max(rem / perPkg, 0.3)));
+      out.push(mk(rem, h, 'partial', (item.length * item.width * h) / 1e6, tare));
     } else {
-      out.push(mk(rem, item.height, perPkg > 1 ? 'partial' : 'reference', refVol, tare * (perPkg > 1 ? Math.max(ratio, 0.5) : 1)));
+      out.push(mk(rem, item.height, 'reference', refVol, tare));
     }
   }
   return out;
@@ -170,36 +211,64 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
   return result;
 }
 
+export type Confidence = 'observed' | 'interpolated' | 'estimated' | 'mixed' | 'manual';
+
+/** Même surface au sol et même famille (palette ou carton/caisse) : PALLET et PALPLATE 160×80 se comparent */
+const footprintKey = (v: { length: number; width: number; packageType: string }) =>
+  `${[Math.round(v.length), Math.round(v.width)].sort((x, y) => y - x).join('x')}|${isPalletLike(v) ? 'PAL' : v.packageType.toUpperCase().slice(0, 4)}`;
+
+/** Niveau de fiabilité du colisage proposé pour une ligne */
+function confidenceOf(item: CatalogItem, qty: number): Confidence {
+  if (item.manual) return 'manual';
+  if (item.mixed) return 'mixed';
+  const per = item.qtyPerPackage;
+  if (!(per > 1)) return 'observed';
+  const rem = round(qty - Math.floor(round(qty / per, 6)) * per, 6);
+  if (rem <= 0) return 'observed';
+  const anchors = item.heightAnchors ?? [];
+  if (anchors.some((x) => Math.abs(x.n - rem) < 1e-9)) return 'observed';
+  if (anchors.some((x) => x.n < rem)) return 'interpolated';
+  return 'estimated';
+}
+
 /**
- * Choisit, parmi les emballages déjà observés pour cet article, celui qui donne le colisage
- * le plus compact pour la quantité demandée (volume total minimal, puis moins de colis).
+ * Choisit l'emballage qu'un emballeur utiliserait pour la quantité demandée,
+ * à partir des envois réels de l'article (variantes) :
+ * 1) quantité déjà expédiée telle quelle → même emballage ;
+ * 2) sinon le moins de colis possible, puis le plus petit volume, puis la configuration la plus vue.
+ * Les autres envois sur le même type de palette servent à estimer la hauteur d'une palette incomplète.
  * Les estimations en colis mixte ne servent que s'il n'existe aucune autre donnée.
  */
-export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogItem; note?: string } {
-  if (item.manual) return { item };
+export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogItem; note?: string; confidence: Confidence } {
+  if (item.manual) return { item, confidence: 'manual' };
   const all = variantsOf(item);
-  if (all.length <= 1) return { item };
   const dedicated = all.filter((v) => !v.mixed && (v.length || v.volumePerPackage));
   const pool = dedicated.length ? dedicated : all;
+  const withAnchors = (v: (typeof pool)[number]): CatalogItem => {
+    const it = applyVariant(item, v);
+    const fk = footprintKey(v);
+    it.heightAnchors = dedicated.filter((o) => o.length && footprintKey(o) === fk).map((o) => ({ n: o.qtyPerPackage, h: o.height }));
+    return it;
+  };
+  const done = (it: CatalogItem) => ({ item: it, note: `${it.qtyPerPackage} / ${it.packageType}`, confidence: confidenceOf(it, qty) });
+
+  if (pool.length <= 1) return done(pool.length ? withAnchors(pool[0]) : item);
   // 1) La quantité demandée a déjà été expédiée telle quelle : on reprend cet emballage réel
   const exact = pool.filter((v) => Math.abs(v.qtyPerPackage - qty) < 1e-9).sort((a, b) => b.count - a.count)[0];
-  if (exact) {
-    const it = applyVariant(item, exact);
-    return { item: it, note: `${exact.qtyPerPackage} / ${exact.packageType}` };
-  }
+  if (exact) return done(withAnchors(exact));
   // 2) Sinon : le moins de colis possible, puis le volume le plus faible, puis la config la plus vue
-  let best = { item, n: Infinity, vol: Infinity, count: -1 };
+  let best: { item: CatalogItem; n: number; vol: number; count: number } | null = null;
   for (const v of pool) {
-    const cand = applyVariant(item, v);
+    const cand = withAnchors(v);
     const pieces = piecesFor(cand, qty, 0);
     const vol = pieces.reduce((s, p) => s + p.volume, 0);
     const better =
+      !best ||
       pieces.length < best.n ||
       (pieces.length === best.n && (vol < best.vol - 1e-6 || (Math.abs(vol - best.vol) < 1e-6 && v.count > best.count)));
     if (better) best = { item: cand, n: pieces.length, vol, count: v.count };
   }
-  const q = best.item.qtyPerPackage;
-  return { item: best.item, note: `${q} / ${best.item.packageType}` };
+  return done(best!.item);
 }
 
 export function generatePackingList(
@@ -219,13 +288,14 @@ export function generatePackingList(
       lines.push({ lineNo: lineIdx + 1, code: req.code, pn: req.pn, description: '— Article introuvable dans la base —', quantity: qty, unit: '', cases: '', netWeight: 0, grossWeight: 0, hsCode: '', origin: '', found: false, warning: 'Introuvable' });
       continue;
     }
-    const { item: chosen, note } = chooseVariant(item, qty);
+    const { item: chosen, note, confidence } = chooseVariant(item, qty);
     const warnings: string[] = [];
     if (!(chosen.length || chosen.volumePerPackage)) warnings.push('Dimensions manquantes');
     if (!chosen.grossWeightPerUnit) warnings.push('Poids manquant');
     if (chosen.mixed) warnings.push('Données estimées (colis mixte)');
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
+    lines[lineIdx].confidence = confidence;
     allPieces.push(...piecesFor(chosen, qty, lineIdx));
   }
 

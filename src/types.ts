@@ -27,6 +27,8 @@ export interface CatalogItem {
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */
   manual?: boolean;
+  /** (calcul) hauteurs réelles observées pour d'autres quantités sur le même emballage */
+  heightAnchors?: { n: number; h: number }[];
   updatedAt: string;
 }
 
@@ -115,6 +117,8 @@ export interface PLLine {
   warning?: string;
   /** emballage retenu quand plusieurs configurations existent, ex. "6 / PALPLATE" */
   packing?: string;
+  /** fiabilité : déjà expédié tel quel, interpolé, estimé, colis mixte, saisie manuelle */
+  confidence?: 'observed' | 'interpolated' | 'estimated' | 'mixed' | 'manual';
 }
 
 /** Colis physique (palette, caisse, carton) avec ses dimensions calculées */

@@ -27,6 +27,23 @@ interface Props {
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
+const CONF: Record<string, [string, string, string]> = {
+  observed: ['déjà expédié', 'chip-ok', 'Configuration identique à un envoi réel de vos PL'],
+  interpolated: ['interpolé', 'chip-accent', 'Calculé entre deux envois réels de cet article'],
+  estimated: ['estimé', 'chip-warn', "Extrapolé à partir d'un seul envoi réel"],
+  mixed: ['colis mixte', 'chip-danger', 'Article vu seulement avec d’autres dans un même colis : poids et dimensions approximatifs'],
+  manual: ['fiche manuelle', 'chip-accent', 'Valeurs saisies à la main dans la fiche article'],
+};
+
+function ConfidenceChip({ c }: { c: string }) {
+  const [label, cls, title] = CONF[c] ?? CONF.estimated;
+  return (
+    <span className={`chip ${cls}`} title={title}>
+      {label}
+    </span>
+  );
+}
+
 export default function GeneratorPanel({ catalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -110,7 +127,14 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
   };
 
   const unknown = pl?.lines.filter((l) => !l.found).length ?? 0;
-  const estimated = pl?.lines.filter((l) => l.found && l.warning).length ?? 0;
+  const byConf = (c: string) => pl?.lines.filter((l) => l.found && l.confidence === c).length ?? 0;
+  const reliability = {
+    observed: byConf('observed'),
+    interpolated: byConf('interpolated'),
+    estimated: byConf('estimated'),
+    mixed: byConf('mixed'),
+    manual: byConf('manual'),
+  };
 
   return (
     <div className="page">
@@ -142,7 +166,8 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
         <div className="lines">
           {lines.map((l) => {
             const it = findItem(catalog, l.code, l.pn);
-            const packing = it ? chooseVariant(it, l.quantity || 1).item : null;
+            const choice = it ? chooseVariant(it, l.quantity || 1) : null;
+            const packing = choice?.item ?? null;
             return (
               <div key={l.id} className={`line-card ${it ? '' : 'unknown'}`}>
                 <div className="line-info">
@@ -160,7 +185,7 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
                     ) : (
                       <span className="chip chip-danger">introuvable dans la base</span>
                     )}
-                    {packing?.mixed && <span className="chip chip-warn">estimé</span>}
+                    {choice && l.quantity > 0 && <ConfidenceChip c={choice.confidence} />}
                   </div>
                 </div>
                 <div className="stepper">
@@ -285,17 +310,17 @@ export default function GeneratorPanel({ catalog, settings, setSettings, lines, 
             </div>
           </div>
 
-          {(unknown > 0 || estimated > 0) && (
-            <div className="banner warn">
-              {unknown > 0 && <div>⚠️ {unknown} article(s) introuvable(s) : ils figurent sur la PL sans poids ni colis.</div>}
-              {estimated > 0 && (
-                <div>
-                  ℹ️ {estimated} article(s) avec des données estimées (vus seulement en colis mixte) : vérifiez poids et
-                  dimensions.
-                </div>
-              )}
+          <div className="reliability">
+            <b>Fiabilité de la proposition</b>
+            <div className="rel-items">
+              {reliability.observed > 0 && <span><ConfidenceChip c="observed" /> <span>{reliability.observed} ligne(s) identique(s) à des envois réels</span></span>}
+              {reliability.interpolated > 0 && <span><ConfidenceChip c="interpolated" /> <span>{reliability.interpolated} calculée(s) entre deux envois réels</span></span>}
+              {reliability.estimated > 0 && <span><ConfidenceChip c="estimated" /> <span>{reliability.estimated} extrapolée(s) d'un seul envoi : à vérifier</span></span>}
+              {reliability.mixed > 0 && <span><ConfidenceChip c="mixed" /> <span>{reliability.mixed} vue(s) seulement en colis mixte : à vérifier</span></span>}
+              {reliability.manual > 0 && <span><ConfidenceChip c="manual" /> <span>{reliability.manual} selon votre fiche corrigée</span></span>}
+              {unknown > 0 && <span><span className="chip chip-danger">introuvable</span> <span>{unknown} article(s) sans données : ni poids ni colis</span></span>}
             </div>
-          )}
+          </div>
 
           <PackingListView pl={pl} />
           <FreightPanel pl={pl} />
