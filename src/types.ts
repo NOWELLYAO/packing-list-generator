@@ -23,7 +23,27 @@ export interface CatalogItem {
   source: string; // fichier d'origine
   /** valeurs estimées à partir d'un colis partagé avec d'autres articles */
   mixed?: boolean;
+  /** toutes les configurations d'emballage observées dans les PL importées */
+  variants?: PackVariant[];
+  /** fiche corrigée à la main : ses valeurs priment sur les variantes */
+  manual?: boolean;
   updatedAt: string;
+}
+
+/** Une configuration d'emballage observée pour un article */
+export interface PackVariant {
+  qtyPerPackage: number;
+  packageType: string;
+  length: number;
+  width: number;
+  height: number;
+  volumePerPackage: number;
+  netWeightPerUnit: number;
+  grossWeightPerUnit: number;
+  mixed: boolean;
+  source: string;
+  /** nombre de fois où cette configuration a été vue */
+  count: number;
 }
 
 /** Champs reconnus lors de l'import d'un PL */
@@ -93,6 +113,8 @@ export interface PLLine {
   origin: string;
   found: boolean;
   warning?: string;
+  /** emballage retenu quand plusieurs configurations existent, ex. "6 / PALPLATE" */
+  packing?: string;
 }
 
 /** Colis physique (palette, caisse, carton) avec ses dimensions calculées */
@@ -113,10 +135,13 @@ export interface PLPackage {
 export interface GenerateOptions {
   /** regrouper les petits articles sur un carton / une palette commune */
   consolidate: boolean;
+  /** référence libre (facultative) affichée sur le document */
+  reference?: string;
 }
 
 export interface PackingList {
   date: string;
+  reference: string;
   lines: PLLine[];
   packages: PLPackage[];
   totals: {
@@ -126,4 +151,22 @@ export interface PackingList {
     grossWeight: number;
     volume: number;
   };
+}
+
+/** Réglages de mise en forme des documents */
+export interface Settings {
+  companyName: string;
+  /** logo en data URL (PNG/JPEG), importé par l'utilisateur */
+  logo: string;
+  /** palette de couleurs des documents */
+  accent: string;
+}
+
+/** PL générée, conservée dans l'historique */
+export interface HistoryEntry {
+  id: string;
+  createdAt: string;
+  reference: string;
+  requests: RequestLine[];
+  totals: PackingList['totals'];
 }

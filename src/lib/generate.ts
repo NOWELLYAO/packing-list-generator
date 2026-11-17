@@ -1,6 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
+import { applyVariant, variantsOf } from './variants';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
@@ -166,10 +167,32 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
   return result;
 }
 
+/**
+ * Choisit, parmi les emballages déjà observés pour cet article, celui qui donne le colisage
+ * le plus compact pour la quantité demandée (volume total minimal, puis moins de colis).
+ * Les estimations en colis mixte ne servent que s'il n'existe aucune autre donnée.
+ */
+export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogItem; note?: string } {
+  if (item.manual) return { item };
+  const all = variantsOf(item);
+  if (all.length <= 1) return { item };
+  const dedicated = all.filter((v) => !v.mixed && (v.length || v.volumePerPackage));
+  const pool = dedicated.length ? dedicated : all;
+  let best = { item, vol: Infinity, n: Infinity };
+  for (const v of pool) {
+    const cand = applyVariant(item, v);
+    const pieces = piecesFor(cand, qty, 0);
+    const vol = pieces.reduce((s, p) => s + p.volume, 0);
+    if (vol < best.vol - 1e-6 || (Math.abs(vol - best.vol) < 1e-6 && pieces.length < best.n)) best = { item: cand, vol, n: pieces.length };
+  }
+  const q = best.item.qtyPerPackage;
+  return { item: best.item, note: `${q} / ${best.item.packageType}` };
+}
+
 export function generatePackingList(
   catalog: CatalogItem[],
   requests: RequestLine[],
-  options: GenerateOptions = { consolidate: true },
+  options: GenerateOptions = { consolidate: true, reference: '' },
 ): PackingList {
   const lines: PLLine[] = [];
   const allPieces: Piece[] = [];
@@ -183,12 +206,14 @@ export function generatePackingList(
       lines.push({ lineNo: lineIdx + 1, code: req.code, pn: req.pn, description: '— Article introuvable dans la base —', quantity: qty, unit: '', cases: '', netWeight: 0, grossWeight: 0, hsCode: '', origin: '', found: false, warning: 'Introuvable' });
       continue;
     }
+    const { item: chosen, note } = chooseVariant(item, qty);
     const warnings: string[] = [];
-    if (!(item.length || item.volumePerPackage)) warnings.push('Dimensions manquantes');
-    if (!item.grossWeightPerUnit) warnings.push('Poids manquant');
-    if (item.mixed) warnings.push('Données estimées (colis mixte)');
+    if (!(chosen.length || chosen.volumePerPackage)) warnings.push('Dimensions manquantes');
+    if (!chosen.grossWeightPerUnit) warnings.push('Poids manquant');
+    if (chosen.mixed) warnings.push('Données estimées (colis mixte)');
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
-    allPieces.push(...piecesFor(item, qty, lineIdx));
+    if (note) lines[lineIdx].packing = note;
+    allPieces.push(...piecesFor(chosen, qty, lineIdx));
   }
 
   // Petits colis -> regroupés ; gros colis -> tels quels
@@ -224,6 +249,7 @@ export function generatePackingList(
   const sum = (f: (p: PLPackage) => number) => packages.reduce((s, p) => s + f(p), 0);
   return {
     date: new Date().toISOString().slice(0, 10),
+    reference: options.reference ?? '',
     lines,
     packages,
     totals: {

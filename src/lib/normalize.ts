@@ -1,6 +1,7 @@
 import type { CatalogItem, ImportOptions, Mapping } from '../types';
 import { norm, unitFromHeader } from './detect';
 import { parseDimensions, parseNumber, round, toCm } from './parseValues';
+import { applyVariant, mergeVariants, preferredVariant, variantsOf } from './variants';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -201,7 +202,13 @@ export function normalizeRows(
   return { items, skipped };
 }
 
-/** Fusionne dans le catalogue : un même (code, PN) est mis à jour par l'import le plus récent. */
+/**
+ * Fusionne dans le catalogue. Pour un même (code, PN) :
+ * - les configurations d'emballage sont cumulées comme variantes (rien n'est perdu) ;
+ * - la fiche affiche la variante de référence (colis dédié le plus fréquent) ;
+ * - désignation, code SH, origine sont complétés si l'import les fournit ;
+ * - une fiche corrigée à la main garde ses valeurs.
+ */
 export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
   const map = new Map(catalog.map((c) => [itemKey(c.code, c.pn), c]));
   let added = 0;
@@ -209,23 +216,27 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
   for (const it of incoming) {
     const k = itemKey(it.code, it.pn);
     const prev = map.get(k);
-    if (prev) {
-      // une fiche issue d'un colis dédié n'est pas écrasée par une estimation en colis mixte
-      if (it.mixed && !prev.mixed) continue;
-      updated++;
-      // garder les valeurs existantes si le nouvel import ne les fournit pas
-      map.set(k, {
-        ...prev,
-        ...Object.fromEntries(
-          Object.entries(it).filter(([key, v]) => key !== 'id' && v !== '' && v !== 0),
-        ),
-        mixed: it.mixed ?? false,
-        id: prev.id,
-      } as CatalogItem);
-    } else {
+    const incomingVariants = variantsOf(it);
+    if (!prev) {
       added++;
-      map.set(k, it);
+      const variants = mergeVariants([], incomingVariants);
+      map.set(k, it.manual ? { ...it, variants } : applyVariant({ ...it, variants }, preferredVariant(variants)));
+      continue;
     }
+    updated++;
+    const variants = mergeVariants(variantsOf(prev), incomingVariants);
+    const text = (a: string, b: string) => (b && b.length >= a.length ? b : a || b);
+    const merged: CatalogItem = {
+      ...prev,
+      description: text(prev.description, it.description),
+      hsCode: it.hsCode || prev.hsCode,
+      origin: it.origin || prev.origin,
+      unit: prev.unit || it.unit,
+      source: it.source || prev.source,
+      updatedAt: it.updatedAt,
+      variants,
+    };
+    map.set(k, prev.manual ? merged : applyVariant(merged, preferredVariant(variants)));
   }
   return { catalog: [...map.values()], added, updated };
 }

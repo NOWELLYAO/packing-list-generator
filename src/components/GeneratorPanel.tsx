@@ -1,47 +1,62 @@
 import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import type { CatalogItem, PackingList, RequestLine } from '../types';
-import { findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
-import { exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate } from '../lib/exporters';
+import type { CatalogItem, HistoryEntry, RequestLine, Settings } from '../types';
+import { chooseVariant, findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
+import { exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate, sharePackingListPdf } from '../lib/exporters';
 import { uid } from '../lib/normalize';
-import { usePersistent } from '../lib/storage';
 import { detectHeaderRow, detectMapping } from '../lib/detect';
 import { parseNumber } from '../lib/parseValues';
+import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
+import FreightPanel from './FreightPanel';
 
-const newLine = (): RequestLine => ({ id: uid(), code: '', pn: '', quantity: 1 });
+interface Props {
+  catalog: CatalogItem[];
+  settings: Settings;
+  lines: RequestLine[];
+  setLines: (l: RequestLine[]) => void;
+  consolidate: boolean;
+  setConsolidate: (b: boolean) => void;
+  onSaved: (e: HistoryEntry) => void;
+  toast: (msg: string) => void;
+}
 
-export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) {
-  const [consolidate, setConsolidate] = usePersistent<boolean>('consolidate', true);
-  const [lines, setLines] = usePersistent<RequestLine[]>('requests', [newLine()]);
+const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+export default function GeneratorPanel({ catalog, settings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
   const [paste, setPaste] = useState('');
-  const [result, setResult] = useState<PackingList | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const active = lines.filter((l) => (l.code || l.pn) && l.quantity > 0);
 
-  const codes = useMemo(() => [...new Set(catalog.map((c) => c.code).filter(Boolean))], [catalog]);
-  const pns = useMemo(() => [...new Set(catalog.map((c) => c.pn).filter(Boolean))], [catalog]);
+  // Calcul en direct à chaque modification
+  const pl = useMemo(
+    () => (active.length ? generatePackingList(catalog, active, { consolidate }) : null),
+    [catalog, active, consolidate],
+  );
 
-  const setLine = (id: string, patch: Partial<RequestLine>) =>
-    setLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-
-  /** Remplit automatiquement l'autre identifiant (code <-> PN) quand l'article est trouvé */
-  const autoComplete = (l: RequestLine) => {
-    const it = findItem(catalog, l.code, l.pn);
-    if (it) setLine(l.id, { code: l.code || it.code, pn: l.pn || it.pn });
+  const addItem = (code: string, pn: string, quantity = 1) => {
+    const existing = lines.find((l) => (code && l.code === code) || (pn && l.pn === pn && l.pn));
+    if (existing) {
+      setLines(lines.map((l) => (l === existing ? { ...l, quantity: l.quantity + quantity } : l)));
+      toast(`Quantité augmentée : ${code || pn}`);
+    } else setLines([...lines, { id: uid(), code, pn, quantity }]);
   };
+  const setQty = (id: string, q: number) => setLines(lines.map((l) => (l.id === id ? { ...l, quantity: Math.max(0, q) } : l)));
+  const remove = (id: string) => setLines(lines.filter((l) => l.id !== id));
 
   const addPasted = () => {
     const parsed = parsePastedRequests(paste);
-    if (!parsed.length) return alert('Aucune ligne reconnue. Format attendu : Code [tab] PN [tab] Quantité');
-    const kept = lines.filter((l) => l.code || l.pn);
+    if (!parsed.length) return toast('Aucune ligne reconnue (format : Code ⇥ PN ⇥ Quantité)');
     setLines([
-      ...kept,
+      ...lines,
       ...parsed.map((p) => {
         const it = findItem(catalog, p.code, p.pn);
         return { ...p, code: it ? it.code : p.code, pn: it ? it.pn : p.pn, id: uid() };
       }),
     ]);
     setPaste('');
+    toast(`${parsed.length} ligne(s) ajoutée(s)`);
   };
 
   const importRequestFile = async (f: File | undefined) => {
@@ -53,7 +68,7 @@ export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) 
     const hr = detectHeaderRow(rows);
     const m = detectMapping(rows[hr] ?? []);
     if (m.quantity === undefined || (m.code === undefined && m.pn === undefined)) {
-      return alert('Colonnes non reconnues. Utilisez le modèle : Code article | PN | Quantité');
+      return toast('Colonnes non reconnues : utilisez le modèle Code article | PN | Quantité');
     }
     const parsed: RequestLine[] = [];
     for (const r of rows.slice(hr + 1)) {
@@ -62,142 +77,195 @@ export default function GeneratorPanel({ catalog }: { catalog: CatalogItem[] }) 
       const qty = parseNumber(r[m.quantity]);
       if ((code || pn) && qty > 0) parsed.push({ id: uid(), code, pn, quantity: qty });
     }
-    const kept = lines.filter((l) => l.code || l.pn);
-    setLines([...kept, ...parsed]);
+    setLines([...lines, ...parsed]);
+    toast(`${parsed.length} ligne(s) importée(s)`);
   };
 
-  const generate = () => {
-    const pl = generatePackingList(catalog, lines, { consolidate });
-    if (!pl.lines.length) return alert('Saisissez au moins un article avec une quantité.');
-    setResult(pl);
-    setTimeout(() => document.getElementById('pl-result')?.scrollIntoView({ behavior: 'smooth' }), 50);
+  const run = async (label: string, fn: () => Promise<unknown>) => {
+    if (!pl) return;
+    setBusy(label);
+    try {
+      await fn();
+      onSaved({ id: uid(), createdAt: new Date().toISOString(), reference: '', requests: active, totals: pl.totals });
+    } catch (e) {
+      console.error(e);
+      toast(`Erreur : ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
   };
+
+  const unknown = pl?.lines.filter((l) => !l.found).length ?? 0;
+  const estimated = pl?.lines.filter((l) => l.found && l.warning).length ?? 0;
 
   return (
-    <div className="panel">
-      <h2>3. Générer une Packing List</h2>
+    <div className="page">
       {catalog.length === 0 && (
-        <p className="warn">⚠️ La base d'articles est vide : importez d'abord vos Packing Lists existantes.</p>
+        <div className="banner">
+          La base d'articles est vide. Importez vos Packing Lists (onglet <b>Importer</b>) ou chargez une base JSON (onglet{' '}
+          <b>Articles</b>).
+        </div>
       )}
 
-      <div className="card">
-        <div className="row between wrap">
-          <h3>Articles à expédier</h3>
-          <div className="row wrap">
-            <button onClick={() => fileRef.current?.click()}>Importer Excel</button>
-            <input ref={fileRef} type="file" hidden accept=".xlsx,.xls,.csv" onChange={(e) => {
-              void importRequestFile(e.target.files?.[0]);
-              e.target.value = '';
-            }} />
-            <button className="ghost" onClick={exportRequestTemplate}>
-              Modèle Excel
-            </button>
-            <button className="ghost" onClick={() => confirm('Effacer toutes les lignes ?') && setLines([newLine()])}>
-              Tout effacer
-            </button>
-          </div>
-        </div>
-
-        <datalist id="codes">
-          {codes.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-        <datalist id="pns">
-          {pns.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-
-        <div className="table-wrap">
-          <table className="editable">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Code article</th>
-                <th>PN</th>
-                <th>Quantité</th>
-                <th>Article trouvé</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => {
-                const it = l.code || l.pn ? findItem(catalog, l.code, l.pn) : undefined;
-                return (
-                  <tr key={l.id}>
-                    <td className="muted">{i + 1}</td>
-                    <td>
-                      <input list="codes" value={l.code} onChange={(e) => setLine(l.id, { code: e.target.value })} onBlur={() => autoComplete(l)} />
-                    </td>
-                    <td>
-                      <input list="pns" value={l.pn} onChange={(e) => setLine(l.id, { pn: e.target.value })} onBlur={() => autoComplete(l)} />
-                    </td>
-                    <td>
-                      <input
-                        className="num"
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={l.quantity}
-                        onChange={(e) => setLine(l.id, { quantity: Number(e.target.value) })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && i === lines.length - 1) setLines([...lines, newLine()]);
-                        }}
-                      />
-                    </td>
-                    <td className={l.code || l.pn ? (it ? 'ok' : 'miss') : 'muted'}>
-                      {l.code || l.pn ? (it ? `✓ ${it.description || it.code}` : '✗ introuvable') : ''}
-                    </td>
-                    <td>
-                      <button className="icon" title="Supprimer" onClick={() => setLines(lines.length > 1 ? lines.filter((x) => x.id !== l.id) : [newLine()])}>
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <button onClick={() => setLines([...lines, newLine()])}>+ Ligne</button>
-
-        <details className="paste">
-          <summary>Coller une liste depuis Excel</summary>
-          <p className="muted">Une ligne par article : Code [tab] PN [tab] Quantité — ou Code ; Quantité.</p>
-          <textarea rows={5} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder={'ART-001\tPN-123\t10\nART-002\t\t4'} />
-          <button onClick={addPasted} disabled={!paste.trim()}>
-            Ajouter ces lignes
-          </button>
-        </details>
+      <div className="sticky-search">
+        <ArticleSearch
+          catalog={catalog}
+          onPick={(it) => addItem(it.code, it.pn)}
+          onPickUnknown={(code) => addItem(code, '')}
+        />
       </div>
 
-      <label className="option">
+      {lines.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">📦</div>
+          <p>
+            <b>Aucun article pour l'instant.</b>
+            <br />
+            Tapez un code, un PN ou une désignation ci-dessus, ou collez une liste depuis Excel.
+          </p>
+        </div>
+      ) : (
+        <div className="lines">
+          {lines.map((l) => {
+            const it = findItem(catalog, l.code, l.pn);
+            const packing = it ? chooseVariant(it, l.quantity || 1).item : null;
+            return (
+              <div key={l.id} className={`line-card ${it ? '' : 'unknown'}`}>
+                <div className="line-info">
+                  <div className="line-title">{it ? it.description || it.code : l.code || l.pn}</div>
+                  <div className="line-sub">
+                    <span className="mono">{it ? it.code : l.code}</span>
+                    {it && it.pn && it.pn !== it.code && <span className="mono"> · {it.pn}</span>}
+                    {it ? (
+                      packing && (
+                        <span className="chip">
+                          {packing.qtyPerPackage} / {packing.packageType}
+                          {packing.length ? ` · ${packing.length}×${packing.width}×${packing.height}` : ''}
+                        </span>
+                      )
+                    ) : (
+                      <span className="chip chip-danger">introuvable dans la base</span>
+                    )}
+                    {packing?.mixed && <span className="chip chip-warn">estimé</span>}
+                  </div>
+                </div>
+                <div className="stepper">
+                  <button onClick={() => setQty(l.id, l.quantity - 1)} aria-label="Moins">
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={l.quantity}
+                    onChange={(e) => setQty(l.id, Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button onClick={() => setQty(l.id, l.quantity + 1)} aria-label="Plus">
+                    +
+                  </button>
+                </div>
+                <button className="icon-btn" onClick={() => remove(l.id)} aria-label="Retirer" title="Retirer">
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="tools-row">
+        <details className="bulk">
+          <summary>Ajout en masse</summary>
+          <p className="hint">Collez depuis Excel : une ligne par article, « Code ⇥ PN ⇥ Quantité » ou « Code ; Quantité ».</p>
+          <textarea rows={4} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder={'96500988\t\t6\n99463877\t\t3'} />
+          <div className="row wrap">
+            <button className="btn" onClick={addPasted} disabled={!paste.trim()}>
+              Ajouter ces lignes
+            </button>
+            <button className="btn ghost" onClick={() => fileRef.current?.click()}>
+              Importer un fichier Excel
+            </button>
+            <button className="btn ghost" onClick={exportRequestTemplate}>
+              Télécharger le modèle
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            hidden
+            accept=".xlsx,.xls,.csv"
+            onChange={(e) => {
+              void importRequestFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </details>
+        {lines.length > 0 && (
+          <button className="btn ghost danger" onClick={() => confirm('Retirer tous les articles ?') && setLines([])}>
+            Tout effacer
+          </button>
+        )}
+      </div>
+
+      <label className="switch-row">
         <input type="checkbox" checked={consolidate} onChange={(e) => setConsolidate(e.target.checked)} />
+        <span className="switch" aria-hidden />
         <span>
-          <b>Regrouper les petits articles</b> sur un carton ou une palette commune (colis de moins de 0,15 m³ et 60 kg).
-          Les palettes incomplètes sont toujours recalculées (hauteur et poids selon la quantité).
+          <b>Regrouper les petits articles</b>
+          <small>Carton ou palette commune pour les colis de moins de 0,15 m³ et 60 kg</small>
         </span>
       </label>
 
-      <div className="row center">
-        <button className="primary big" onClick={generate}>
-          Générer la Packing List
-        </button>
-      </div>
-
-      {result && (
-        <div id="pl-result" className="card">
-          <div className="row between wrap no-print">
-            <h3>Résultat</h3>
-            <div className="row wrap">
-              <button onClick={() => exportPackingListXlsx(result)}>⬇ Excel</button>
-              <button onClick={() => void exportPackingListPdf(result)}>⬇ PDF</button>
-              <button onClick={() => window.print()}>🖨 Imprimer</button>
+      {pl && (
+        <>
+          <div className="summary-bar">
+            <div className="kpis">
+              <div>
+                <small>Colis</small>
+                <b>{pl.totals.packages}</b>
+              </div>
+              <div>
+                <small>Brut</small>
+                <b>{fmt(pl.totals.grossWeight, 1)} kg</b>
+              </div>
+              <div>
+                <small>Net</small>
+                <b>{fmt(pl.totals.netWeight, 1)} kg</b>
+              </div>
+              <div>
+                <small>Volume</small>
+                <b>{fmt(pl.totals.volume, 3)} m³</b>
+              </div>
+            </div>
+            <div className="actions">
+              <button className="btn primary" disabled={!!busy} onClick={() => run('pdf', () => exportPackingListPdf(pl, settings))}>
+                {busy === 'pdf' ? '…' : 'PDF'}
+              </button>
+              <button className="btn" disabled={!!busy} onClick={() => run('xlsx', () => exportPackingListXlsx(pl, settings))}>
+                {busy === 'xlsx' ? '…' : 'Excel'}
+              </button>
+              <button className="btn" disabled={!!busy} onClick={() => run('share', () => sharePackingListPdf(pl, settings))}>
+                {busy === 'share' ? '…' : 'Partager'}
+              </button>
             </div>
           </div>
-          <PackingListView pl={result} />
-        </div>
+
+          {(unknown > 0 || estimated > 0) && (
+            <div className="banner warn">
+              {unknown > 0 && <div>⚠️ {unknown} article(s) introuvable(s) : ils figurent sur la PL sans poids ni colis.</div>}
+              {estimated > 0 && (
+                <div>
+                  ℹ️ {estimated} article(s) avec des données estimées (vus seulement en colis mixte) : vérifiez poids et
+                  dimensions.
+                </div>
+              )}
+            </div>
+          )}
+
+          <PackingListView pl={pl} />
+          <FreightPanel pl={pl} />
+        </>
       )}
     </div>
   );

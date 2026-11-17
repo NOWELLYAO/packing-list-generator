@@ -1,4 +1,5 @@
-import type { CatalogItem } from '../types';
+import type { CatalogItem, PackVariant } from '../types';
+import { applyVariant, mergeVariants, preferredVariant, variantOf } from './variants';
 import { round } from './parseValues';
 import { uid } from './normalize';
 
@@ -153,7 +154,7 @@ export function parseSapPackingList(rawLines: string[]): SapDocument {
   for (const raw of rawLines) {
     const line = cleanLine(raw);
     if (!line) continue;
-    const num = line.match(/(?:Packing\s*list|Note\s*de\s*colisage)\s*(\d{6,12})/i);
+    const num = line.match(/(?:Packing\s*list(?:\s*shipment)?|Note\s*de\s*colisage)\s*(\d{6,12})/i);
     if (num && !doc.number) doc.number = num[1];
     const go = line.match(/COUNTRY OF ORIGIN\s*[:;]\s*([A-Z][A-Za-z ]+)$/);
     if (go && !hu) doc.globalOrigin = go[1].trim();
@@ -282,27 +283,19 @@ export function sapToCatalog(doc: SapDocument, source: string): SapObservation[]
 }
 
 /**
- * Choisit la meilleure observation par article : colis dédié > colis mixte,
- * puis la plus fréquente configuration (qté/colis + dimensions).
+ * Regroupe les observations d'un fichier par article : chaque configuration de colis
+ * devient une variante d'emballage (la fusion dans le catalogue choisit la référence).
  */
 export function bestObservations(obs: SapObservation[]): CatalogItem[] {
   const groups = new Map<string, SapObservation[]>();
-  for (const o of obs) {
-    const k = o.item.pn;
-    groups.set(k, [...(groups.get(k) ?? []), o]);
-  }
+  for (const o of obs) groups.set(o.item.pn, [...(groups.get(o.item.pn) ?? []), o]);
   const result: CatalogItem[] = [];
   for (const list of groups.values()) {
-    const dedicated = list.filter((o) => !o.mixed);
-    const pool = dedicated.length ? dedicated : list;
-    const sig = (i: CatalogItem) => `${i.qtyPerPackage}|${i.length}x${i.width}x${i.height}`;
-    const counts = new Map<string, number>();
-    for (const o of pool) counts.set(sig(o.item), (counts.get(sig(o.item)) ?? 0) + 1);
-    const best = [...pool].sort((a, b) => (counts.get(sig(b.item)) ?? 0) - (counts.get(sig(a.item)) ?? 0))[0];
-    // garder la meilleure description (la plus longue) et une origine connue
+    const variants = list.reduce<PackVariant[]>((acc, o) => mergeVariants(acc, [variantOf(o.item)]), []);
     const desc = list.map((o) => o.item.description).sort((a, b) => b.length - a.length)[0];
     const origin = list.map((o) => o.item.origin).find(Boolean) ?? '';
-    result.push({ ...best.item, description: desc, origin: best.item.origin || origin });
+    const base = applyVariant({ ...list[0].item, description: desc, origin, variants }, preferredVariant(variants));
+    result.push(base);
   }
   return result;
 }

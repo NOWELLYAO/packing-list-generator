@@ -1,123 +1,94 @@
-import type { PackingList, PLPackage } from '../types';
+import type { PackingList } from '../types';
+import BoxIcon from './BoxIcon';
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
-const BASIS: Record<PLPackage['basis'], string> = {
-  reference: '',
-  partial: 'Colis incomplet : hauteur/poids réduits',
-  grouped: 'Petits articles regroupés',
-};
-
+/** Aperçu du colisage et des articles (mis à jour en direct) */
 export default function PackingListView({ pl }: { pl: PackingList }) {
-  const problems = pl.lines.filter((l) => l.warning);
   return (
-    <div className="pl-doc printable">
-      <h1>PACKING LIST</h1>
-      <p className="pl-date">Date : {new Date(pl.date).toLocaleDateString('fr-FR')}</p>
+    <div className="pl-view">
+      <section>
+        <h3 className="section-title">
+          Colisage <span className="count">{pl.packages.length}</span>
+        </h3>
+        <div className="pkg-grid">
+          {pl.packages.map((p) => (
+            <article key={p.no} className={`pkg-card ${p.basis}`}>
+              <div className="pkg-head">
+                <BoxIcon l={p.length} w={p.width} h={p.height} />
+                <div>
+                  <div className="pkg-no">Colis {p.no}</div>
+                  <div className="pkg-type">
+                    {p.type}
+                    {p.basis === 'grouped' && <span className="chip chip-accent">groupé</span>}
+                    {p.basis === 'partial' && <span className="chip chip-warn">incomplet</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="pkg-dims">{p.length ? `${p.length} × ${p.width} × ${p.height} cm` : 'Dimensions inconnues'}</div>
+              <div className="pkg-stats">
+                <span>
+                  <small>Brut</small>
+                  {fmt(p.grossWeight)} kg
+                </span>
+                <span>
+                  <small>Net</small>
+                  {fmt(p.netWeight)} kg
+                </span>
+                <span>
+                  <small>Volume</small>
+                  {fmt(p.volume, 3)} m³
+                </span>
+              </div>
+              <div className="pkg-contents">
+                {p.contents.map((c, i) => (
+                  <span key={i} className="chip">
+                    {c.code} × {c.quantity}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
-      <div className="totals">
-        <div>
-          <span>Colis</span>
-          <b>{pl.totals.packages}</b>
-        </div>
-        <div>
-          <span>Poids net</span>
-          <b>{fmt(pl.totals.netWeight)} kg</b>
-        </div>
-        <div>
-          <span>Poids brut</span>
-          <b>{fmt(pl.totals.grossWeight)} kg</b>
-        </div>
-        <div>
-          <span>Volume</span>
-          <b>{fmt(pl.totals.volume, 3)} m³</b>
-        </div>
-      </div>
-
-      {problems.length > 0 && (
-        <div className="warn no-print">
-          ⚠️ {problems.length} ligne(s) à vérifier :{' '}
-          {problems.map((p) => `#${p.lineNo} ${p.code || p.pn} (${p.warning})`).join(' · ')}
-        </div>
-      )}
-
-      <h3>Colisage</h3>
-      <div className="table-wrap">
-        <table className="pl-table">
-          <thead>
-            <tr>
-              <th>Colis N°</th>
-              <th>Emballage</th>
-              <th>Dimensions L×l×H (cm)</th>
-              <th>Volume (m³)</th>
-              <th>Net (kg)</th>
-              <th>Brut (kg)</th>
-              <th>Contenu</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pl.packages.map((p) => (
-              <tr key={p.no} className={p.basis !== 'reference' ? 'row-calc' : ''}>
-                <td>{p.no}</td>
-                <td>{p.type}</td>
-                <td title={BASIS[p.basis]}>
-                  {p.length ? `${p.length} × ${p.width} × ${p.height}` : '—'}
-                  {p.basis !== 'reference' && <span className="tag">{p.basis === 'grouped' ? 'groupé' : 'incomplet'}</span>}
-                </td>
-                <td className="num">{fmt(p.volume, 3)}</td>
-                <td className="num">{fmt(p.netWeight)}</td>
-                <td className="num">{fmt(p.grossWeight)}</td>
-                <td className="contents">{p.contents.map((c) => `${c.code} × ${c.quantity}`).join(', ')}</td>
+      <section>
+        <h3 className="section-title">Articles</h3>
+        <div className="table-wrap">
+          <table className="pl-table">
+            <thead>
+              <tr>
+                <th>N°</th>
+                <th>Code / PN</th>
+                <th>Désignation</th>
+                <th className="num">Qté</th>
+                <th>Colis</th>
+                <th className="num">Net (kg)</th>
+                <th className="num">Brut (kg)</th>
+                <th>Orig.</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={3}>TOTAL : {pl.totals.packages} colis</td>
-              <td className="num">{fmt(pl.totals.volume, 3)}</td>
-              <td className="num">{fmt(pl.totals.netWeight)}</td>
-              <td className="num">{fmt(pl.totals.grossWeight)}</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <h3>Articles</h3>
-      <div className="table-wrap">
-        <table className="pl-table">
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Code / PN</th>
-              <th>Désignation</th>
-              <th>Qté</th>
-              <th>Colis N°</th>
-              <th>Net (kg)</th>
-              <th>Brut (kg)*</th>
-              <th>Origine</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pl.lines.map((l) => (
-              <tr key={l.lineNo} className={!l.found ? 'row-miss' : l.warning ? 'row-warn' : ''}>
-                <td>{l.lineNo}</td>
-                <td>{l.code === l.pn || !l.pn ? l.code : `${l.code} / ${l.pn}`}</td>
-                <td>{l.description}</td>
-                <td className="num">{l.quantity}</td>
-                <td>{l.cases}</td>
-                <td className="num">{fmt(l.netWeight)}</td>
-                <td className="num">{fmt(l.grossWeight)}</td>
-                <td>{l.origin}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted small-note">
-        * Brut par article = marchandise + son emballage d'origine ; la tare des palettes/cartons groupés n'est comptée
-        que dans le colisage.
-      </p>
+            </thead>
+            <tbody>
+              {pl.lines.map((l) => (
+                <tr key={l.lineNo} className={!l.found ? 'row-miss' : l.warning ? 'row-warn' : ''}>
+                  <td>{l.lineNo}</td>
+                  <td className="mono">{l.code === l.pn || !l.pn ? l.code : `${l.code} / ${l.pn}`}</td>
+                  <td>{l.description}</td>
+                  <td className="num">{l.quantity}</td>
+                  <td>{l.cases}</td>
+                  <td className="num">{fmt(l.netWeight)}</td>
+                  <td className="num">{fmt(l.grossWeight)}</td>
+                  <td>{l.origin}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="hint">
+          Le poids brut par article comprend son emballage d'origine ; la tare des cartons et palettes de regroupement
+          n'apparaît que dans le colisage.
+        </p>
+      </section>
     </div>
   );
 }

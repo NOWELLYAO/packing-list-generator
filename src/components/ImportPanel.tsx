@@ -119,9 +119,13 @@ export default function ImportPanel({ onImport }: Props) {
   const noQty = draft && draft.mapping.quantity === undefined;
 
   return (
-    <div className="panel">
-      <h2>1. Charger des Packing Lists</h2>
-      <p className="muted">
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h2>Importer des Packing Lists</h2>
+        </div>
+      </div>
+      <p className="hint">
         Formats acceptés : Excel (.xlsx, .xls), CSV et PDF (y compris scannés, lus par OCR). Les PL au format SAP
         (Grundfos : « Hand. unit / Material / Gross wt. ») sont importées directement. Pour les autres, les colonnes
         sont détectées automatiquement et vous pouvez corriger l'association avant d'ajouter à la base.{' '}
@@ -152,7 +156,9 @@ export default function ImportPanel({ onImport }: Props) {
             e.target.value = '';
           }}
         />
-        <strong>Glissez vos PL ici</strong> ou cliquez pour choisir (plusieurs fichiers possibles)
+        <span className="drop-icon">⤓</span>
+        <strong>Déposez vos PL ici</strong>
+        <span>ou touchez pour choisir — plusieurs fichiers possibles</span>
       </label>
 
       {busy && <p className="busy">⏳ {busy}</p>}
@@ -163,10 +169,10 @@ export default function ImportPanel({ onImport }: Props) {
           <div className="row between">
             <h3>📄 {draft.fileName}</h3>
             <div className="row">
-              <button className="ghost" onClick={() => next()}>
+              <button className="btn ghost" onClick={() => next()}>
                 Ignorer ce fichier
               </button>
-              <button className="primary" disabled={!preview.items.length} onClick={confirm}>
+              <button className="btn primary" disabled={!preview.items.length} onClick={confirm}>
                 Ajouter {preview.items.length} article(s) à la base
               </button>
             </div>
