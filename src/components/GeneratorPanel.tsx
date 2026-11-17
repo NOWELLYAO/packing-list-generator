@@ -10,6 +10,8 @@ import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
 import FreightPanel from './FreightPanel';
 import QuickItemForm from './QuickItemForm';
+import LoadPlanPanel from './LoadPlanPanel';
+import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
 import { isChunkLoadError, reloadForUpdate } from '../lib/updates';
@@ -335,7 +337,8 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             </div>
           </div>
 
-          <PackingListView pl={pl} />
+          <PackingListView pl={pl} accent={settings.accent || DEFAULT_ACCENT} />
+          <LoadPlanPanel pl={pl} accent={settings.accent || DEFAULT_ACCENT} />
           <FreightPanel pl={pl} />
         </>
       )}

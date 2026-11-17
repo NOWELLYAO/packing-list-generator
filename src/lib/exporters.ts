@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
+import { packageDrawing, scaleStrip, type Picture } from './drawing';
+import { loadPlanDrawing, planLoad } from './loadPlan';
 
 /* ------------------------------------------------------------------ */
 /* Outils communs                                                      */
@@ -43,6 +45,57 @@ function download(blob: Blob, name: string) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** Dessine un schéma (lib/drawing) dans le PDF : x, y en mm, largeur en mm */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: number) {
+  const s = width / pic.w;
+  const P = (pt: [number, number]): [number, number] => [x + pt[0] * s, y + pt[1] * s];
+  for (const sh of pic.shapes) {
+    if (sh.kind === 'poly') {
+      const pts = sh.pts.map(P);
+      const deltas = pts.slice(1).map((p, i) => [p[0] - pts[i][0], p[1] - pts[i][1]]);
+      let gs = false;
+      if (sh.opacity !== undefined && doc.GState) {
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ opacity: sh.opacity }));
+        gs = true;
+      }
+      doc.setFillColor(sh.fill);
+      if (sh.stroke) {
+        doc.setDrawColor(sh.stroke);
+        doc.setLineWidth((sh.sw ?? 0.5) * s);
+      }
+      doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], sh.stroke ? 'FD' : 'F', true);
+      if (gs) doc.restoreGraphicsState();
+    } else if (sh.kind === 'line') {
+      doc.setDrawColor(sh.stroke);
+      doc.setLineWidth(sh.sw * s);
+      if (sh.dash) doc.setLineDashPattern([1.2, 0.8], 0);
+      const [a, b] = [P(sh.a), P(sh.b)];
+      doc.line(a[0], a[1], b[0], b[1]);
+      if (sh.dash) doc.setLineDashPattern([], 0);
+    } else if (sh.kind === 'circle') {
+      const c = P(sh.c);
+      doc.setFillColor(sh.fill);
+      if (sh.stroke) {
+        doc.setDrawColor(sh.stroke);
+        doc.setLineWidth((sh.sw ?? 0.5) * s);
+      }
+      doc.circle(c[0], c[1], sh.r * s, sh.stroke ? 'FD' : 'F');
+    } else {
+      const at = P(sh.at);
+      doc.setFont('helvetica', sh.bold ? 'bold' : 'normal');
+      doc.setFontSize((sh.size * s) / 0.3528);
+      doc.setTextColor(sh.color);
+      doc.text(sh.text.replace(/\u202f|\u00a0/g, ' ').replace('m³', 'm3'), at[0], at[1], {
+        align: sh.anchor === 'middle' ? 'center' : sh.anchor === 'end' ? 'right' : 'left',
+        baseline: 'middle',
+        angle: sh.rotate ? -sh.rotate : 0,
+      });
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -193,6 +246,105 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       7: { halign: 'center', cellWidth: 13 },
     },
   });
+
+  // ---- Schémas des colis ----
+  const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: T.locale };
+  const drawable = pl.packages.filter((p) => p.length > 0 && p.width > 0 && p.height > 0);
+  if (drawable.length) {
+    doc.addPage();
+    let yy = section(T.schemas, 18);
+    const strip = scaleStrip(drawable.map((p) => ({ ...p, type: p.type })), settings.accent || DEFAULT_ACCENT, labels, 640);
+    const stripW = Math.min(W - 2 * M, (strip.w / 640) * (W - 2 * M));
+    drawPicturePdf(doc, strip, M, yy, stripW);
+    yy += (strip.h * stripW) / strip.w + 1;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...muted);
+    doc.text(T.scaleView, M, yy + 2);
+    yy += 7;
+    const cols = 3;
+    const cellW = (W - 2 * M) / cols;
+    let col = 0;
+    for (const p of drawable) {
+      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels);
+      const cellH = (pic.h * cellW) / pic.w;
+      if (yy + cellH + 8 > H - 16) {
+        doc.addPage();
+        yy = 18;
+        col = 0;
+      }
+      const cx = M + col * cellW;
+      doc.setDrawColor(230, 235, 241);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(cx + 1, yy, cellW - 2, cellH + 6, 2, 2, 'S');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...muted);
+      doc.text(typeOf(p, lang), cx + 4, yy + 4.5);
+      drawPicturePdf(doc, pic, cx + 1, yy + 5, cellW - 2);
+      col++;
+      if (col === cols) {
+        col = 0;
+        yy += cellH + 9;
+      }
+    }
+
+    // ---- Plan de chargement ----
+    const plan = planLoad(pl.packages);
+    if (plan) {
+      doc.addPage();
+      yy = section(T.loadPlan, 18);
+      const vName = lang === 'fr' ? plan.vehicle.name : plan.vehicle.nameEn;
+      const facts: [string, string][] = [
+        [T.vehicle, `${plan.bins.length} × ${vName}`],
+        [T.lengthUsed, plan.bins.map((b) => `${nf(b.usedLength / 100, 2)} m`).join(' + ')],
+        [T.floorUsed, plan.bins.map((b) => `${nf(b.floorPct, 1)} %`).join(' + ')],
+        [T.ldm, `${nf(plan.ldm, 2)}`],
+      ];
+      const fw = (W - 2 * M - 9) / 4;
+      facts.forEach(([k2, v2], i) => {
+        const x0 = M + i * (fw + 3);
+        doc.setFillColor(...light);
+        doc.roundedRect(x0, yy, fw, 14, 2, 2, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...muted);
+        doc.text(k2.toUpperCase(), x0 + 3, yy + 5);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(...ink);
+        doc.text(doc.splitTextToSize(v2, fw - 5)[0], x0 + 3, yy + 11);
+      });
+      yy += 20;
+      for (const [i, b] of plan.bins.entries()) {
+        const pic = loadPlanDrawing(plan.vehicle, b, settings.accent || DEFAULT_ACCENT, lang, 640);
+        const ph = (pic.h * (W - 2 * M)) / pic.w;
+        if (yy + ph + 10 > H - 16) {
+          doc.addPage();
+          yy = 18;
+        }
+        if (plan.bins.length > 1) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(...ink);
+          doc.text(`${vName} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
+          yy += 4;
+        }
+        drawPicturePdf(doc, pic, M, yy, W - 2 * M);
+        yy += ph + 6;
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...muted);
+      doc.text(T.loadNote, M, yy);
+      yy += 5;
+      for (const wmsg of plan.warnings) {
+        doc.setTextColor(180, 83, 9);
+        doc.text(`⚠ ${wmsg}`.replace('⚠ ', '! '), M, yy);
+        yy += 4.5;
+      }
+    }
+  }
 
   // Pied de page sur chaque page
   const pages = doc.getNumberOfPages();

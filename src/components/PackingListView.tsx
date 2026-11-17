@@ -1,23 +1,31 @@
 import type { PackingList } from '../types';
-import BoxIcon from './BoxIcon';
 import { packLabel, useLang } from '../lib/i18n';
+import { packageDrawing, scaleStrip } from '../lib/drawing';
+import Drawing from './Drawing';
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Aperçu du colisage et des articles (mis à jour en direct) */
-export default function PackingListView({ pl }: { pl: PackingList }) {
+export default function PackingListView({ pl, accent }: { pl: PackingList; accent: string }) {
   const lang = useLang();
+  const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: lang === 'fr' ? 'fr-FR' : 'en-GB' };
+  const strip = scaleStrip(pl.packages, accent, labels, 640);
   return (
     <div className="pl-view">
       <section>
         <h3 className="section-title">
           Colisage <span className="count">{pl.packages.length}</span>
         </h3>
+        {strip.shapes.length > 0 && pl.packages.length > 1 && (
+          <div className="scale-strip">
+            <Drawing pic={strip} className="strip-svg" title="Vue à l'échelle" />
+            <span className="hint">Vue de face à la même échelle (repère : silhouette de 1,80 m)</span>
+          </div>
+        )}
         <div className="pkg-grid">
           {pl.packages.map((p) => (
             <article key={p.no} className={`pkg-card ${p.basis}`}>
               <div className="pkg-head">
-                <BoxIcon l={p.length} w={p.width} h={p.height} />
                 <div>
                   <div className="pkg-no">Colis {p.no}</div>
                   <div className="pkg-type">
@@ -27,7 +35,11 @@ export default function PackingListView({ pl }: { pl: PackingList }) {
                   </div>
                 </div>
               </div>
-              <div className="pkg-dims">{p.length ? `${p.length} × ${p.width} × ${p.height} cm` : 'Dimensions inconnues'}</div>
+              {p.length > 0 ? (
+                <Drawing pic={packageDrawing(p, accent, labels)} className="pkg-svg" title={`Colis ${p.no}`} />
+              ) : (
+                <div className="pkg-dims">Dimensions inconnues</div>
+              )}
               <div className="pkg-stats">
                 <span>
                   <small>Brut</small>
