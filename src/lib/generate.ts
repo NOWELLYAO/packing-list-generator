@@ -99,12 +99,25 @@ function partialHeight(item: CatalogItem, n: number): number {
 
 /** Découpe une ligne article en colis, en tenant compte du dernier colis incomplet */
 function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
+  // Donnée issue d'un colis mixte : les dimensions sont celles du colis entier.
+  // On ne garde que la part de l'article (hauteur réduite), sinon chaque article compterait tout le colis.
+  const share = item.mixed && item.packShare && item.packShare < 1 ? item.packShare : 1;
+  if (share < 1 && item.length > 0 && item.width > 0 && item.height > 0) {
+    const h = isPalletLike(item)
+      ? Math.ceil(PALLET_BASE_CM + Math.max(0, item.height - PALLET_BASE_CM) * share)
+      : Math.max(5, Math.ceil(item.height * Math.max(share, 0.3)));
+    item = { ...item, height: Math.min(item.height, h), packShare: undefined, mixed: true };
+  } else if (share < 1 && item.volumePerPackage > 0) {
+    item = { ...item, volumePerPackage: item.volumePerPackage * share, packShare: undefined };
+  }
   const perPkg = item.qtyPerPackage > 0 ? item.qtyPerPackage : qty;
   const hasDims = item.length > 0 && item.width > 0 && item.height > 0;
   const refVol = hasDims ? (item.length * item.width * item.height) / 1e6 : item.volumePerPackage || 0;
   // tare (emballage) d'un colis = (brut - net) x unités par colis
   const tare = Math.max(0, item.grossWeightPerUnit - item.netWeightPerUnit) * perPkg;
-  const unitVol = refVol / perPkg;
+  const loadVol =
+    hasDims && isPalletLike(item) ? (item.length * item.width * Math.max(5, item.height - PALLET_BASE_CM)) / 1e6 : refVol;
+  const goodsUnitVol = loadVol / perPkg;
   const out: Piece[] = [];
   const mk = (q: number, h: number, basis: Piece['basis'], volume: number, packTare: number): Piece => ({
     lineIdx,
@@ -118,8 +131,9 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     net: q * item.netWeightPerUnit,
     gross: q * item.netWeightPerUnit + packTare,
     basis,
-    // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié)
-    goodsVolume: perPkg < 1 ? volume : Math.min(volume, unitVol * q) || volume,
+    // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
+    // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
+    goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
   });
 
   if (perPkg < 1) {
@@ -335,6 +349,7 @@ export function generatePackingList(
   options: GenerateOptions = { consolidate: true, reference: '' },
 ): PackingList {
   const lines: PLLine[] = [];
+  const lineItems: (CatalogItem | undefined)[] = [];
   const allPieces: Piece[] = [];
   for (const req of requests) {
     if (!req.code.trim() && !req.pn.trim()) continue;
@@ -342,6 +357,7 @@ export function generatePackingList(
     if (qty <= 0) continue;
     const item = findItem(catalog, req.code, req.pn);
     const lineIdx = lines.length;
+    lineItems[lineIdx] = item;
     if (!item) {
       lines.push({ lineNo: lineIdx + 1, code: req.code, pn: req.pn, description: '— Article introuvable dans la base —', quantity: qty, unit: '', cases: '', netWeight: 0, grossWeight: 0, hsCode: '', origin: '', found: false, warning: 'Introuvable' });
       continue;
@@ -359,26 +375,64 @@ export function generatePackingList(
     allPieces.push(...(gf ? gf.pieces : piecesFor(chosen, qty, lineIdx)));
   }
 
-  // Petits colis -> regroupés ; gros colis -> tels quels
+  // ---------- Regroupements ----------
   const isSmall = (p: Piece) => p.volume > 0 && p.volume < SMALL_PKG_M3 && p.gross < SMALL_PKG_KG;
-  const consolidateOn = options.consolidate && options.strategy !== 'grundfos';
-  const small = consolidateOn ? allPieces.filter(isSmall) : [];
-  const big = consolidateOn ? allPieces.filter((p) => !isSmall(p)) : allPieces;
-  const doGroup = small.length >= 2;
+  const grundfosMode = options.strategy === 'grundfos';
+  const grundfosGrouping = grundfosMode && options.grundfosGrouping !== false;
+  const groups: { pieces: Piece[]; source: 'history' | 'rule' }[] = [];
+  let pool = [...allPieces];
+
+  if (grundfosGrouping) {
+    // 1) Articles déjà mis ensemble dans un même colis par Grundfos → regroupés de la même façon
+    //    (colis de moins de 300 kg : au-delà, Grundfos ne mélange pas dans vos PL)
+    const parent = lines.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const ids = (it?: CatalogItem) => (it ? [it.code, it.pn].filter(Boolean) : []);
+    for (let i = 0; i < lineItems.length; i++)
+      for (let j = i + 1; j < lineItems.length; j++) {
+        const a = lineItems[i];
+        const b = lineItems[j];
+        if (!a || !b) continue;
+        const linked = ids(b).some((x) => a.coPacked?.includes(x)) || ids(a).some((x) => b.coPacked?.includes(x));
+        if (linked) parent[find(i)] = find(j);
+      }
+    const comps = new Map<number, Piece[]>();
+    // seuls les restes (colis incomplets) et les petits colis sont mélangés : une palette pleine d'un article reste seule
+    const mixable = (p: Piece) => p.gross < 300 && p.volume > 0 && (p.basis === 'partial' || (p.volume < 0.35 && p.gross < 150));
+    for (const p of pool) {
+      if (!mixable(p)) continue;
+      const root = find(p.lineIdx);
+      comps.set(root, [...(comps.get(root) ?? []), p]);
+    }
+    for (const list of comps.values()) {
+      if (new Set(list.map((p) => p.lineIdx)).size < 2) continue; // il faut au moins deux articles différents
+      groups.push({ pieces: list, source: 'history' });
+      pool = pool.filter((p) => !list.includes(p));
+    }
+  }
+  // 2) Petits colis restants réunis sur un carton ou une palette (tendance observée chez Grundfos,
+  //    et règle de la proposition optimisée si l'option est activée)
+  if (grundfosGrouping || (!grundfosMode && options.consolidate)) {
+    const small = pool.filter(isSmall);
+    if (small.length >= 2) {
+      groups.push({ pieces: small, source: 'rule' });
+      pool = pool.filter((p) => !small.includes(p));
+    }
+  }
 
   const packages: PLPackage[] = [];
   const casesByLine = new Map<number, number[]>();
   const addCase = (lineIdx: number, no: number) => casesByLine.set(lineIdx, [...(casesByLine.get(lineIdx) ?? []), no]);
-  for (const p of doGroup ? big : allPieces) {
+  for (const p of pool) {
     const no = packages.length + 1;
     packages.push({ no, type: p.type, length: p.l, width: p.w, height: p.h, volume: round(p.volume, 3), netWeight: round(p.net, 2), grossWeight: round(p.gross, 2), contents: [{ code: p.code, quantity: round(p.qty, 4) }], basis: p.basis });
     addCase(p.lineIdx, no);
   }
-  if (doGroup) {
-    for (const g of consolidate(small)) {
+  for (const grp of groups) {
+    for (const g of consolidate(grp.pieces)) {
       const no = packages.length + 1;
-      packages.push({ ...g, no });
-      for (const p of small) if (g.contents.some((c) => c.code === p.code)) addCase(p.lineIdx, no);
+      packages.push({ ...g, no, groupSource: grp.source });
+      for (const p of grp.pieces) if (g.contents.some((c) => c.code === p.code)) addCase(p.lineIdx, no);
     }
   }
 

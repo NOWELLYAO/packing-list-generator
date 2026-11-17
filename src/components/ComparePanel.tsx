@@ -36,7 +36,7 @@ export default function ComparePanel({ g, s, selected, onSelect, onExportCompari
       <div className="proposal-cards">
         {(
           [
-            ['grundfos', 'Selon Grundfos', 'Emballages réellement utilisés par Grundfos, sans recalcul ni regroupement', g],
+            ['grundfos', 'Selon Grundfos', 'Emballages réellement utilisés par Grundfos ; restes et petits articles regroupés comme Grundfos le fait', g],
             ['smart', 'Optimisée', 'Meilleur emballage, palettes incomplètes recalculées, petits articles regroupés', s],
           ] as const
         ).map(([key, title, sub, pl]) => (

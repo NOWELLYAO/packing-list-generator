@@ -33,7 +33,13 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
                   <div className="pkg-no">Colis {p.no}</div>
                   <div className="pkg-type">
                     {packLabel(p.type, lang)}
-                    {p.basis === 'grouped' && (
+                    {p.basis === 'grouped' && p.groupSource === 'history' && (
+                      <span className="chip-with-tip">
+                        <span className="chip chip-ok">comme Grundfos</span>
+                        <InfoTip k="groupedHistory" />
+                      </span>
+                    )}
+                    {p.basis === 'grouped' && p.groupSource !== 'history' && (
                       <span className="chip-with-tip">
                         <span className="chip chip-accent">groupé</span>
                         <InfoTip k="grouped" />

@@ -245,6 +245,7 @@ export function sapToCatalog(doc: SapDocument, source: string): SapObservation[]
       else byMat.set(p.material, { ...p });
     }
     const volFromDims = hu.dims ? (hu.dims.l * hu.dims.w * hu.dims.h) / 1e6 : 0;
+    const matsInHu = [...byMat.keys()];
     for (const p of byMat.values()) {
       const share = p.qty / totalQty;
       const gross = Number.isFinite(hu.gross) ? hu.gross * share : 0;
@@ -275,6 +276,9 @@ export function sapToCatalog(doc: SapDocument, source: string): SapObservation[]
           source: `${source}${doc.number ? ` (PL ${doc.number})` : ''}${mixed ? ' – colis mixte' : ''}`,
           updatedAt: now,
           mixed,
+          // articles mis dans le même colis par Grundfos (sert à reproduire ses regroupements)
+          coPacked: mixed ? matsInHu.filter((m) => m !== p.material) : undefined,
+          packShare: mixed ? round(share, 4) : undefined,
         },
       });
     }
@@ -294,7 +298,11 @@ export function bestObservations(obs: SapObservation[]): CatalogItem[] {
     const variants = list.reduce<PackVariant[]>((acc, o) => mergeVariants(acc, [variantOf(o.item)]), []);
     const desc = list.map((o) => o.item.description).sort((a, b) => b.length - a.length)[0];
     const origin = list.map((o) => o.item.origin).find(Boolean) ?? '';
-    const base = applyVariant({ ...list[0].item, description: desc, origin, variants }, preferredVariant(variants));
+    const coPacked = [...new Set(list.flatMap((o) => o.item.coPacked ?? []))];
+    const base = applyVariant(
+      { ...list[0].item, description: desc, origin, variants, coPacked: coPacked.length ? coPacked : undefined },
+      preferredVariant(variants),
+    );
     result.push(base);
   }
   return result;

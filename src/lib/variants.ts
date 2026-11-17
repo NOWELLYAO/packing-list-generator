@@ -22,6 +22,7 @@ export function variantOf(item: CatalogItem): PackVariant {
     netWeightPerUnit: item.netWeightPerUnit,
     grossWeightPerUnit: item.grossWeightPerUnit,
     mixed: !!item.mixed,
+    packShare: item.packShare,
     source: item.source,
     count: 1,
   };
@@ -66,5 +67,6 @@ export function applyVariant(item: CatalogItem, v: PackVariant): CatalogItem {
     netWeightPerUnit: v.netWeightPerUnit,
     grossWeightPerUnit: v.grossWeightPerUnit,
     mixed: v.mixed,
+    packShare: v.mixed ? v.packShare : undefined,
   };
 }

@@ -27,6 +27,10 @@ export interface CatalogItem {
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */
   manual?: boolean;
+  /** codes des articles avec lesquels Grundfos l'a déjà mis dans un même colis */
+  coPacked?: string[];
+  /** colis mixte : part du colis occupée par cet article (0–1, au prorata des quantités) */
+  packShare?: number;
   /** (calcul) hauteurs réelles observées pour d'autres quantités sur le même emballage */
   heightAnchors?: { n: number; h: number }[];
   updatedAt: string;
@@ -43,6 +47,8 @@ export interface PackVariant {
   netWeightPerUnit: number;
   grossWeightPerUnit: number;
   mixed: boolean;
+  /** colis mixte : part du colis occupée par l'article */
+  packShare?: number;
   source: string;
   /** nombre de fois où cette configuration a été vue */
   count: number;
@@ -134,6 +140,8 @@ export interface PLPackage {
   contents: { code: string; quantity: number }[];
   /** comment les dimensions ont été obtenues */
   basis: 'reference' | 'partial' | 'grouped';
+  /** regroupement : 'history' = articles déjà réunis par Grundfos dans un même colis ; 'rule' = petits articles réunis */
+  groupSource?: 'history' | 'rule';
 }
 
 export interface GenerateOptions {
@@ -141,6 +149,8 @@ export interface GenerateOptions {
   consolidate: boolean;
   /** 'grundfos' : uniquement les emballages réellement utilisés par le fournisseur ; 'smart' (défaut) : proposition optimisée */
   strategy?: 'grundfos' | 'smart';
+  /** proposition « selon Grundfos » : reproduire ses regroupements (défaut : oui) */
+  grundfosGrouping?: boolean;
   /** référence libre (facultative) affichée sur le document */
   reference?: string;
 }

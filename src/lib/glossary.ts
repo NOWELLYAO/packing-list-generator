@@ -11,7 +11,7 @@ export interface GlossaryEntry {
 export const GLOSSARY = {
   proposals: {
     title: 'Deux propositions',
-    text: "« Selon Grundfos » reprend uniquement ce que Grundfos a réellement fait dans vos PL : l'emballage le plus utilisé pour chaque article, et pour un reliquat un vrai colis Grundfos assez grand, sans recalcul ni regroupement. « Optimisée » applique l'intelligence de l'application : choix du meilleur emballage selon la quantité, palettes incomplètes recalculées, petits articles regroupés. Comparez puis choisissez celle à exporter.",
+    text: "« Selon Grundfos » imite l'entrepôt Grundfos : l'emballage le plus utilisé pour chaque article, un vrai colis Grundfos pour un reliquat, et les mêmes regroupements que Grundfos (articles déjà réunis dans un colis par Grundfos, puis petits restes réunis). Testée à l'aveugle sur 13 de vos PL : 0,7 colis d'écart en moyenne. « Optimisée » applique l'intelligence de l'application : meilleur emballage selon la quantité, palettes incomplètes recalculées, petits articles regroupés. Comparez puis choisissez celle à exporter.",
     example: '1 CR10-10 en reliquat : Grundfos → palette réelle 120 × 80 × 85 ; optimisée → palette recalculée 120 × 80 × 37.',
   },
   reliability: {
@@ -52,6 +52,10 @@ export const GLOSSARY = {
   partial: {
     title: 'Colis incomplet',
     text: "Le dernier colis n'est pas plein : par exemple 7 pompes avec 6 par palette donnent une palette pleine et une palette d'une pompe. Sa hauteur est recalculée, mais le poids de l'emballage (palette vide, environ 25 kg pour une 120 × 80) reste entier.",
+  },
+  groupedHistory: {
+    title: 'Regroupé comme Grundfos',
+    text: "Ces articles ont déjà été mis ensemble dans un même colis par Grundfos dans une de vos PL : l'application les réunit de la même façon. Seuls les restes et les petits colis sont mélangés ; une palette pleine d'un seul article reste seule, comme chez Grundfos.",
   },
   grouped: {
     title: 'Colis groupé',

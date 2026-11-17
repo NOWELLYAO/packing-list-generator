@@ -235,7 +235,9 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
       source: it.source || prev.source,
       updatedAt: it.updatedAt,
       variants,
+      coPacked: [...new Set([...(prev.coPacked ?? []), ...(it.coPacked ?? [])])].filter(Boolean),
     };
+    if (!merged.coPacked?.length) delete merged.coPacked;
     map.set(k, prev.manual ? merged : applyVariant(merged, preferredVariant(variants)));
   }
   return { catalog: [...map.values()], added, updated };
