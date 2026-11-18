@@ -80,6 +80,8 @@ interface Piece {
   dimsInferred?: boolean;
   /** petit reliquat réemballé dans un carton à sa taille */
   repacked?: boolean;
+  /** dimensions issues d'un colis partagé (ce ne sont pas celles de l'article) */
+  fromMixed?: boolean;
   /** volume réellement occupé par la marchandise (pour le regroupement) */
   goodsVolume: number;
 }
@@ -161,6 +163,7 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     gross: q * item.netWeightPerUnit + packTare,
     basis,
     dimsInferred: item.dimsInferred,
+    fromMixed: !!item.mixed,
     // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
     // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
     goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
@@ -220,7 +223,9 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
 function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
   const result: Omit<PLPackage, 'no'>[] = [];
   const goods = (p: Piece) => p.goodsVolume || p.volume;
-  const longest = Math.max(...pieces.map((p) => sorted3(p.l, p.w, p.h)[0] || 0));
+  // les dimensions d'un colis partagé ne disent rien de la longueur de l'article (un câble vu sur une palette de 144 cm)
+  const own = (ps: Piece[]) => ps.filter((p) => !p.fromMixed);
+  const longest = Math.max(0, ...own(pieces).map((p) => sorted3(p.l, p.w, p.h)[0] || 0));
   const totalVol = pieces.reduce((s, p) => s + goods(p), 0);
   const contents = (ps: Piece[]) => {
     const m = new Map<string, number>();
@@ -262,9 +267,9 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
 
   for (const g of groups) {
     const v = g.reduce((s, p) => s + goods(p), 0);
-    const maxPieceH = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[2] || 0));
-    const gLongest = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[0] || 0));
-    const gSecond = Math.max(...g.map((p) => sorted3(p.l, p.w, p.h)[1] || 0));
+    const maxPieceH = Math.max(0, ...own(g).map((p) => sorted3(p.l, p.w, p.h)[2] || 0));
+    const gLongest = Math.max(0, ...own(g).map((p) => sorted3(p.l, p.w, p.h)[0] || 0));
+    const gSecond = Math.max(0, ...own(g).map((p) => sorted3(p.l, p.w, p.h)[1] || 0));
     // demi-palette si le volume et la taille des colis le permettent
     const base = v <= 0.3 && gLongest <= 80 && gSecond <= 60 ? PALLETS[0] : euro;
     // la palette doit être au moins aussi longue que le plus long colis (ex. pompe de 160 cm)
@@ -520,7 +525,9 @@ export function generatePackingList(
   for (const p of packages) {
     const idx = p.contents.map((c) => codeLine.get(c.code)).filter((i): i is number => i !== undefined);
     if (idx.some((i) => lineInferred.has(i))) p.dimCheck = 'inferred';
-    else if (idx.some((i) => lines[i].confidence === 'estimated' || lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';
+    // une palette pleine déjà expédiée telle quelle reste fiable ; seuls les colis recalculés (incomplets, regroupés) sont à vérifier
+    else if (p.basis !== 'reference' && idx.some((i) => lines[i].confidence === 'estimated' || lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';
+    else if (idx.some((i) => lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';
   }
 
   // Indications de dessin : nombre d'unités et forme des articles

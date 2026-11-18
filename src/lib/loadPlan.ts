@@ -79,6 +79,8 @@ export interface LoadPlan {
   ldm: number;
   unplaced: number[];
   warnings: string[];
+  /** mêmes alertes, en anglais (documents EN) */
+  warningsEn: string[];
   /** toutes les solutions évaluées, pour comparaison */
   alternatives: { vehicle: Vehicle; count: number; feasible: boolean; reason?: string }[];
 }
@@ -254,21 +256,35 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
     }
   }
   const warnings: string[] = [];
+  const warningsEn: string[] = [];
+  const fr = (n: number) => String(n).replace('.', ',');
   chosen.bins.forEach((b, i) => {
     const tag = chosen!.bins.length > 1 ? ` (n° ${i + 1})` : '';
+    const tagEn = chosen!.bins.length > 1 ? ` (no. ${i + 1})` : '';
     // charge reportée vers les portes : risque réel (essieu arrière, basculement à l'ouverture)
-    if (b.cogX > 62 && b.weight > b.vehicle.payload * 0.2)
-      warnings.push(`Centre de gravité à ${String(b.cogX).replace('.', ',')} % de la longueur, côté portes${tag} : avancer les colis lourds vers le fond`);
+    if (b.cogX > 62 && b.weight > b.vehicle.payload * 0.2) {
+      warnings.push(`Centre de gravité à ${fr(b.cogX)} % de la longueur, côté portes${tag} : avancer les colis lourds vers le fond`);
+      warningsEn.push(`Centre of gravity at ${b.cogX} % of the length, door side${tagEn}: move heavy packages towards the front`);
+    }
     // charge lourde concentrée tout à l'avant : surcharge de l'essieu avant possible
-    else if (b.cogX < 25 && b.weight > b.vehicle.payload * 0.5)
-      warnings.push(`Charge lourde concentrée à l'avant (${String(b.cogX).replace('.', ',')} % de la longueur)${tag} : répartir sur la longueur`);
-    if (Math.abs(b.cogY - 50) > 10 && b.weight > Math.max(300, b.vehicle.payload * 0.15)) warnings.push(`Charge décentrée en largeur (${String(b.cogY).replace('.', ',')} %)${tag} : caler les colis`);
+    else if (b.cogX < 25 && b.weight > b.vehicle.payload * 0.5) {
+      warnings.push(`Charge lourde concentrée à l'avant (${fr(b.cogX)} % de la longueur)${tag} : répartir sur la longueur`);
+      warningsEn.push(`Heavy load concentrated at the front (${b.cogX} % of the length)${tagEn}: spread it along the length`);
+    }
+    if (Math.abs(b.cogY - 50) > 10 && b.weight > Math.max(300, b.vehicle.payload * 0.15)) {
+      warnings.push(`Charge décentrée en largeur (${fr(b.cogY)} %)${tag} : caler les colis`);
+      warningsEn.push(`Load off-centre across the width (${b.cogY} %)${tagEn}: secure the packages`);
+    }
   });
   // envoi léger : un véhicule dédié n'est pas la solution la plus logique
   const totalKg = items.reduce((t, p) => t + p.grossWeight, 0);
   const totalM3 = items.reduce((t, p) => t + (p.length * p.width * p.height) / 1e6, 0);
-  if (totalKg <= 70 && totalM3 <= 0.3)
-    warnings.push(`Envoi léger (${String(Math.round(totalKg * 10) / 10).replace('.', ',')} kg, ${String(Math.round(totalM3 * 1000) / 1000).replace('.', ',')} m³) : la messagerie ou l'express est plus adaptée qu'un véhicule dédié`);
+  if (totalKg <= 70 && totalM3 <= 0.3) {
+    const kg = Math.round(totalKg * 10) / 10;
+    const m3 = Math.round(totalM3 * 1000) / 1000;
+    warnings.push(`Envoi léger (${fr(kg)} kg, ${fr(m3)} m³) : la messagerie ou l'express est plus adaptée qu'un véhicule dédié`);
+    warningsEn.push(`Light shipment (${kg} kg, ${m3} m³): parcel or express service is better suited than a dedicated vehicle`);
+  }
   return {
     vehicle: chosen.v,
     summary: describe(chosen.bins, false),
@@ -277,6 +293,7 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
     ldm: round(chosen.bins.reduce((s, b) => s + b.usedLength, 0) / 100, 2),
     unplaced: chosen.unplaced,
     warnings,
+    warningsEn,
     alternatives,
   };
 }

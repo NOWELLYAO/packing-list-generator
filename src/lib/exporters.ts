@@ -367,7 +367,8 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       // par véhicule : vue 3D (≤ 62 mm) puis vue de dessus (≤ 34 mm) ; réduites jusqu'à 70 % si cela évite une page presque vide
       const D3_H = 62;
       const TOP_H = 34;
-      const tail = 3 + 6 + plan.warnings.length * 4.5; // espace sous le dessin + légende + alertes
+      const planWarnings = lang === 'fr' ? plan.warnings : plan.warningsEn;
+      const tail = 3 + 6 + planWarnings.length * 4.5; // espace sous le dessin + légende + alertes
       const fitW = (pic: { w: number; h: number }, maxH: number) => Math.min(W - 2 * M, (maxH * pic.w) / pic.h);
       const blockH = (b: (typeof plan.bins)[number], sc: number) => {
         const p3 = loadPlan3D(b, lang, 640);
@@ -421,13 +422,13 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
         drawPicturePdf(doc, pt, M + (W - 2 * M - wt) / 2, yy, wt);
         yy += ht + 3;
       }
-      ensure(6 + plan.warnings.length * 4.5);
+      ensure(6 + planWarnings.length * 4.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(...muted);
       doc.text(T.loadNote, M, yy);
       yy += 5;
-      for (const wmsg of plan.warnings) {
+      for (const wmsg of planWarnings) {
         doc.setTextColor(180, 83, 9);
         doc.text(pdfSafe(`! ${wmsg}`), M, yy);
         yy += 4.5;
@@ -807,7 +808,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     }
     ws3.getCell(r, 1).value = T.loadNote;
     ws3.getCell(r, 1).font = { size: 9, color: { argb: 'FF6E7887' } };
-    for (const [i, w] of plan.warnings.entries()) {
+    for (const [i, w] of (lang === 'fr' ? plan.warnings : plan.warningsEn).entries()) {
       ws3.getCell(r + 1 + i, 1).value = `⚠ ${w}`;
       ws3.getCell(r + 1 + i, 1).font = { size: 9, color: { argb: 'FFB45309' } };
     }

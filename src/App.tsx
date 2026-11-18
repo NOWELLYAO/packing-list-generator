@@ -3,6 +3,7 @@ import type { CatalogItem, HistoryEntry, RequestLine, Settings } from './types';
 import { requestPersistence, save, STORAGE_ERROR_EVENT, usePersistent } from './lib/storage';
 import { backupReminderDue, daysSinceBackup, downloadCatalogBackup, snoozeBackupReminder } from './lib/backup';
 import { mergeCatalog } from './lib/normalize';
+import type { AccuracyRecord } from './lib/realCheck';
 import { DEFAULT_ACCENT } from './lib/exporters';
 import { LangContext } from './lib/i18n';
 import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
@@ -36,6 +37,7 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settings, setSettings] = usePersistent<Settings>('settings', DEFAULT_SETTINGS);
   const [history, setHistory] = usePersistent<HistoryEntry[]>('history', []);
+  const [accuracy, setAccuracy] = usePersistent<AccuracyRecord[]>('accuracy', []);
   const [lines, setLines] = usePersistent<RequestLine[]>('requests', []);
   const [consolidate, setConsolidate] = usePersistent<boolean>('consolidate', true);
   const [tab, setTab] = useState<Tab>(catalog.length ? 'generate' : 'import');
@@ -128,7 +130,7 @@ export default function App() {
       </header>
 
       {storageError && (
-        <div className="update-banner danger-banner">
+        <div className="update-banner danger-banner" role="alert">
           <span>
             ⛔ Le navigateur refuse d'enregistrer les dernières modifications (stockage plein ou navigation privée). Sauvegardez la
             base maintenant pour ne rien perdre.
@@ -139,7 +141,7 @@ export default function App() {
         </div>
       )}
       {showBackup && !storageError && (
-        <div className="update-banner">
+        <div className="update-banner" role="region" aria-label="Information">
           <span>
             {daysSinceBackup() === null
               ? 'Votre base d’articles n’a jamais été sauvegardée.'
@@ -168,7 +170,7 @@ export default function App() {
         </div>
       )}
       {updateReady && (
-        <div className="update-banner">
+        <div className="update-banner" role="region" aria-label="Information">
           <span>Une nouvelle version est disponible.</span>
           <button
             className="btn small primary"
@@ -199,9 +201,13 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogPanel catalog={catalog} setCatalog={setCatalog} toast={toast} />}
-        {tab === 'import' && <ImportPanel onImport={onImport} />}
+        {tab === 'import' && (
+          <ImportPanel onImport={onImport} getCatalog={() => latest.current} onAccuracy={(r) => setAccuracy((a) => [r, ...a].slice(0, 300))} />
+        )}
         {tab === 'history' && (
           <HistoryPanel
+            accuracy={accuracy}
+            setAccuracy={setAccuracy}
             history={history}
             setHistory={setHistory}
             onOpen={(h) => {

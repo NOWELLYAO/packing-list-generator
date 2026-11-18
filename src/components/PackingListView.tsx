@@ -101,7 +101,7 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
 
       <section>
         <h3 className="section-title">Articles</h3>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Tableau (défilement horizontal)">
           <table className="pl-table">
             <thead>
               <tr>

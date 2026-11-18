@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import type { CatalogItem, HistoryEntry, RequestLine, Settings } from '../types';
+import type { CatalogItem, HistoryEntry, PackingList, RequestLine, Settings } from '../types';
 import { chooseVariant, findItem, generatePackingList, parsePastedRequests } from '../lib/generate';
 import { exportComparisonPdf, exportPackingListPdf, exportPackingListXlsx, exportRequestTemplate, sharePackingListPdf } from '../lib/exporters';
 import ComparePanel, { type Proposal } from './ComparePanel';
@@ -12,6 +12,7 @@ import PackingListView from './PackingListView';
 import QuickItemForm from './QuickItemForm';
 import TransportPanel from './TransportPanel';
 import InfoTip from './InfoTip';
+import LabelsDialog from './LabelsDialog';
 import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
@@ -52,6 +53,32 @@ function ConfidenceChip({ c }: { c: string }) {
         {label}
       </span>
       <InfoTip k={(c in CONF ? c : 'estimated') as GlossaryKey} />
+    </span>
+  );
+}
+
+/**
+ * Emballage proposé pour la ligne, tel qu'il sortira sur la PL (ex. « 2 colis : Palette 120×80×117 + 120×80×33 »).
+ * La configuration de référence de la base reste visible au survol.
+ */
+function PackingChip({ pl, code, packing, lang }: { pl: PackingList | null; code: string; packing: CatalogItem; lang: 'fr' | 'en' }) {
+  const base = `${packing.qtyPerPackage} / ${packLabel(packing.packageType, lang)}${packing.length ? ` · ${packing.length}×${packing.width}×${packing.height}` : ''}`;
+  const mine = pl ? pl.packages.filter((p) => p.contents.some((c) => c.code === code)) : [];
+  if (!mine.length) return <span className={packing.dimsInferred ? 'chip chip-check' : 'chip'}>{base}</span>;
+  const groups = new Map<string, { n: number; label: string }>();
+  for (const p of mine) {
+    const shared = p.contents.length > 1;
+    const label = shared ? `${packLabel(p.type, lang)} n° ${p.no} (partagé)` : `${packLabel(p.type, lang)} ${p.dimCheck ? '≈ ' : ''}${p.length}×${p.width}×${p.height}`;
+    const k = shared ? `s${p.no}` : label;
+    const g = groups.get(k);
+    if (g) g.n++;
+    else groups.set(k, { n: 1, label });
+  }
+  const text = [...groups.values()].map((g) => (g.n > 1 ? `${g.n} × ${g.label}` : g.label)).join(' + ');
+  const doubt = mine.some((p) => p.dimCheck);
+  return (
+    <span className={doubt ? 'chip chip-check' : 'chip'} title={`Configuration de référence dans la base : ${base}`}>
+      {mine.length} colis · {text}
     </span>
   );
 }
@@ -151,6 +178,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
     toast(`${parsed.length} ligne(s) importée(s)`);
   };
 
+  const [showLabels, setShowLabels] = useState(false);
   const run = async (label: string, fn: () => Promise<unknown>) => {
     if (!pl) return;
     setBusy(label);
@@ -194,6 +222,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
 
   return (
     <div className="page">
+      <h2 className="sr-only">Nouvelle Packing List</h2>
       {catalog.length === 0 && (
         <div className="banner">
           La base d'articles est vide. Importez vos Packing Lists (onglet <b>Importer</b>) ou chargez une base JSON (onglet{' '}
@@ -235,12 +264,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                     <span className="mono">{it ? it.code : l.code}</span>
                     {it && it.pn && it.pn !== it.code && <span className="mono"> · {it.pn}</span>}
                     {it ? (
-                      packing && (
-                        <span className={packing.dimsInferred ? 'chip chip-check' : 'chip'} title={packing.dimsInferred ? 'Dimensions reconstituées à partir du volume : à vérifier' : undefined}>
-                          {packing.qtyPerPackage} / {packLabel(packing.packageType, lang)}
-                          {packing.length ? ` · ${packing.dimsInferred ? '≈ ' : ''}${packing.length}×${packing.width}×${packing.height}` : ''}
-                        </span>
-                      )
+                      packing && <PackingChip pl={pl} code={it.code} packing={packing} lang={lang} />
                     ) : (
                       <>
                         <span className="chip-with-tip">
@@ -274,7 +298,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                   </div>
                 </div>
                 <div className="stepper">
-                  <button onClick={() => setQty(l.id, l.quantity - 1)} aria-label="Moins">
+                  <button onClick={() => setQty(l.id, l.quantity - 1)} aria-label={`Diminuer la quantité de ${it?.description || l.code}`}>
                     −
                   </button>
                   <input
@@ -282,14 +306,15 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                     inputMode="decimal"
                     min={0}
                     value={l.quantity}
+                    aria-label={`Quantité de ${it?.description || l.code || l.pn}`}
                     onChange={(e) => setQty(l.id, Number(e.target.value))}
                     onFocus={(e) => e.target.select()}
                   />
-                  <button onClick={() => setQty(l.id, l.quantity + 1)} aria-label="Plus">
+                  <button onClick={() => setQty(l.id, l.quantity + 1)} aria-label={`Augmenter la quantité de ${it?.description || l.code}`}>
                     +
                   </button>
                 </div>
-                <button className="icon-btn" onClick={() => remove(l.id)} aria-label="Retirer" title="Retirer">
+                <button className="icon-btn" onClick={() => remove(l.id)} aria-label={`Retirer ${it?.description || l.code}`} title="Retirer">
                   ✕
                 </button>
               </div>
@@ -398,6 +423,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               <button className="btn" disabled={!!busy} onClick={() => run('share', () => sharePackingListPdf(pl, settings))}>
                 {busy === 'share' ? '…' : 'Partager'}
               </button>
+              <button className="btn" disabled={!!busy} onClick={() => setShowLabels(true)} title="Étiquettes de colis à imprimer">
+                Étiquettes
+              </button>
             </div>
           </div>
 
@@ -446,6 +474,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         </>
       )}
 
+      {showLabels && pl && <LabelsDialog pl={pl} settings={settings} setSettings={setSettings} onClose={() => setShowLabels(false)} />}
       {quick && (
         <QuickItemForm
           item={quick.item}

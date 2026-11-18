@@ -3,12 +3,27 @@ import type { CatalogItem, DimUnit, FieldKey, ImportDraft, WeightBasis } from '.
 import { detectHeaderRow, detectMapping, FIELD_LABELS, FIELD_ORDER } from '../lib/detect';
 import { readAnyFile } from '../lib/readFiles';
 import { bestObservations, sapToCatalog } from '../lib/sapPackingList';
+import { blindTest, type AccuracyRecord } from '../lib/realCheck';
+import AccuracyCard from './AccuracyCard';
 import InfoTip from './InfoTip';
 import { normalizeRows } from '../lib/normalize';
 
 interface Props {
   onImport: (items: CatalogItem[], fileName: string) => { added: number; updated: number };
+  /** base au moment présent (avant l'import du fichier en cours) */
+  getCatalog: () => CatalogItem[];
+  onAccuracy: (r: AccuracyRecord) => void;
 }
+
+interface LogEntry {
+  text: string;
+  rec?: AccuracyRecord;
+  note?: string;
+}
+
+/** La PL a-t-elle déjà été importée ? (le test ne serait plus à l'aveugle) */
+const alreadyKnown = (catalog: CatalogItem[], number: string) =>
+  !!number && catalog.some((c) => (c.source || '').includes(`(PL ${number})`) || c.variants?.some((v) => (v.source || '').includes(`(PL ${number})`)));
 
 function makeDraft(fileName: string, tables: ImportDraft['tables'], tableIndex = 0): ImportDraft {
   const rows = tables[tableIndex]?.rows ?? [];
@@ -38,12 +53,12 @@ function bestTable(tables: ImportDraft['tables']) {
   return best;
 }
 
-export default function ImportPanel({ onImport }: Props) {
+export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props) {
   const queueRef = useRef<File[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
   const [busy, setBusy] = useState<string | false>(false);
-  const [log, setLog] = useState<string[]>([]);
+  const [log, setLog] = useState<LogEntry[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
   const openFile = async (file: File) => {
@@ -53,11 +68,20 @@ export default function ImportPanel({ onImport }: Props) {
       // Format SAP / Grundfos reconnu : import direct
       if (res.sap && res.sap.hus.some((h) => h.positions.length)) {
         const sap = res.sap;
+        // test à l'aveugle AVANT d'apprendre : que l'application aurait-elle proposé ?
+        const before = getCatalog();
+        const seen = alreadyKnown(before, sap.number);
+        const rec = seen ? null : blindTest(sap, before, file.name);
+        if (rec) onAccuracy(rec);
         const items = bestObservations(sapToCatalog(sap, file.name));
         const r = onImport(items, file.name);
         const nPos = sap.hus.reduce((s, h) => s + h.positions.length, 0);
         setLog((l) => [
-          `✅ ${file.name}${sap.number ? ` (PL ${sap.number})` : ''}${res.ocr ? ' [scan lu par OCR]' : ''} : ${sap.hus.length} colis, ${nPos} lignes → ${r.added} nouveaux articles, ${r.updated} mis à jour${sap.warnings.length ? ` ⚠️ ${sap.warnings.join(' ; ')}` : ''}`,
+          {
+            text: `✅ ${file.name}${sap.number ? ` (PL ${sap.number})` : ''}${res.ocr ? ' [scan lu par OCR]' : ''} : ${sap.hus.length} colis, ${nPos} lignes → ${r.added} nouveaux articles, ${r.updated} mis à jour${sap.warnings.length ? ` ⚠️ ${sap.warnings.join(' ; ')}` : ''}`,
+            rec: rec ?? undefined,
+            note: seen ? 'PL déjà importée : pas de test de précision (la base la connaît déjà).' : !rec ? 'Aucun article connu avant cet import : rien à comparer, la base apprend.' : undefined,
+          },
           ...l,
         ]);
         setBusy(false);
@@ -68,7 +92,7 @@ export default function ImportPanel({ onImport }: Props) {
       if (!tables.length) throw new Error(res.ocr ? 'scan illisible' : 'aucune donnée lisible');
       setDraft(makeDraft(file.name, tables, bestTable(tables)));
     } catch (e) {
-      setLog((l) => [`❌ ${file.name} : lecture impossible (${(e as Error).message})`, ...l]);
+      setLog((l) => [{ text: `❌ ${file.name} : lecture impossible (${(e as Error).message})` }, ...l]);
       next();
     } finally {
       setBusy(false);
@@ -109,10 +133,7 @@ export default function ImportPanel({ onImport }: Props) {
   const confirm = () => {
     if (!draft || !preview) return;
     const res = onImport(preview.items, draft.fileName);
-    setLog((l) => [
-      `✅ ${draft.fileName} : ${preview.items.length} lignes lues → ${res.added} nouveaux articles, ${res.updated} mis à jour`,
-      ...l,
-    ]);
+    setLog((l) => [{ text: `✅ ${draft.fileName} : ${preview.items.length} lignes lues → ${res.added} nouveaux articles, ${res.updated} mis à jour` }, ...l]);
     next();
   };
 
@@ -320,7 +341,18 @@ export default function ImportPanel({ onImport }: Props) {
       {log.length > 0 && (
         <ul className="log">
           {log.map((l, i) => (
-            <li key={i}>{l}</li>
+            <li key={i}>
+              {l.text}
+              {l.note && <div className="hint">{l.note}</div>}
+              {l.rec && (
+                <div className="log-accuracy">
+                  <div className="hint">
+                    🎯 Test à l'aveugle avant apprentissage <InfoTip k="accuracy" />
+                  </div>
+                  <AccuracyCard r={l.rec} compact />
+                </div>
+              )}
+            </li>
           ))}
         </ul>
       )}

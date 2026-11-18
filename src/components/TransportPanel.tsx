@@ -145,7 +145,7 @@ export default function TransportPanel({ pl, accent, mode, setMode }: Props) {
             })}
           </div>
           {plan.bins.map((b, i) => (
-            <div key={i} className="plan-card">
+            <div key={i} className="plan-card" tabIndex={0} role="region" aria-label={`Plan de chargement ${i + 1}`}>
               <div className="plan-title">
                 {lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn}
                 {plan.bins.length > 1 ? ` n° ${i + 1}` : ''} · {fmt(b.weight, 0)} kg · {b.placements.length} colis · {fmt(b.usedLength / 100, 2)} m

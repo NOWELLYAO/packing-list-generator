@@ -49,6 +49,10 @@ export const GLOSSARY = {
     title: 'Regrouper les petits articles',
     text: "Les colis de moins de 0,15 m³ et 60 kg sont réunis dans un carton standard (40 × 30 × 30, 60 × 40 × 40 ou 80 × 60 × 50) ou sur une palette commune, comme le ferait un emballeur. Moins de colis à manipuler et un volume plus réaliste. Les gros colis gardent leur emballage d'origine.",
   },
+  accuracy: {
+    title: 'Précision mesurée sur vos PL réelles',
+    text: "À chaque import d'une PL Grundfos, l'application fait d'abord SA proposition pour les mêmes articles et quantités, avec la base telle qu'elle était avant l'import (test à l'aveugle), puis la compare à la PL réelle : nombre de colis, colis identiques (mêmes articles, dimensions à ± 5 cm), volume et poids. Ensuite seulement, la PL enrichit la base. Score sur 100 : nombre de colis 30 %, volume 30 %, poids 25 %, colis identiques 15 %. Les articles encore inconnus sont exclus du test (ils sont appris).",
+  },
   dimCheck: {
     title: 'Dimensions à vérifier',
     text: "Cotes en orange précédées de « ≈ » : elles ne viennent pas d'une mesure lue telle quelle sur une PL. Soit la PL ne donnait que le volume (dimensions reconstituées : surface de l'emballage habituel de l'article et hauteur = volume ÷ surface), soit cette quantité n'a jamais été expédiée ainsi (dimensions calculées). Faites-les confirmer par le fournisseur ou mesurer avant de transmettre la PL.",

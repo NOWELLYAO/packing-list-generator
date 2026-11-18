@@ -46,7 +46,7 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
-        <h4>Logo</h4>
+        <h3 className="card-title">Logo</h3>
         <p className="hint">PNG ou JPEG. Utilisez le logo officiel fourni par votre société. Il apparaît sur le PDF et l'Excel.</p>
         <div className="logo-zone">
           {settings.logo ? (
@@ -92,7 +92,7 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
-        <h4>Nom affiché (facultatif)</h4>
+        <h3 className="card-title">Nom affiché (facultatif)</h3>
         <input
           value={settings.companyName}
           placeholder="Ex. : nom de votre société"
@@ -101,7 +101,7 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
-        <h4>Langue des documents</h4>
+        <h3 className="card-title">Langue des documents</h3>
         <p className="hint">
           PDF, Excel et libellés d'emballage (PALPLATE → Palette à plateau / Pallet with top plate). Les désignations des
           articles restent celles du fournisseur.
@@ -121,7 +121,7 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
-        <h4>Couleur des documents</h4>
+        <h3 className="card-title">Couleur des documents</h3>
         <div className="swatches">
           {PRESETS.map((c) => (
             <button
@@ -139,7 +139,7 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       </div>
 
       <div className="card">
-        <h4>Où sont mes données ?</h4>
+        <h3 className="card-title">Où sont mes données ?</h3>
         <p className="hint">
           Base d'articles, historique et réglages sont enregistrés dans ce navigateur, sur cet appareil. Pour les retrouver
           sur un autre appareil, sauvegardez la base (Articles → Plus… → Sauvegarder) puis chargez-la là-bas.

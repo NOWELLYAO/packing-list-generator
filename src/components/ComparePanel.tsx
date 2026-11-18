@@ -75,7 +75,9 @@ export default function ComparePanel({ g, s, selected, onSelect, onExportCompari
             <table>
               <thead>
                 <tr>
-                  <th />
+                  <th>
+                    <span className="sr-only">Indicateur</span>
+                  </th>
                   <th className="num">Selon Grundfos</th>
                   <th className="num">Optimisée</th>
                   <th className="num col-delta">Écart</th>

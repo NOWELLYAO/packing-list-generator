@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { isPieceUnit, readUserNumber, sanitizeCatalog } from '../lib/validate';
 import { planLoad } from '../lib/loadPlan';
 import { familyOf } from '../lib/drawing';
+import { accuracySummary, blindTest } from '../lib/realCheck';
+import { labelQrText } from '../lib/labels';
 import { variantsOf } from '../lib/variants';
 import { generatePackingList } from '../lib/generate';
 import { formatNos, groupIdentical, scaleStrip } from '../lib/drawing';
@@ -229,5 +231,42 @@ Total HU/Weight/Volume: 1 15,000 KG`;
   it('la quantité est 7, pas 2026', () => {
     const doc = parseSapPackingList(text.split('\n'));
     expect(doc.hus[0].positions[0].qty).toBe(7);
+  });
+});
+
+describe('apprentissage : test à l’aveugle sur une PL réelle', () => {
+  // PL réelle fictive : 6 pompes P-100 sur une palette identique à la base + 1 article inconnu
+  const doc = {
+    number: '90000001',
+    globalOrigin: 'DK',
+    warnings: [],
+    hus: [
+      { hu: '1', packType: 'PALPLATE', gross: 0, net: 0, volume: 0, dims: null, positions: [] },
+      { hu: '2', packType: 'Carton', gross: 3, net: 2, volume: 0.02, dims: { l: 30, w: 20, h: 20 }, positions: [{ pos: '20', material: 'NEW-1', description: 'Nouveau', custMat: '', qty: 1, origin: '' }] },
+    ],
+  };
+  const pump = CATALOG.find((c) => c.code === 'P-100')!;
+  const pl6 = generatePackingList(CATALOG, [req('P-100', 6)], { consolidate: true, strategy: 'grundfos' });
+  const p = pl6.packages[0];
+  doc.hus[0] = { hu: '1', packType: 'PALPLATE', gross: p.grossWeight, net: p.netWeight, volume: p.volume, dims: { l: p.length, w: p.width, h: p.height }, positions: [{ pos: '10', material: 'P-100', description: pump.description, custMat: '', qty: 6, origin: 'DK' }] };
+  it('prédiction identique à la réalité : 100/100, article inconnu exclu du test', () => {
+    const r = blindTest(doc, CATALOG, 'test.pdf')!;
+    expect(r.known).toBe(1);
+    expect(r.unknown).toBe(1);
+    expect(r.grundfos.exactPackages).toBe(1);
+    expect(r.grundfos.score).toBe(100);
+    expect(accuracySummary([r])!.average).toBe(100);
+  });
+  it('aucun article connu : pas de test (la base apprend simplement)', () => {
+    expect(blindTest({ ...doc, hus: [doc.hus[1]] }, CATALOG, 'x.pdf')).toBeNull();
+  });
+});
+
+describe('étiquettes de colis', () => {
+  it('le QR code ne contient que des caractères lisibles par tous les lecteurs', () => {
+    const pl = generatePackingList(CATALOG, [req('P-100', 7)], { consolidate: true });
+    const t = labelQrText(pl, pl.packages[1], { reference: 'Réf. éàç' }, 'fr');
+    expect(t).toMatch(/^COLIS 2\/2/);
+    expect(/^[\x20-\x7e\n]*$/.test(t)).toBe(true);
   });
 });
