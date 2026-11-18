@@ -2,11 +2,14 @@ import { useRef } from 'react';
 import type { Settings } from '../types';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { useSafety } from '../lib/safety';
+import type { useCloudSync } from '../lib/useCloudSync';
+import CloudPanel from './CloudPanel';
 
 interface Props {
   settings: Settings;
   setSettings: (s: Settings) => void;
   toast: (msg: string) => void;
+  cloud: ReturnType<typeof useCloudSync>;
 }
 
 const PRESETS = ['#0B4F8A', '#1E3A5F', '#0F766E', '#7C3AED', '#B45309', '#BE123C', '#111827'];
@@ -33,7 +36,7 @@ function resizeImage(file: File): Promise<string> {
   });
 }
 
-export default function SettingsPanel({ settings, setSettings, toast }: Props) {
+export default function SettingsPanel({ settings, setSettings, toast, cloud }: Props) {
   const logoRef = useRef<HTMLInputElement>(null);
   const { notify } = useSafety();
   return (
@@ -41,9 +44,11 @@ export default function SettingsPanel({ settings, setSettings, toast }: Props) {
       <div className="page-head">
         <div>
           <h2>Réglages</h2>
-          <p className="hint">Mise en forme des PDF et fichiers Excel générés.</p>
+          <p className="hint">Sauvegarde de vos données et mise en forme des PDF et fichiers Excel.</p>
         </div>
       </div>
+
+      <CloudPanel cloud={cloud} toast={toast} />
 
       <div className="card">
         <h3 className="card-title">Logo</h3>

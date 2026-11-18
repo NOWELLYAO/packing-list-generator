@@ -15,7 +15,7 @@ import { catalogHealth, HEALTH_LABEL, HEALTH_ORDER, type HealthStatus } from '..
 
 interface Props {
   catalog: CatalogItem[];
-  setCatalog: (c: CatalogItem[]) => void;
+  setCatalog: (c: CatalogItem[], o?: { allowEmpty?: boolean }) => void;
   toast: (msg: string) => void;
 }
 
@@ -74,7 +74,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
     const before = catalog;
     snapshotCatalog(before, 'avant « Vider la base »');
     setSnapKey((k) => k + 1);
-    setCatalog([]);
+    setCatalog([], { allowEmpty: true });
     notify(`${before.length} articles supprimés`, () => setCatalog(before));
   };
 

@@ -123,6 +123,10 @@ export const GLOSSARY = {
     title: 'Emballages observés',
     text: "Toutes les façons dont cet article a été emballé dans vos PL (par exemple 4 ou 6 pompes par palette). À la génération, l'application choisit la plus adaptée à la quantité : d'abord un envoi identique s'il existe, sinon le moins de colis possible.",
   },
+  cloud: {
+    title: 'Sauvegarde en ligne',
+    text: "Le navigateur garde vos données sur l'appareil, mais il peut les effacer : Safari sur iPhone supprime les données d'un site non ouvert depuis 7 jours, et chaque adresse, navigateur ou icône d'écran d'accueil a sa propre mémoire. La sauvegarde en ligne copie la base sur le serveur à chaque modification. Si l'appareil la perd, elle revient automatiquement à l'ouverture. Le code d'espace (PL-XXXX-…) est la clé : avec lui, un autre appareil ou un collègue retrouve la même base ; sans lui, personne ne peut la lire. Les 10 dernières versions sont gardées et peuvent être restaurées.",
+  },
   health: {
     title: 'Santé de la base',
     text: "Part des articles dont l'emballage repose sur une mesure réellement relevée sur une PL (ou corrigée à la main). Les autres reposent sur une estimation : dimensions illisibles reconstituées à partir du volume, article vu seulement dans un colis partagé, emballage repris d'un article similaire, ou données fausses. Corrigez-les en priorité (les plus graves et les plus expédiés sont en tête de liste) : ouvrez l'article et saisissez les dimensions et poids réels du colis. L'article devient alors « Fiable » et toutes vos PL en profitent.",

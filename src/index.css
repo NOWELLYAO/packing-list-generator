@@ -594,3 +594,21 @@ td.delta small { font-weight: 500; }
 .chip.health-suspect, .chip.health-nodata { background: var(--danger-soft); color: var(--danger); }
 .chip.health-shared, .chip.health-inferred, .chip.health-similar { background: #fff1e6; color: #c2410c; }
 .health-reason { font-size: 0.78rem; color: #9a3412; white-space: normal !important; overflow: visible !important; }
+
+/* ---------- Sauvegarde en ligne ---------- */
+.cloud-card { display: flex; flex-direction: column; gap: 0.7rem; }
+.cloud-status { display: flex; align-items: center; gap: 0.45rem; font-weight: 600; font-size: 0.9rem; }
+.cloud-status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.cloud-status.good .dot { background: var(--ok); }
+.cloud-status.mid .dot { background: var(--warn); }
+.cloud-status.low .dot { background: var(--danger); }
+.cloud-code { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 12px; padding: 0.7rem 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.cloud-code small { color: var(--ink-2); font-weight: 600; font-size: 0.75rem; }
+.cloud-code b.mono { font-size: 1.15rem; letter-spacing: 0.06em; color: var(--ink); }
+.cloud-join { display: flex; flex-direction: column; gap: 0.6rem; }
+.cloud-join input { font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.05em; text-transform: uppercase; }
+.cloud-versions { display: flex; flex-direction: column; gap: 0.4rem; }
+.cloud-version { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 10px; font-size: 0.86rem; flex-wrap: wrap; }
+.brand .cloud-dot.synced { color: var(--ok); }
+.brand .cloud-dot.offline, .brand .cloud-dot.syncing { color: var(--warn); }
+.brand .cloud-dot.error, .brand .cloud-dot.not_configured { color: var(--danger); }

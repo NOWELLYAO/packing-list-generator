@@ -32,6 +32,8 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
+        // la sauvegarde en ligne ne passe jamais par le cache hors ligne
+        navigateFallbackDenylist: [/^\/api\//],
         // moteur OCR et décodeurs PDF (lourds) : téléchargés au premier besoin, puis gardés
         runtimeCaching: [
           {
