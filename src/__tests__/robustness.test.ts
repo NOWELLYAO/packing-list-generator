@@ -385,3 +385,18 @@ describe('emballages saisis depuis la fiche article (SAP)', () => {
     expect(p[0].height).toBeLessThanOrEqual(47);
   });
 });
+
+describe('fiche corrigée à la main incohérente', () => {
+  const base = { unit: 'PCS', hsCode: '', origin: '', updatedAt: '', source: 'x', manual: true, mixed: false } as const;
+  it('quantité par colis lue comme une date (2026) avec les dimensions d’une unité → 1 par colis', () => {
+    const A = { ...base, id: 'a', code: 'AG-1', pn: 'AG-1', description: 'Agitateur', qtyPerPackage: 2026, packageType: 'PALPLATE', length: 140, width: 30, height: 30, volumePerPackage: 0.682, netWeightPerUnit: 17, grossWeightPerUnit: 19 };
+    const p = generatePackingList([A], [req('AG-1', 1)], { consolidate: true }).packages[0];
+    expect(p.grossWeight).toBeLessThan(25);
+    expect(p.height).toBe(30);
+  });
+  it('volume seul (pas de dimensions) → jamais 0 × 0 × 0', () => {
+    const B = { ...base, id: 'b', code: 'VO-1', pn: 'VO-1', description: 'Pompe', qtyPerPackage: 4, packageType: 'PALPLATE', length: 0, width: 0, height: 0, volumePerPackage: 0.48, netWeightPerUnit: 29, grossWeightPerUnit: 31.6 };
+    const p = generatePackingList([B], [req('VO-1', 4)], { consolidate: true }).packages[0];
+    expect(p.length * p.width * p.height).toBeGreaterThan(0);
+  });
+});

@@ -1,7 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
-import { applyVariant, preferredVariant, variantsOf } from './variants';
+import { applyVariant, completeDims, preferredVariant, variantsOf } from './variants';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
 /**
@@ -142,6 +142,23 @@ export function refineMixedShare(item0: CatalogItem, catalog: CatalogItem[]): Ca
   const top = variants.find((_, i) => item.variants![i].source === item.source && item.variants![i].mixed);
   const base = top && item.mixed ? { ...item, netWeightPerUnit: top.netWeightPerUnit, grossWeightPerUnit: top.grossWeightPerUnit, packShare: top.packShare } : item;
   return { ...base, variants };
+}
+
+/**
+ * Fiche corrigée à la main : garde-fous contre les saisies incohérentes qui donneraient des colis absurdes
+ * (quantité par colis lue comme une date — 2026 —, volume seul sans dimensions, reste d'un colis mixte).
+ */
+export function sanitizeManual(item: CatalogItem): CatalogItem {
+  if (!item.manual) return item;
+  let it: CatalogItem = { ...item, mixed: false, packShare: undefined };
+  if (!(it.length > 0 && it.width > 0 && it.height > 0) && it.volumePerPackage > 0) {
+    const c = completeDims(it, []);
+    it = { ...it, length: c.length, width: c.width, height: c.height, dimsInferred: c.dimsInferred };
+  }
+  const vol = it.length > 0 && it.width > 0 && it.height > 0 ? (it.length * it.width * it.height) / 1e6 : it.volumePerPackage;
+  // plus de 3 000 kg de marchandise par m³ de colis : la quantité par colis est fausse, les dimensions sont celles d'une unité
+  if (it.qtyPerPackage > 1 && vol > 0 && (it.netWeightPerUnit * it.qtyPerPackage) / vol > 3000) it = { ...it, qtyPerPackage: 1 };
+  return it;
 }
 
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
@@ -648,7 +665,7 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem0 = withSimilarPacking(refineMixedShare(item, catalog), catalog);
+    const packItem0 = withSimilarPacking(refineMixedShare(sanitizeManual(item), catalog), catalog);
     // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
     const ub = variantsOf(packItem0).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType));
     const packItem = ub ? { ...packItem0, unitBox: { l: ub.length, w: ub.width, h: ub.height, net: ub.netWeightPerUnit, gross: ub.grossWeightPerUnit } } : packItem0;
@@ -705,7 +722,8 @@ export function generatePackingList(
   if (grundfosGrouping || (!grundfosMode && options.consolidate)) {
     const small = pool.filter(isSmall);
     // 2 ou 3 articles déjà dans leur propre carton : ils partent tels quels (pas de suremballage)
-    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !PALLET_RE.test(p.type));
+    const realPallet = (p: Piece) => PALLET_RE.test(p.type) && Math.max(p.l, p.w) >= 80 && Math.min(p.l, p.w) >= 50;
+    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !realPallet(p));
     if (small.length >= 2 && !ownCartons) {
       groups.push({ pieces: small, source: 'rule' });
       pool = pool.filter((p) => !small.includes(p));

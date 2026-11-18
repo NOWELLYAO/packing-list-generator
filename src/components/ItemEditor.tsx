@@ -84,6 +84,10 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
       else vals[f.key] = n;
     }
     for (const k of ['length', 'width', 'height']) if (vals[k] > 1500) errs[k] = 'Max 1500 cm';
+    const vol0 = (vals.length * vals.width * vals.height) / 1e6;
+    // ex. 2026 (une date lue comme quantité) avec les dimensions d'une seule unité
+    if (vals.qtyPerPackage > 1 && vol0 > 0 && (vals.netWeightPerUnit * vals.qtyPerPackage) / vol0 > 3000)
+      errs.qtyPerPackage = `${vals.qtyPerPackage} unités de ${vals.netWeightPerUnit} kg ne tiennent pas dans ce colis : mettez la quantité correspondant aux dimensions saisies (souvent 1)`;
     if (!errs.qtyPerPackage && !(vals.qtyPerPackage > 0)) errs.qtyPerPackage = 'Doit être supérieur à 0';
     if (!errs.grossWeightPerUnit && !errs.netWeightPerUnit && vals.grossWeightPerUnit < vals.netWeightPerUnit)
       errs.grossWeightPerUnit = 'Le brut doit être ≥ au net';
@@ -91,7 +95,17 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
     if (dims.some((x) => x > 0) && dims.some((x) => !(x > 0))) for (const k of ['length', 'width', 'height']) if (!(vals[k] > 0)) errs[k] = 'Renseignez les 3 dimensions';
     setFieldErrors(errs);
     if (Object.values(errs).some(Boolean)) return setError('Corrigez les champs signalés en rouge.');
-    onSave({ ...draft, ...vals, manual: draft.manual || packChanged, updatedAt: new Date().toISOString() });
+    const manual = draft.manual || packChanged;
+    const vol = (vals.length * vals.width * vals.height) / 1e6;
+    onSave({
+      ...draft,
+      ...vals,
+      // volume recalculé d'après les dimensions saisies ; une fiche corrigée n'est plus une estimation de colis mixte
+      ...(vol > 0 ? { volumePerPackage: Math.round(vol * 10000) / 10000 } : {}),
+      ...(manual && packChanged ? { mixed: false, packShare: undefined } : {}),
+      manual,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   return (
