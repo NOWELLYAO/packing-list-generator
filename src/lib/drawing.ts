@@ -45,12 +45,21 @@ const toHex = (rgb: number[]) => '#' + rgb.map((v) => Math.max(0, Math.min(255, 
 export const shade = (c: string, k: number) => toHex(hex(c).map((v) => (k >= 0 ? v + (255 - v) * k : v * (1 + k))));
 
 type Family = 'pallet' | 'crate' | 'carton' | 'other';
-export function familyOf(type: string): Family {
+export function familyOf(type: string, dims?: { length: number; width: number; height: number }): Family {
   const t = type.toLowerCase();
-  if (/carton group|^carton|^box|^\d{2,4}\s*x|pre-?pack|emballage d/.test(t)) return 'carton';
-  if (/crate|caisse|plywood|wood|contreplaq/.test(t)) return 'crate';
-  if (/pal|euro|half|plate/.test(t)) return 'pallet';
-  return 'other';
+  let fam: Family = 'other';
+  if (/carton group|^carton|^box|^\d{2,4}\s*x|pre-?pack|emballage d/.test(t)) fam = 'carton';
+  else if (/crate|caisse|plywood|wood|contreplaq/.test(t)) fam = 'crate';
+  else if (/pal|euro|half|plate/.test(t)) fam = 'pallet';
+  if (!dims || !(dims.length > 0 && dims.width > 0)) return fam;
+  const big = Math.max(dims.length, dims.width);
+  const small = Math.min(dims.length, dims.width);
+  // une palette fait au moins 80 × 55 (ou c'est un long berceau d'au moins 1,5 m) :
+  // en dessous, « EURO PAL » désigne un carton posé sur palette
+  if (fam === 'pallet' && (big < 80 || small < 50) && big < 150) return 'carton';
+  // libellé inconnu : carton s'il est maniable, caisse au-delà
+  if (fam === 'other') return Math.max(big, dims.height) <= 120 ? 'carton' : 'crate';
+  return fam;
 }
 
 export const KRAFT = '#d2b48c';
@@ -456,7 +465,7 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
   const L = Math.max(1, p.length || 40);
   const l = Math.max(1, p.width || 30);
   const H = Math.max(1, p.height || 30);
-  const fam = familyOf(p.type);
+  const fam = familyOf(p.type, p);
   const shapes: Shape[] = [];
 
   // mise à l'échelle : la boîte + ses cotes doivent tenir dans ~170 × 130
@@ -539,7 +548,7 @@ export function scaleStrip(pkgs: PackageLike[], _accent: string, labels: DrawLab
   const groups = new Map<string, { p: PackageLike; n: number }>();
   for (const p of pkgs) {
     if (!(p.length > 0 && p.height > 0)) continue;
-    const k = `${familyOf(p.type)}|${Math.max(p.length, p.width)}|${p.height}`;
+    const k = `${familyOf(p.type, p)}|${Math.max(p.length, p.width)}|${p.height}`;
     const g = groups.get(k);
     if (g) g.n++;
     else groups.set(k, { p, n: 1 });
@@ -563,7 +572,7 @@ export function scaleStrip(pkgs: PackageLike[], _accent: string, labels: DrawLab
   for (const { p, n } of valid) {
     const w = Math.max(p.length, p.width) * k;
     const h = p.height * k;
-    const fam = familyOf(p.type);
+    const fam = familyOf(p.type, p);
     const rect = (x0: number, y0: number, x1: number, y1: number, fill: string, stroke?: string, sw?: number, opacity?: number): Shape => ({ kind: 'poly', pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], fill, stroke, sw, opacity });
     const hline = (y: number, x0: number, x1: number, stroke: string, sw = 0.3, opacity?: number): Shape => ({ kind: 'line', a: [x0, y], b: [x1, y], stroke, sw, opacity });
     if (fam === 'pallet') {

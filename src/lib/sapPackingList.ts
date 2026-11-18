@@ -121,9 +121,18 @@ function parsePosRest(rest: string): { description: string; custMat: string; qty
   // Retirer le n° de commande client et le n° de commande de vente en fin de ligne
   let end = tokens.length;
   if (end > 0 && /^\d{7,10}$/.test(fixDigits(tokens[end - 1]))) end--; // sales order
-  // quantité = dernier jeton numérique "court" (<= 5 chiffres avant la virgule)
+  // quantité = dernier jeton numérique "court" (<= 5 chiffres avant la virgule)…
   let qIdx = -1;
-  for (let i = end - 1; i >= 0; i--) {
+  // …sauf si un n° de commande client en texte suit la quantité (« 7 N° HY 0010 CN 2026 ») :
+  // la quantité est alors le nombre placé juste avant « N° » / « No » / « PO »
+  for (let i = 0; i < end - 1; i++) {
+    const f = fixDigits(tokens[i]).replace(/\.$/, '');
+    if (/^\d{1,5}(?:[.,]\d{1,3})?$/.test(f) && /^(N°?|N\.?°|No\.?|Nr\.?|PO|P\.O\.?|°)$/i.test(tokens[i + 1]) && i > 0) {
+      qIdx = i;
+      break;
+    }
+  }
+  if (qIdx === -1) for (let i = end - 1; i >= 0; i--) {
     const f = fixDigits(tokens[i]).replace(/\.$/, '');
     if (/^\d{1,5}(?:[.,]\d{1,3})?$/.test(f)) {
       qIdx = i;

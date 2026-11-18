@@ -198,9 +198,17 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
         out.push(mk(rem, h, 'partial', vol, emptyPallet + innerPerUnit * rem));
       }
     } else if (hasDims && perPkg > 1) {
-      // carton incomplet : l'emballeur prend un carton plus bas (constaté : 4 DDC → 55 cm, 2 DDC → 27 cm)
-      const h = Math.min(item.height, Math.ceil(item.height * Math.max(rem / perPkg, 0.3)));
-      out.push(mk(rem, h, 'partial', (item.length * item.width * h) / 1e6, tare));
+      if (isLongItem(item)) {
+        // articles longs couchés côte à côte (ex. 4 pompes SQ) : on retire des rangées, la hauteur ne change pas
+        const [L0, W0] = [Math.max(item.length, item.width), Math.min(item.length, item.width)];
+        const w = Math.min(W0, Math.max(Math.ceil((W0 * rem) / perPkg), Math.min(item.height, W0)));
+        const piece = mk(rem, item.height, 'partial', (L0 * w * item.height) / 1e6, tare);
+        out.push({ ...piece, l: L0, w });
+      } else {
+        // carton incomplet : l'emballeur prend un carton plus bas (constaté : 4 DDC → 55 cm, 2 DDC → 27 cm)
+        const h = Math.min(item.height, Math.ceil(item.height * Math.max(rem / perPkg, 0.3)));
+        out.push(mk(rem, h, 'partial', (item.length * item.width * h) / 1e6, tare));
+      }
     } else {
       out.push(mk(rem, item.height, 'reference', refVol, tare));
     }
@@ -495,7 +503,16 @@ export function generatePackingList(
   }
 
   // Convention L × l × H : la longueur est toujours la plus grande cote au sol
-  for (const p of packages) if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+  for (const p of packages) {
+    // colis élancé hors palette (ex. pompe 14 × 12 × 143 cm) : il voyage couché, pas debout
+    const realPallet = PALLET_RE.test(p.type) && Math.max(p.length, p.width) >= 80 && Math.min(p.length, p.width) >= 50;
+    if (!realPallet && p.height > 60 && p.height > 2.5 * Math.max(p.length, p.width)) {
+      [p.length, p.width, p.height] = [p.height, Math.max(p.length, p.width), Math.min(p.length, p.width)];
+    }
+    if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+    // « Pallet » / « EURO PAL » de moins de 80 × 50 cm (et moins de 1,5 m) : c'est un carton, le libellé suit
+    if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.length < 80 || p.width < 50) && p.length < 150) p.type = 'Carton';
+  }
 
   // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi
   const lineInferred = new Set(allPieces.filter((p) => p.dimsInferred).map((p) => p.lineIdx));

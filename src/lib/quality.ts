@@ -5,7 +5,7 @@ import type { CatalogItem } from '../types';
  * ou incomplètes, sans jamais les corriger à la place de l'utilisateur.
  */
 export interface Issue {
-  code: 'density' | 'tare' | 'netGross' | 'noDims' | 'noWeight' | 'mixed';
+  code: 'density' | 'tare' | 'netGross' | 'noDims' | 'noWeight' | 'mixed' | 'qtyAbsurd';
   severity: 'error' | 'warning';
   message: string;
 }
@@ -30,6 +30,8 @@ export function itemIssues(it: CatalogItem): Issue[] {
     });
   if (PALLET_OR_CRATE.test(it.packageType) && gross > 50 && Math.abs(it.grossWeightPerUnit - it.netWeightPerUnit) < 1e-6)
     out.push({ code: 'tare', severity: 'warning', message: 'Brut = net sur une palette ou caisse : le poids de l’emballage semble manquer' });
+  if (per > 999 && !vol)
+    out.push({ code: 'qtyAbsurd', severity: 'error', message: `${per} unités par colis sans dimensions : la PL a probablement été mal lue (date ou n° de commande pris pour la quantité). Réimportez la PL ou corrigez la fiche.` });
   if (!vol) out.push({ code: 'noDims', severity: 'warning', message: 'Dimensions inconnues' });
   if (!(it.grossWeightPerUnit > 0)) out.push({ code: 'noWeight', severity: 'warning', message: 'Poids inconnu' });
   if (it.mixed && !it.manual) out.push({ code: 'mixed', severity: 'warning', message: 'Vu seulement en colis mixte : valeurs estimées' });

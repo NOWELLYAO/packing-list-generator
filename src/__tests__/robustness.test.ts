@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isPieceUnit, readUserNumber, sanitizeCatalog } from '../lib/validate';
 import { planLoad } from '../lib/loadPlan';
+import { familyOf } from '../lib/drawing';
+import { variantsOf } from '../lib/variants';
 import { generatePackingList } from '../lib/generate';
 import { formatNos, groupIdentical, scaleStrip } from '../lib/drawing';
 import { packLabel } from '../lib/i18n';
@@ -192,4 +194,40 @@ describe('petit reliquat d’une grosse palette', () => {
       expect(pl.packages[0].grossWeight).toBeLessThan(5);
     });
   }
+});
+
+describe('contrôle des schémas (audit tailles)', () => {
+  it('un « EURO PAL » de 48 × 36 cm est dessiné comme un carton', () => {
+    expect(familyOf('EURO PAL', { length: 48, width: 36, height: 55 })).toBe('carton');
+    expect(familyOf('PALPLATE', { length: 120, width: 80, height: 60 })).toBe('pallet');
+    expect(familyOf('GIN', { length: 38, width: 36, height: 18 })).toBe('carton');
+  });
+  it('un relevé aberrant (2026 pièces par colis, sans dimensions) est écarté', () => {
+    const item = {
+      ...CATALOG[0],
+      variants: [
+        { qtyPerPackage: 25, packageType: 'Carton', length: 48, width: 36, height: 32, volumePerPackage: 0.055, netWeightPerUnit: 0.3, grossWeightPerUnit: 0.32, mixed: false, source: 'a', count: 2 },
+        { qtyPerPackage: 2026, packageType: '300x200x', length: 0, width: 0, height: 0, volumePerPackage: 0, netWeightPerUnit: 0.0007, grossWeightPerUnit: 0.001, mixed: false, source: 'b', count: 1 },
+      ],
+    };
+    expect(variantsOf(item).map((v) => v.qtyPerPackage)).toEqual([25]);
+  });
+  it('un colis élancé hors palette voyage couché', () => {
+    const item = { ...CATALOG[0], code: 'T-1', pn: 'T-1', description: 'Tube test', variants: [{ qtyPerPackage: 1, packageType: 'Carton', length: 14, width: 12, height: 143, volumePerPackage: 0.024, netWeightPerUnit: 8, grossWeightPerUnit: 9, mixed: false, source: 'a', count: 1 }] };
+    const p = generatePackingList([item], [req('T-1', 1)], { consolidate: true }).packages[0];
+    expect([p.length, p.width, p.height]).toEqual([143, 14, 12]);
+  });
+});
+
+describe('lecture SAP : n° de commande client en texte après la quantité', () => {
+  const text = `Packing list 99999998
+Hand. unit: Delivery: Pack.: Gross wt. KG. Nett. wt. KG: Vol.M3: Dimens. CM:
+Pos: Material: Description: Cust. mat. no.: Quantity: Cust. order no.: Sales order:
+657086010001 2024010906 PALLET 15,000 12,000 0,167 120X80X30
+0020 11112222 Article test 7 N ° HY 0010 CN 2026 14701745
+Total HU/Weight/Volume: 1 15,000 KG`;
+  it('la quantité est 7, pas 2026', () => {
+    const doc = parseSapPackingList(text.split('\n'));
+    expect(doc.hus[0].positions[0].qty).toBe(7);
+  });
 });

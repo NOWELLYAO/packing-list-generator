@@ -308,7 +308,7 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
   // colis : couleur par famille, intensité selon le poids
   const maxKg = Math.max(...bin.placements.map((p) => p.kg), 1);
   for (const p of bin.placements) {
-    const fam = familyOf(p.type);
+    const fam = familyOf(p.type, { length: p.l, width: p.w, height: p.h });
     // mêmes matières que la vue 3D ; plus le colis est lourd, plus la teinte est soutenue
     const baseC = fam === 'crate' ? CRATE : fam === 'carton' ? KRAFT : fam === 'pallet' ? '#cdb08a' : '#c9d1db';
     const fill = shade(baseC, 0.45 - 0.45 * (p.kg / maxKg));
@@ -490,7 +490,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
 
     // colis
     for (const p of paintOrder(bin.placements)) {
-      const fam = familyOf(p.type);
+      const fam = familyOf(p.type, { length: p.l, width: p.w, height: p.h });
       const off = project(p.x, p.y, 0);
       const push = (sh: Shape[]) => {
         for (const x of sh) {

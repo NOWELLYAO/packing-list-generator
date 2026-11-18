@@ -40,25 +40,38 @@ export function completeDims<V extends { packageType: string; length: number; wi
   if (hasDims(v) || !(v.volumePerPackage > 0)) return v;
   const same = siblings.find((o) => hasDims(o) && typeKey(o.packageType) === typeKey(v.packageType));
   const t = v.packageType.toLowerCase();
+  // format de carton écrit dans le libellé, en mm : « 400x450x » → 40 × 45 cm
+  const named = t.match(/(\d{3,4})\s*x\s*(\d{3,4})/);
   const fp: [number, number] | null = same
     ? [same.length, same.width]
-    : /half|demi|1\/2/.test(t)
-      ? [80, 60]
-      : /pal|eur|plate/.test(t)
-        ? [120, 80]
-        : null;
-  if (!fp) return v;
-  const h = Math.round((v.volumePerPackage * 1e6) / (fp[0] * fp[1]));
-  if (h < 5 || h > 260) return v;
-  return { ...v, length: fp[0], width: fp[1], height: h, dimsInferred: true };
+    : named
+      ? [Math.round(Number(named[1]) / 10), Math.round(Number(named[2]) / 10)]
+      : /half|demi|1\/2/.test(t)
+        ? [80, 60]
+        : /pal|eur|plate/.test(t)
+          ? [120, 80]
+          : null;
+  if (fp) {
+    const h = Math.round((v.volumePerPackage * 1e6) / (fp[0] * fp[1]));
+    // palette « par défaut » sans place pour une charge (< 20 cm) : ce n'était pas une palette
+    const defaultPallet = !same && !named;
+    if (h >= 3 && h <= 260 && !(defaultPallet && h < 20)) return { ...v, length: Math.max(fp[0], fp[1]), width: Math.min(fp[0], fp[1]), height: h, dimsInferred: true };
+  }
+  // seul le volume est connu : cube de même volume (signalé « à vérifier »)
+  const c = Math.round(Math.cbrt(v.volumePerPackage) * 100);
+  if (c >= 5 && c <= 250) return { ...v, length: c, width: c, height: c, dimsInferred: true };
+  return v;
 }
 
 /** Variantes d'une fiche (une fiche ancienne ou saisie à la main n'en a qu'une : elle-même) */
 export function variantsOf(item: CatalogItem): PackVariant[] {
   const vs = item.variants?.length ? item.variants : [variantOf(item)];
   // une configuration sans dimensions est inutile si la même (quantité + emballage) a été mesurée ailleurs
-  const measured = (v: PackVariant) => vs.some((o) => o !== v && hasDims(o) && o.qtyPerPackage === v.qtyPerPackage && typeKey(o.packageType) === typeKey(v.packageType));
-  const kept = vs.filter((v) => hasDims(v) || !measured(v));
+  const measured = (v: PackVariant) => sane.some((o) => o !== v && hasDims(o) && o.qtyPerPackage === v.qtyPerPackage && typeKey(o.packageType) === typeKey(v.packageType));
+  // relevé aberrant (ex. une date lue comme quantité : 2026 pièces par colis, sans dimensions) : écarté s'il y a mieux
+  const absurd = (v: PackVariant) => v.qtyPerPackage > 999 && !hasDims(v);
+  const sane = vs.some((v) => !absurd(v)) ? vs.filter((v) => !absurd(v)) : vs;
+  const kept = sane.filter((v) => hasDims(v) || !measured(v));
   return kept.map((v) => completeDims(v, kept));
 }
 
