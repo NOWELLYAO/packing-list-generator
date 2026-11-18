@@ -345,3 +345,19 @@ describe('article vu seulement dans un carton mixte', () => {
     expect(p.type).toBe('Carton');
   });
 });
+
+describe('base importée avec une ancienne version (part du colis mixte absente)', () => {
+  const src = 'old.pdf (PL 2) – colis mixte';
+  const base = { unit: 'PCS', hsCode: '', origin: '', updatedAt: '', packageType: '600x400x', length: 60, width: 40, height: 63, volumePerPackage: 0.1512, mixed: false } as const;
+  const kitMixed = { ...base, qtyPerPackage: 20, netWeightPerUnit: 0.7188, grossWeightPerUnit: 0.75, source: src, count: 1 };
+  const kitOwn = { ...base, packageType: '300x200x', length: 30, width: 20, height: 27, volumePerPackage: 0.0162, qtyPerPackage: 5, netWeightPerUnit: 0.3, grossWeightPerUnit: 0.4, source: 'x', count: 2 };
+  const boxMixed = { ...base, qtyPerPackage: 2, netWeightPerUnit: 0.7188, grossWeightPerUnit: 0.75, source: src, count: 1 };
+  const KIT = { ...kitOwn, id: 'k', code: 'KIT-2', pn: 'KIT-2', description: 'Kit test', coPacked: ['BOX-2'], variants: [kitOwn, kitMixed] };
+  const BOX = { ...boxMixed, id: 'b', code: 'BOX-2', pn: 'BOX-2', description: 'Coffret test', coPacked: ['KIT-2'], variants: [boxMixed] };
+  it('la part est reconstituée : pas un demi-carton mixte de 0,78 kg', () => {
+    const p = generatePackingList([KIT, BOX], [req('BOX-2', 1)], { consolidate: true }).packages[0];
+    expect(p.type).toBe('Carton');
+    expect(p.grossWeight).toBeGreaterThan(4);
+    expect(p.height).toBeLessThan(63);
+  });
+});

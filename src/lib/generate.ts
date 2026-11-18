@@ -61,7 +61,32 @@ export function withSimilarPacking(item: CatalogItem, catalog: CatalogItem[]): C
  * Quand les autres articles du colis ont un emballage propre connu, on retire leur part réelle
  * et le reste revient aux articles inconnus du colis.
  */
-export function refineMixedShare(item: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+const MIXED_SRC = /colis mixte|mixed package/i;
+const sameDims = (a: PackVariant, b: PackVariant) => a.length === b.length && a.width === b.width && a.height === b.height;
+
+/**
+ * Bases importées avec une ancienne version : la variante relevée dans un colis mixte n'a pas sa « part du colis »
+ * (seul le libellé de la source dit « colis mixte »). On la reconstitue avec les quantités des autres articles du même colis.
+ */
+export function restoreMixed(item: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+  if (!item.variants?.length || !item.variants.some((v) => MIXED_SRC.test(v.source) && !(v.mixed && v.packShare))) return item;
+  const variants = item.variants.map((v) => {
+    if (!MIXED_SRC.test(v.source) || (v.mixed && v.packShare) || !(v.qtyPerPackage > 0)) return v;
+    let others = 0;
+    for (const code of item.coPacked ?? []) {
+      const o = catalog.find((c) => c !== item && (c.code === code || c.pn === code));
+      const mv = o?.variants?.find((x) => x.source === v.source && sameDims(x, v));
+      if (mv && mv.qtyPerPackage > 0) others += mv.qtyPerPackage;
+    }
+    return { ...v, mixed: true, packShare: others > 0 ? round(v.qtyPerPackage / (v.qtyPerPackage + others), 4) : v.packShare };
+  });
+  const i = item.variants.findIndex((v) => v.source === item.source && MIXED_SRC.test(v.source));
+  const top = i >= 0 && !item.manual ? { ...item, mixed: true, packShare: variants[i].packShare } : item;
+  return { ...top, variants };
+}
+
+export function refineMixedShare(item0: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+  const item = restoreMixed(item0, catalog);
   if (item.manual || !item.variants?.length) return item;
   const ownPerUnit = (o: CatalogItem) => {
     const v = variantsOf(o).filter((x) => !x.mixed && x.qtyPerPackage > 0 && x.grossWeightPerUnit > 0).sort((a, b) => b.count - a.count)[0];
@@ -82,8 +107,9 @@ export function refineMixedShare(item: CatalogItem, catalog: CatalogItem[]): Cat
     let kV = 0;
     let volKnown = true;
     for (const code of item.coPacked ?? []) {
-      const o = catalog.find((c) => c !== item && (c.code === code || c.pn === code));
-      if (!o) continue;
+      const o0 = catalog.find((c) => c !== item0 && (c.code === code || c.pn === code));
+      if (!o0) continue;
+      const o = restoreMixed(o0, catalog);
       // même colis : même source, mêmes dimensions et même poids total de colis (±3 %)
       const mv = (o.variants ?? []).find(
         (x) => x.mixed && x.source === v.source && x.packShare && x.length === v.length && x.width === v.width && x.height === v.height &&
