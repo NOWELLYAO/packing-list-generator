@@ -154,3 +154,23 @@ describe('export des schémas en image (point 13)', () => {
     expect(PUMP.code).toBe('P-100');
   });
 });
+
+describe('configuration dont seul le volume est connu', () => {
+  const base = CATALOG[0];
+  const item = {
+    ...base,
+    code: 'V-1',
+    pn: 'V-1',
+    description: 'Pompe test',
+    variants: [
+      { qtyPerPackage: 6, packageType: 'PALPLATE', length: 120, width: 80, height: 110, volumePerPackage: 1.056, netWeightPerUnit: 36, grossWeightPerUnit: 40, mixed: false, source: 'a', count: 2 },
+      { qtyPerPackage: 4, packageType: 'PALPLATE', length: 0, width: 0, height: 0, volumePerPackage: 0.768, netWeightPerUnit: 36, grossWeightPerUnit: 42.5, mixed: false, source: 'b', count: 1 },
+    ],
+  };
+  it('reconstitue L × l × H à partir du volume et de l’empreinte connue', () => {
+    const pl = generatePackingList([item], [req('V-1', 4)], { consolidate: true });
+    const p = pl.packages[0];
+    expect([p.length, p.width, p.height]).toEqual([120, 80, 80]);
+    expect(planLoad(pl.packages, 'auto', 'road')!.bins[0].placements).toHaveLength(1);
+  });
+});

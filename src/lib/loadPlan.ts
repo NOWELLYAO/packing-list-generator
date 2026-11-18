@@ -255,9 +255,13 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
   const warnings: string[] = [];
   chosen.bins.forEach((b, i) => {
     const tag = chosen!.bins.length > 1 ? ` (n° ${i + 1})` : '';
-    if (Math.abs(b.cogX - 50) > 15 && b.usedLength > b.vehicle.length * 0.5)
-      warnings.push(`Centre de gravité à ${b.cogX} % de la longueur${tag} : répartir les colis lourds pour équilibrer`);
-    if (Math.abs(b.cogY - 50) > 10) warnings.push(`Charge décentrée en largeur (${b.cogY} %)${tag} : caler les colis`);
+    // charge reportée vers les portes : risque réel (essieu arrière, basculement à l'ouverture)
+    if (b.cogX > 62 && b.weight > b.vehicle.payload * 0.2)
+      warnings.push(`Centre de gravité à ${String(b.cogX).replace('.', ',')} % de la longueur, côté portes${tag} : avancer les colis lourds vers le fond`);
+    // charge lourde concentrée tout à l'avant : surcharge de l'essieu avant possible
+    else if (b.cogX < 25 && b.weight > b.vehicle.payload * 0.5)
+      warnings.push(`Charge lourde concentrée à l'avant (${String(b.cogX).replace('.', ',')} % de la longueur)${tag} : répartir sur la longueur`);
+    if (Math.abs(b.cogY - 50) > 10) warnings.push(`Charge décentrée en largeur (${String(b.cogY).replace('.', ',')} %)${tag} : caler les colis`);
   });
   return {
     vehicle: chosen.v,

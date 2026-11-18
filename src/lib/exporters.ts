@@ -50,6 +50,9 @@ function download(blob: Blob, name: string) {
 
 /** Dessine un schéma (lib/drawing) dans le PDF : x, y en mm, largeur en mm */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/** Caractères absents de la police PDF standard */
+const pdfSafe = (t: string) => t.replace(/³/g, '3').replace(/²/g, '2').replace(/[\u202f\u00a0]/g, ' ');
+
 function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: number) {
   const s = width / pic.w;
   const P = (pt: [number, number]): [number, number] => [x + pt[0] * s, y + pt[1] * s];
@@ -96,7 +99,7 @@ function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: num
       doc.setFont('helvetica', sh.bold ? 'bold' : 'normal');
       doc.setFontSize((sh.size * s) / 0.3528);
       doc.setTextColor(sh.color);
-      doc.text(sh.text.replace(/\u202f|\u00a0/g, ' ').replace('m³', 'm3'), at[0], at[1], {
+      doc.text(pdfSafe(sh.text), at[0], at[1], {
         align: sh.anchor === 'middle' ? 'center' : sh.anchor === 'end' ? 'right' : 'left',
         baseline: 'middle',
         angle: sh.rotate ? -sh.rotate : 0,
@@ -381,7 +384,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9.5);
         doc.setTextColor(...ink);
-        doc.text(doc.splitTextToSize(v2, fw - 5)[0], x0 + 3, yy + 11);
+        doc.text(doc.splitTextToSize(pdfSafe(v2), fw - 5)[0], x0 + 3, yy + 11);
       });
       yy += 18;
       for (const [i, b] of plan.bins.entries()) {
@@ -396,7 +399,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
           doc.setTextColor(...ink);
-          doc.text(`${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
+          doc.text(pdfSafe(`${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn} n° ${i + 1} — ${nf(b.weight, 0)} kg`), M, yy + 2);
           yy += 4;
         }
         drawPicturePdf(doc, p3, M + (W - 2 * M - w3) / 2, yy, w3);
@@ -412,7 +415,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       yy += 5;
       for (const wmsg of plan.warnings) {
         doc.setTextColor(180, 83, 9);
-        doc.text(`! ${wmsg}`, M, yy);
+        doc.text(pdfSafe(`! ${wmsg}`), M, yy);
         yy += 4.5;
       }
     }

@@ -28,9 +28,35 @@ export function variantOf(item: CatalogItem): PackVariant {
   };
 }
 
+const hasDims = (v: { length: number; width: number; height: number }) => v.length > 0 && v.width > 0 && v.height > 0;
+const typeKey = (t: string) => (t || '').toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * Configuration dont seules le volume a pu être lu (PL scannée, colonne illisible) :
+ * on reconstitue L × l avec l'empreinte du même emballage vu ailleurs pour cet article
+ * (ou la palette standard : 120 × 80, demi-palette 80 × 60), et H = volume ÷ (L × l).
+ */
+export function completeDims<V extends { packageType: string; length: number; width: number; height: number; volumePerPackage: number }>(v: V, siblings: V[]): V {
+  if (hasDims(v) || !(v.volumePerPackage > 0)) return v;
+  const same = siblings.find((o) => hasDims(o) && typeKey(o.packageType) === typeKey(v.packageType));
+  const t = v.packageType.toLowerCase();
+  const fp: [number, number] | null = same
+    ? [same.length, same.width]
+    : /half|demi|1\/2/.test(t)
+      ? [80, 60]
+      : /pal|eur|plate/.test(t)
+        ? [120, 80]
+        : null;
+  if (!fp) return v;
+  const h = Math.round((v.volumePerPackage * 1e6) / (fp[0] * fp[1]));
+  if (h < 5 || h > 260) return v;
+  return { ...v, length: fp[0], width: fp[1], height: h };
+}
+
 /** Variantes d'une fiche (une fiche ancienne ou saisie à la main n'en a qu'une : elle-même) */
 export function variantsOf(item: CatalogItem): PackVariant[] {
-  return item.variants?.length ? item.variants : [variantOf(item)];
+  const vs = item.variants?.length ? item.variants : [variantOf(item)];
+  return vs.map((v) => completeDims(v, vs));
 }
 
 /** Fusionne des listes de variantes : même configuration -> compteur incrémenté, valeurs les plus récentes */
