@@ -56,7 +56,7 @@ export function familyOf(type: string, dims?: { length: number; width: number; h
   const small = Math.min(dims.length, dims.width);
   // une palette fait au moins 80 × 55 (ou c'est un long berceau d'au moins 1,5 m) :
   // en dessous, « EURO PAL » désigne un carton posé sur palette
-  if (fam === 'pallet' && (big < 80 || small < 50) && big < 150) return 'carton';
+  if (fam === 'pallet' && (small < 30 || ((big < 80 || small < 50) && big < 150))) return 'carton';
   // libellé inconnu : carton s'il est maniable, caisse au-delà
   if (fam === 'other') return Math.max(big, dims.height) <= 120 ? 'carton' : 'crate';
   return fam;

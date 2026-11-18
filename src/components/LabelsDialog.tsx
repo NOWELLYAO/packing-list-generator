@@ -13,7 +13,9 @@ const DEFAULTS: LabelOptions = { format: 'a6', marking: '', reference: '', fragi
 
 /** Réglages des étiquettes de colis, puis génération du PDF */
 export default function LabelsDialog({ pl, settings, setSettings, onClose }: Props) {
-  const [o, setO] = useState<LabelOptions>({ ...DEFAULTS, ...(settings.labels ?? {}) });
+  // seuls le format et les pictogrammes sont mémorisés ; destinataire et référence repartent vides à chaque fois
+  const remembered = settings.labels ?? DEFAULTS;
+  const [o, setO] = useState<LabelOptions>({ ...DEFAULTS, format: remembered.format, fragile: remembered.fragile, noStack: remembered.noStack });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const n = pl.packages.length;
@@ -23,7 +25,7 @@ export default function LabelsDialog({ pl, settings, setSettings, onClose }: Pro
     setBusy(true);
     setError('');
     try {
-      setSettings({ ...settings, labels: o });
+      setSettings({ ...settings, labels: { ...o, marking: '', reference: '' } });
       const { exportLabelsPdf } = await import('../lib/labels');
       await exportLabelsPdf(pl, settings, o);
       onClose();
@@ -62,11 +64,11 @@ export default function LabelsDialog({ pl, settings, setSettings, onClose }: Pro
             </div>
           </fieldset>
           <label className="field">
-            <span>Destinataire / marquage</span>
+            <span>Destinataire (facultatif)</span>
             <textarea
-              rows={4}
+              rows={3}
               value={o.marking}
-              placeholder={'Nom du destinataire\nAdresse, ville, pays\nMarquage (ex. PROJET X – Lot 2)'}
+              placeholder="Saisissez le nom du destinataire si besoin — laissé vide, l'étiquette n'en comporte pas"
               onChange={(e) => setO({ ...o, marking: e.target.value })}
             />
           </label>

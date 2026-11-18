@@ -270,3 +270,29 @@ describe('étiquettes de colis', () => {
     expect(/^[\x20-\x7e\n]*$/.test(t)).toBe(true);
   });
 });
+
+describe('cohérence physique (une fois pour toutes)', () => {
+  const v = (o: Partial<import('../types').PackVariant>) => ({ qtyPerPackage: 1, packageType: 'CRATE', length: 240, width: 24, height: 32, volumePerPackage: 0.18, netWeightPerUnit: 40, grossWeightPerUnit: 70, mixed: false, source: 'a', count: 5, ...o });
+  it('un relevé impossible (zéro perdu : 24 × 24 × 32 pour 67 kg) est écarté', () => {
+    const item = { ...CATALOG[0], code: 'S-1', pn: 'S-1', description: 'SP test', variants: [v({}), v({ length: 24, count: 2, grossWeightPerUnit: 67 })] };
+    const pl = generatePackingList([item], [req('S-1', 2)], { consolidate: true });
+    expect(pl.packages.every((p) => p.length === 240)).toBe(true);
+  });
+  it('un relevé au poids aberrant (1 kg au lieu de 254 kg) est écarté', () => {
+    const item = { ...CATALOG[0], code: 'H-1', pn: 'H-1', description: 'Booster test', variants: [v({ packageType: 'Pre-Pack', length: 109, width: 99, height: 123, netWeightPerUnit: 254, grossWeightPerUnit: 254 }), v({ packageType: 'Pre-Pack', length: 105, width: 80, height: 12, netWeightPerUnit: 1, grossWeightPerUnit: 1, count: 1 })] };
+    expect(variantsOf(item)).toHaveLength(1);
+  });
+  it('article vu seulement en palette partagée : emballage repris d’un article du même modèle', () => {
+    const shared = { ...CATALOG[0], code: 'Q-1', pn: 'Q-1', description: 'SQF 2.5-2 Rp 1', mixed: true, variants: [v({ packageType: 'PALPLATE', length: 0, width: 0, height: 0, volumePerPackage: 0.626, qtyPerPackage: 2, netWeightPerUnit: 5.15, grossWeightPerUnit: 7.08, mixed: true, packShare: 0.15 })] };
+    const twin = { ...CATALOG[0], id: 'twin', code: 'Q-2', pn: 'Q-2', description: 'SQF 2.5-2 Rp 1 PARK', variants: [v({ packageType: 'Carton', length: 143, width: 14, height: 12, netWeightPerUnit: 8.9, grossWeightPerUnit: 9 })] };
+    const p = generatePackingList([shared, twin], [req('Q-1', 1)], { consolidate: true }).packages[0];
+    expect([p.length, p.width, p.height]).toEqual([143, 14, 12]);
+    expect(p.grossWeight).toBeLessThan(10);
+    expect(p.dimCheck).toBe('estimated');
+  });
+  it('une palette pèse toujours au moins le poids d’une palette vide', () => {
+    const item = { ...CATALOG[0], code: 'L-9', pn: 'L-9', description: 'Coffret test', variants: [v({ packageType: 'Palette', length: 120, width: 80, height: 54, qtyPerPackage: 2, netWeightPerUnit: 27, grossWeightPerUnit: 30 })] };
+    const p = generatePackingList([item], [req('L-9', 2)], { consolidate: true }).packages[0];
+    expect(p.grossWeight - p.netWeight).toBeGreaterThanOrEqual(15);
+  });
+});

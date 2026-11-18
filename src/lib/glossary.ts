@@ -55,7 +55,7 @@ export const GLOSSARY = {
   },
   dimCheck: {
     title: 'Dimensions à vérifier',
-    text: "Cotes en orange précédées de « ≈ » : elles ne viennent pas d'une mesure lue telle quelle sur une PL. Soit la PL ne donnait que le volume (dimensions reconstituées : surface de l'emballage habituel de l'article et hauteur = volume ÷ surface), soit cette quantité n'a jamais été expédiée ainsi (dimensions calculées). Faites-les confirmer par le fournisseur ou mesurer avant de transmettre la PL.",
+    text: "Cotes en orange précédées de « ≈ » : elles ne viennent pas d'une mesure lue telle quelle sur une PL. Soit la PL ne donnait que le volume (dimensions reconstituées : surface de l'emballage habituel de l'article et hauteur = volume ÷ surface), soit l'article n'a été vu que dans un colis partagé et son emballage est repris d'un article du même modèle (ex. SQF 2.5-2 et SQF 2.5-2 PARK), soit cette quantité n'a jamais été expédiée ainsi (dimensions calculées). Faites-les confirmer par le fournisseur ou mesurer avant de transmettre la PL.",
   },
   partial: {
     title: 'Colis incomplet',

@@ -18,6 +18,42 @@ export function isLongItem(item: CatalogItem | undefined): boolean {
   return (item.variants ?? []).some((v) => v.qtyPerPackage === 1 && elongated(v.length, v.width, v.height)) || (item.qtyPerPackage === 1 && elongated(item.length, item.width, item.height));
 }
 
+/** Modèle d'un article : « SQF 2.5-2 Rp 1 PARK » → « SQF 2.5-2 » (sert à trouver un article similaire) */
+export function modelKey(description: string): string {
+  const toks = description.toUpperCase().replace(/\bPARK\b/g, ' ').replace(/[,;]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const key = toks.slice(0, 2).join(' ');
+  return /\d/.test(key) && key.length >= 4 ? key : '';
+}
+
+/**
+ * Article vu uniquement en colis partagé (pas d'emballage propre connu) : on reprend l'emballage
+ * unitaire d'un article du même modèle (ex. SQF 2.5-2 Rp 1 ↔ SQF 2.5-2 Rp 1 PARK), avec son propre poids net.
+ * Résultat signalé « à vérifier ».
+ */
+export function withSimilarPacking(item: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+  if (item.manual) return item;
+  const own = variantsOf(item).filter((v) => !v.mixed && (v.length || v.volumePerPackage));
+  if (own.length) return item;
+  const key = modelKey(item.description);
+  if (!key) return item;
+  let best: { it: CatalogItem; v: ReturnType<typeof variantsOf>[number] } | null = null;
+  for (const o of catalog) {
+    if (o === item || o.id === item.id || modelKey(o.description) !== key) continue;
+    for (const v of variantsOf(o)) {
+      if (v.mixed || !(v.length > 0 && v.width > 0 && v.height > 0)) continue;
+      const better = !best || (v.qtyPerPackage === 1 && best.v.qtyPerPackage !== 1) || (v.qtyPerPackage === best.v.qtyPerPackage && v.count > best.v.count) || (best.v.qtyPerPackage !== 1 && v.qtyPerPackage < best.v.qtyPerPackage);
+      if (better) best = { it: o, v };
+    }
+  }
+  if (!best) return item;
+  // poids net de l'article lui-même (relevé dans son colis partagé), sinon celui de l'article similaire
+  const ownNet = variantsOf(item).map((x) => x.netWeightPerUnit).find((n) => n > 0) ?? item.netWeightPerUnit;
+  const net = ownNet > 0 ? ownNet : best.v.netWeightPerUnit;
+  const tarePerUnit = Math.max(0, best.v.grossWeightPerUnit - best.v.netWeightPerUnit);
+  const v = { ...best.v, netWeightPerUnit: net, grossWeightPerUnit: round(net + tarePerUnit, 4), count: 1, source: `emballage de ${best.it.code} (${best.it.description})` };
+  return { ...applyVariant(item, v), variants: [v], similarFrom: `${best.it.code} ${best.it.description}`, coPacked: item.coPacked };
+}
+
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
   const c = norm(code).replace(/\s/g, '');
   const p = norm(pn).replace(/\s/g, '');
@@ -58,7 +94,7 @@ const REPACK_CARTONS: [number, number, number][] = [
   [80, 60, 50],
 ];
 /** au-delà, le reliquat reste sur palette */
-const REPACK_MAX_M3 = 0.09;
+const REPACK_MAX_M3 = 0.12;
 const REPACK_MAX_KG = 30;
 const PALLETS: { type: string; l: number; w: number; tare: number }[] = [
   { type: 'Demi-palette groupée', l: 80, w: 60, tare: 10 },
@@ -82,6 +118,8 @@ interface Piece {
   repacked?: boolean;
   /** dimensions issues d'un colis partagé (ce ne sont pas celles de l'article) */
   fromMixed?: boolean;
+  /** emballage repris d'un article similaire */
+  similar?: boolean;
   /** volume réellement occupé par la marchandise (pour le regroupement) */
   goodsVolume: number;
 }
@@ -150,6 +188,26 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     hasDims && isPalletLike(item) ? (item.length * item.width * Math.max(5, item.height - PALLET_BASE_CM)) / 1e6 : refVol;
   const goodsUnitVol = loadVol / perPkg;
   const out: Piece[] = [];
+  // Article vu seulement dans une palette partagée : ce n'est pas « sa » palette.
+  // Petit article compact → carton à la taille de sa marchandise ; sinon palette propre, avec au moins le poids d'une palette vide.
+  let palletFloor = 0;
+  if (share < 1 && hasDims && isPalletLike(item)) {
+    const goodsAll = goodsUnitVol * qty;
+    const box = !isLongItem(item) && goodsAll > 0 && goodsAll <= REPACK_MAX_M3 && qty * item.netWeightPerUnit <= REPACK_MAX_KG
+      ? REPACK_CARTONS.find(([l, w, h]) => (l * w * h * FILL) / 1e6 >= goodsAll)
+      : undefined;
+    if (box) {
+      const [cl, cw, ch] = box;
+      const cartonTare = round(0.3 + ((cl * cw * ch) / 1e6) * 8, 2);
+      const inner = Math.max(0, item.grossWeightPerUnit - item.netWeightPerUnit) * 0.3; // emballage individuel, sans la part de palette
+      const vol = (cl * cw * ch) / 1e6;
+      return [{ lineIdx, code: item.code || item.pn, qty, type: 'Carton', l: cl, w: cw, h: ch, volume: vol, net: qty * item.netWeightPerUnit, gross: qty * (item.netWeightPerUnit + inner) + cartonTare, basis: 'reference', dimsInferred: item.dimsInferred, fromMixed: true, repacked: true, goodsVolume: goodsAll }];
+    }
+    palletFloor = item.length * item.width >= 9000 ? 25 : 10;
+  } else if (hasDims && isPalletLike(item)) {
+    // une palette vide pèse au moins 15 kg (120 × 80) ou 8 kg (demi-palette) : brut = net est impossible
+    palletFloor = item.length * item.width >= 9000 ? 15 : 8;
+  }
   const mk = (q: number, h: number, basis: Piece['basis'], volume: number, packTare: number): Piece => ({
     lineIdx,
     code: item.code || item.pn,
@@ -160,10 +218,11 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     h,
     volume,
     net: q * item.netWeightPerUnit,
-    gross: q * item.netWeightPerUnit + packTare,
+    gross: q * item.netWeightPerUnit + Math.max(packTare, palletFloor),
     basis,
     dimsInferred: item.dimsInferred,
     fromMixed: !!item.mixed,
+    similar: !!item.similarFrom,
     // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
     // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
     goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
@@ -192,7 +251,8 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
         const [cl, cw, ch] = repack;
         const cartonTare = round(0.3 + (cl * cw * ch) / 1e6 * 8, 2);
         const piece = mk(rem, ch, 'reference', (cl * cw * ch) / 1e6, rem * innerPerUnit + cartonTare);
-        out.push({ ...piece, type: 'Carton', l: cl, w: cw, h: ch, goodsVolume: goodsRem, repacked: true });
+        // carton : pas de poids minimal de palette
+        out.push({ ...piece, gross: rem * item.netWeightPerUnit + rem * innerPerUnit + cartonTare, type: 'Carton', l: cl, w: cw, h: ch, goodsVolume: goodsRem, repacked: true });
       } else {
         // palette incomplète : hauteur estimée d'après les envois réels de cet article ;
         // tare = palette vide + emballages des seules unités présentes
@@ -292,6 +352,7 @@ const footprintKey = (v: { length: number; width: number; packageType: string })
 /** Niveau de fiabilité du colisage proposé pour une ligne */
 function confidenceOf(item: CatalogItem, qty: number): Confidence {
   if (item.manual) return 'manual';
+  if (item.similarFrom) return 'estimated';
   if (item.mixed) return 'mixed';
   const per = item.qtyPerPackage;
   if (!(per > 1)) return 'observed';
@@ -356,7 +417,7 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
   const pool = dedicated.length ? dedicated : all;
   const asItem = (v: (typeof pool)[number]) => applyVariant(item, v);
   const mixed = !dedicated.length && all.some((v) => v.mixed);
-  const conf = (exact: boolean): Confidence => (item.manual ? 'manual' : mixed ? 'mixed' : exact ? 'observed' : 'estimated');
+  const conf = (exact: boolean): Confidence => (item.manual ? 'manual' : mixed ? 'mixed' : exact && !item.similarFrom ? 'observed' : 'estimated');
   // 1) envoi identique
   const exact = pool.filter((v) => Math.abs(v.qtyPerPackage - qty) < 1e-9).sort((a, b) => b.count - a.count)[0];
   if (exact && !item.manual) {
@@ -380,7 +441,9 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
       .sort((a, b) => hasDims(a) - hasDims(b) || a.qtyPerPackage - b.qtyPerPackage || b.count - a.count)[0];
     const h = holder ? asItem(holder) : ref;
     const hv = h.length && h.width && h.height ? (h.length * h.width * h.height) / 1e6 : h.volumePerPackage || 0;
-    const tare = Math.max(0, h.grossWeightPerUnit - h.netWeightPerUnit) * h.qtyPerPackage;
+    // une palette vide pèse au moins 15 kg (8 kg la demi-palette)
+    const floor = h.length > 0 && isPalletLike(h) ? (h.length * h.width >= 9000 ? 15 : 8) : 0;
+    const tare = Math.max(floor, Math.max(0, h.grossWeightPerUnit - h.netWeightPerUnit) * h.qtyPerPackage);
     const exactRem = Math.abs(h.qtyPerPackage - rem) < 1e-9;
     if (!exactRem) exactAll = false;
     // petit reliquat d'une palette (ex. 1 flotteur sur 50) : même un fournisseur le réemballe en carton
@@ -434,12 +497,14 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const gf = grundfos ? grundfosPieces(item, qty, lineIdx) : null;
-    const { item: chosen, note, confidence } = gf ? { item, note: gf.note, confidence: gf.confidence } : chooseVariant(item, qty);
+    const packItem = withSimilarPacking(item, catalog);
+    const gf = grundfos ? grundfosPieces(packItem, qty, lineIdx) : null;
+    const { item: chosen, note, confidence } = gf ? { item: packItem, note: gf.note, confidence: gf.confidence } : chooseVariant(packItem, qty);
     const warnings: string[] = [];
     if (!(chosen.length || chosen.volumePerPackage)) warnings.push('Dimensions manquantes');
     if (!chosen.grossWeightPerUnit) warnings.push('Poids manquant');
     if (chosen.mixed) warnings.push('Données estimées (colis mixte)');
+    if (packItem.similarFrom) warnings.push(`Emballage repris de l'article similaire ${packItem.similarFrom}`);
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
     lines[lineIdx].confidence = confidence;
@@ -516,15 +581,17 @@ export function generatePackingList(
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
     // « Pallet » / « EURO PAL » de moins de 80 × 50 cm (et moins de 1,5 m) : c'est un carton, le libellé suit
-    if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.length < 80 || p.width < 50) && p.length < 150) p.type = 'Carton';
+    if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.width < 30 || ((p.length < 80 || p.width < 50) && p.length < 150))) p.type = 'Carton';
   }
 
   // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi
   const lineInferred = new Set(allPieces.filter((p) => p.dimsInferred).map((p) => p.lineIdx));
+  const lineSimilar = new Set(allPieces.filter((p) => p.similar).map((p) => p.lineIdx));
   const codeLine = new Map(lines.map((l, i) => [l.code, i] as const));
   for (const p of packages) {
     const idx = p.contents.map((c) => codeLine.get(c.code)).filter((i): i is number => i !== undefined);
     if (idx.some((i) => lineInferred.has(i))) p.dimCheck = 'inferred';
+    else if (idx.some((i) => lineSimilar.has(i))) p.dimCheck = 'estimated';
     // une palette pleine déjà expédiée telle quelle reste fiable ; seuls les colis recalculés (incomplets, regroupés) sont à vérifier
     else if (p.basis !== 'reference' && idx.some((i) => lines[i].confidence === 'estimated' || lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';
     else if (idx.some((i) => lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';

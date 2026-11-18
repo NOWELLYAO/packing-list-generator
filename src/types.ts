@@ -25,6 +25,8 @@ export interface CatalogItem {
   mixed?: boolean;
   /** L × l × H reconstitués à partir du volume (dimensions illisibles sur la PL) */
   dimsInferred?: boolean;
+  /** emballage repris d'un article similaire (l'article n'a été vu qu'en colis partagé) */
+  similarFrom?: string;
   /** toutes les configurations d'emballage observées dans les PL importées */
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */

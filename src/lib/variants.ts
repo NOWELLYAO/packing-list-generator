@@ -69,7 +69,16 @@ export function variantsOf(item: CatalogItem): PackVariant[] {
   // une configuration sans dimensions est inutile si la même (quantité + emballage) a été mesurée ailleurs
   const measured = (v: PackVariant) => sane.some((o) => o !== v && hasDims(o) && o.qtyPerPackage === v.qtyPerPackage && typeKey(o.packageType) === typeKey(v.packageType));
   // relevé aberrant (ex. une date lue comme quantité : 2026 pièces par colis, sans dimensions) : écarté s'il y a mieux
-  const absurd = (v: PackVariant) => v.qtyPerPackage > 999 && !hasDims(v);
+  // ou physiquement impossible (plus de 3 000 kg par m³ : un zéro perdu à la lecture, 240 → 24 cm)
+  const density = (v: PackVariant) => {
+    const vol = hasDims(v) ? (v.length * v.width * v.height) / 1e6 : v.volumePerPackage;
+    return vol > 0 ? (v.grossWeightPerUnit * v.qtyPerPackage) / vol : 0;
+  };
+  // ou un poids unitaire 20 fois plus faible / plus fort que les autres relevés (1 kg au lieu de 254 kg)
+  const nets = vs.map((v) => v.netWeightPerUnit).filter((n) => n > 0).sort((a, b) => a - b);
+  const medNet = nets.length >= 2 ? nets[Math.floor(nets.length / 2)] : 0;
+  const weightOutlier = (v: PackVariant) => medNet > 0 && v.netWeightPerUnit > 0 && (v.netWeightPerUnit / medNet > 20 || medNet / v.netWeightPerUnit > 20);
+  const absurd = (v: PackVariant) => (v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || weightOutlier(v);
   const sane = vs.some((v) => !absurd(v)) ? vs.filter((v) => !absurd(v)) : vs;
   const kept = sane.filter((v) => hasDims(v) || !measured(v));
   return kept.map((v) => completeDims(v, kept));
