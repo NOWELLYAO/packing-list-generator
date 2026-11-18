@@ -50,13 +50,16 @@ export function completeDims<V extends { packageType: string; length: number; wi
   if (!fp) return v;
   const h = Math.round((v.volumePerPackage * 1e6) / (fp[0] * fp[1]));
   if (h < 5 || h > 260) return v;
-  return { ...v, length: fp[0], width: fp[1], height: h };
+  return { ...v, length: fp[0], width: fp[1], height: h, dimsInferred: true };
 }
 
 /** Variantes d'une fiche (une fiche ancienne ou saisie à la main n'en a qu'une : elle-même) */
 export function variantsOf(item: CatalogItem): PackVariant[] {
   const vs = item.variants?.length ? item.variants : [variantOf(item)];
-  return vs.map((v) => completeDims(v, vs));
+  // une configuration sans dimensions est inutile si la même (quantité + emballage) a été mesurée ailleurs
+  const measured = (v: PackVariant) => vs.some((o) => o !== v && hasDims(o) && o.qtyPerPackage === v.qtyPerPackage && typeKey(o.packageType) === typeKey(v.packageType));
+  const kept = vs.filter((v) => hasDims(v) || !measured(v));
+  return kept.map((v) => completeDims(v, kept));
 }
 
 /** Fusionne des listes de variantes : même configuration -> compteur incrémenté, valeurs les plus récentes */
@@ -94,5 +97,6 @@ export function applyVariant(item: CatalogItem, v: PackVariant): CatalogItem {
     grossWeightPerUnit: v.grossWeightPerUnit,
     mixed: v.mixed,
     packShare: v.mixed ? v.packShare : undefined,
+    dimsInferred: v.dimsInferred,
   };
 }

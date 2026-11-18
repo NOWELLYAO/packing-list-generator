@@ -55,6 +55,8 @@ export function familyOf(type: string): Family {
 
 export const KRAFT = '#d2b48c';
 const INK = '#2b3442';
+/** couleur des dimensions à vérifier */
+export const CHECK = '#c2410c';
 
 /* ------------------------------------------------------------------ */
 /* Schéma isométrique d'un colis                                       */
@@ -410,6 +412,8 @@ export function drawCarton(push: Push, L: number, l: number, H: number, px: numb
 
 export interface PackageLike {
   load?: LoadHint;
+  /** dimensions à vérifier : cotes en orange précédées de « ≈ » */
+  dimCheck?: 'inferred' | 'estimated';
   no: number;
   type: string;
   length: number;
@@ -487,28 +491,30 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
 
   // ---- cotes ----
   const d = Math.max(Math.max(L, l, H) * 0.09, 9 / k); // écart des cotes : au moins 9 unités à l'écran
-  const dimColor = shade(INK, 0.15);
-  const fmt = (v: number) => `${Math.round(v).toLocaleString(labels.locale)} ${labels.cm}`;
+  const doubt = !!p.dimCheck;
+  const dimColor = doubt ? CHECK : shade(INK, 0.15);
+  const dimText = doubt ? CHECK : INK;
+  const fmt = (v: number) => `${doubt ? '≈ ' : ''}${Math.round(v).toLocaleString(labels.locale)} ${labels.cm}`;
   // longueur L : le long de l'arête avant gauche (b = l), décalée vers l'extérieur
   const la = T(iso(0, l + d, 0));
   const lb = T(iso(L, l + d, 0));
   shapes.push({ kind: 'line', a: la, b: lb, stroke: dimColor, sw: 0.6 });
   shapes.push({ kind: 'line', a: T(iso(0, l, 0)), b: T(iso(0, l + d * 1.3, 0)), stroke: dimColor, sw: 0.35 });
   shapes.push({ kind: 'line', a: T(iso(L, l, 0)), b: T(iso(L, l + d * 1.3, 0)), stroke: dimColor, sw: 0.35 });
-  shapes.push({ kind: 'text', at: [(la[0] + lb[0]) / 2 - 3, (la[1] + lb[1]) / 2 + 9], text: fmt(L), size: 8.5, color: INK, anchor: 'middle', rotate: 30, bold: true, halo: true });
+  shapes.push({ kind: 'text', at: [(la[0] + lb[0]) / 2 - 3, (la[1] + lb[1]) / 2 + 9], text: fmt(L), size: 8.5, color: dimText, anchor: 'middle', rotate: 30, bold: true, halo: true });
   // largeur l : le long de l'arête avant droite (a = L)
   const wa = T(iso(L + d, 0, 0));
   const wb = T(iso(L + d, l, 0));
   shapes.push({ kind: 'line', a: wa, b: wb, stroke: dimColor, sw: 0.6 });
   shapes.push({ kind: 'line', a: T(iso(L, 0, 0)), b: T(iso(L + d * 1.3, 0, 0)), stroke: dimColor, sw: 0.35 });
   shapes.push({ kind: 'line', a: T(iso(L, l, 0)), b: T(iso(L + d * 1.3, l, 0)), stroke: dimColor, sw: 0.35 });
-  shapes.push({ kind: 'text', at: [(wa[0] + wb[0]) / 2 + 3, (wa[1] + wb[1]) / 2 + 9], text: fmt(l), size: 8.5, color: INK, anchor: 'middle', rotate: -30, bold: true, halo: true });
+  shapes.push({ kind: 'text', at: [(wa[0] + wb[0]) / 2 + 3, (wa[1] + wb[1]) / 2 + 9], text: fmt(l), size: 8.5, color: dimText, anchor: 'middle', rotate: -30, bold: true, halo: true });
   // hauteur H : arête verticale la plus à droite (a = L, b = 0)
   const ha = T(iso(L + d, -d * 0.2, 0));
   const hb = T(iso(L + d, -d * 0.2, H));
   shapes.push({ kind: 'line', a: ha, b: hb, stroke: dimColor, sw: 0.6 });
   shapes.push({ kind: 'line', a: T(iso(L, 0, H)), b: T(iso(L + d * 1.3, -d * 0.2, H)), stroke: dimColor, sw: 0.35 });
-  shapes.push({ kind: 'text', at: [ha[0] + 6.5, (ha[1] + hb[1]) / 2], text: fmt(H), size: 8.5, color: INK, anchor: 'middle', rotate: -90, bold: true, halo: true });
+  shapes.push({ kind: 'text', at: [ha[0] + 6.5, (ha[1] + hb[1]) / 2], text: fmt(H), size: 8.5, color: dimText, anchor: 'middle', rotate: -90, bold: true, halo: true });
 
   // poids
   shapes.push({

@@ -54,6 +54,7 @@ export interface Placement {
   type: string;
   rotated: boolean;
   load?: LoadHint;
+  dimCheck?: 'inferred' | 'estimated';
 }
 
 export interface Bin {
@@ -125,7 +126,7 @@ function fillOne(v: Vehicle, items: PLPackage[], lambda: number): { placed: Plac
       rest.push(it);
       continue;
     }
-    const p: Placement = { no: it.no, x: best.x, y: best.y, l: best.l, w: best.w, h: it.height, kg: it.grossWeight, type: it.type, rotated: best.rot, load: it.load };
+    const p: Placement = { no: it.no, x: best.x, y: best.y, l: best.l, w: best.w, h: it.height, kg: it.grossWeight, type: it.type, rotated: best.rot, load: it.load, dimCheck: it.dimCheck };
     placed.push(p);
     weight += it.grossWeight;
     // découpe MaxRects des espaces libres intersectés
@@ -311,7 +312,11 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
     const cx = X(p.x + p.l / 2);
     const cy = Y(p.y + p.w / 2);
     const big = p.l * k > 34 && p.w * k > 22;
-    shapes.push({ kind: 'text', at: [cx, cy + (big ? -1 : 2.5)], text: String(p.no), size: big ? 9 : 7, color: INK, anchor: 'middle', bold: true });
+    if (p.dimCheck) {
+      const r: [number, number][] = [[X(p.x), Y(p.y)], [X(p.x + p.l), Y(p.y)], [X(p.x + p.l), Y(p.y + p.w)], [X(p.x), Y(p.y + p.w)]];
+      r.forEach((a, i) => shapes.push({ kind: 'line', a, b: r[(i + 1) % 4], stroke: '#c2410c', sw: 1.2, dash: true }));
+    }
+    shapes.push({ kind: 'text', at: [cx, cy + (big ? -1 : 2.5)], text: String(p.no), size: big ? 9 : 7, color: p.dimCheck ? '#c2410c' : INK, anchor: 'middle', bold: true });
     if (big) shapes.push({ kind: 'text', at: [cx, cy + 8], text: `${Math.round(p.kg)} kg`, size: 6, color: INK, anchor: 'middle' });
   }
   // longueur utilisée
@@ -384,7 +389,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
   const kEst = (width - 40) / (rear - front + W * DC);
 
   const raw: Shape[] = [];
-  const overlay: { at: Pt; text: string; r: number }[] = [];
+  const overlay: { at: Pt; text: string; r: number; check?: boolean }[] = [];
   const P = (s: Shape[]) => raw.push(...s);
 
   withProjection(oblique, () => {
@@ -508,7 +513,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
         push(solid(0, p.l, 0, p.w, 0, h, CRATE, shade(CRATE, -0.55), 2, 0.4));
         for (let z = 14; z < h; z += 14) push([{ kind: 'line', a: project(0, p.w, z), b: project(p.l, p.w, z), stroke: shade(CRATE, -0.4), sw: 0.3, opacity: 0.7 }]);
       } else push(solid(0, p.l, 0, p.w, 0, h, fam === 'carton' ? KRAFT : '#c9d1db', '#6b5a45', 2, 0.4));
-      overlay.push({ at: project(p.x + p.l / 2, p.y + p.w / 2, h), text: String(p.no), r: Math.min(p.l, p.w) });
+      overlay.push({ at: project(p.x + p.l / 2, p.y + p.w / 2, h), text: String(p.no), r: Math.min(p.l, p.w), check: !!p.dimCheck });
     }
 
     // cadre arrière, longeron bas et arêtes du volume (côté ouvert)
@@ -569,8 +574,8 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
   for (const o of overlay) {
     const c = T(o.at);
     const br = Math.max(4, Math.min(6.5, o.r * k * 0.28));
-    shapes.push({ kind: 'circle', c, r: br, fill: '#ffffff', stroke: '#2b3442', sw: 0.8 });
-    shapes.push({ kind: 'text', at: [c[0], c[1] + 0.3], text: o.text, size: br * 1.25, color: '#2b3442', anchor: 'middle', bold: true });
+    shapes.push({ kind: 'circle', c, r: br, fill: o.check ? '#fff1e6' : '#ffffff', stroke: o.check ? '#c2410c' : '#2b3442', sw: o.check ? 1.1 : 0.8 });
+    shapes.push({ kind: 'text', at: [c[0], c[1] + 0.3], text: o.text, size: br * 1.25, color: o.check ? '#c2410c' : '#2b3442', anchor: 'middle', bold: true });
   }
   const h = pad + 10 + (Math.max(...ys) - minY) * k + 8;
   return { shapes, w: width, h };

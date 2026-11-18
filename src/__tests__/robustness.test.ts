@@ -171,6 +171,7 @@ describe('configuration dont seul le volume est connu', () => {
     const pl = generatePackingList([item], [req('V-1', 4)], { consolidate: true });
     const p = pl.packages[0];
     expect([p.length, p.width, p.height]).toEqual([120, 80, 80]);
+    expect(p.dimCheck).toBe('inferred');
     expect(planLoad(pl.packages, 'auto', 'road')!.bins[0].placements).toHaveLength(1);
   });
 });

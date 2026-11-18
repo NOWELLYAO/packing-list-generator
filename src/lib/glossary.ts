@@ -49,6 +49,10 @@ export const GLOSSARY = {
     title: 'Regrouper les petits articles',
     text: "Les colis de moins de 0,15 m³ et 60 kg sont réunis dans un carton standard (40 × 30 × 30, 60 × 40 × 40 ou 80 × 60 × 50) ou sur une palette commune, comme le ferait un emballeur. Moins de colis à manipuler et un volume plus réaliste. Les gros colis gardent leur emballage d'origine.",
   },
+  dimCheck: {
+    title: 'Dimensions à vérifier',
+    text: "Cotes en orange précédées de « ≈ » : elles ne viennent pas d'une mesure lue telle quelle sur une PL. Soit la PL ne donnait que le volume (dimensions reconstituées : surface de l'emballage habituel de l'article et hauteur = volume ÷ surface), soit cette quantité n'a jamais été expédiée ainsi (dimensions calculées). Faites-les confirmer par le fournisseur ou mesurer avant de transmettre la PL.",
+  },
   partial: {
     title: 'Colis incomplet',
     text: "Le dernier colis n'est pas plein : par exemple 7 pompes avec 6 par palette donnent une palette pleine et une palette d'une pompe. Sa hauteur est recalculée, mais le poids de l'emballage (palette vide, environ 25 kg pour une 120 × 80) reste entier.",

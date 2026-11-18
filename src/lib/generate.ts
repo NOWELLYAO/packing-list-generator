@@ -66,6 +66,7 @@ interface Piece {
   net: number;
   gross: number;
   basis: 'reference' | 'partial';
+  dimsInferred?: boolean;
   /** volume réellement occupé par la marchandise (pour le regroupement) */
   goodsVolume: number;
 }
@@ -145,6 +146,7 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     net: q * item.netWeightPerUnit,
     gross: q * item.netWeightPerUnit + packTare,
     basis,
+    dimsInferred: item.dimsInferred,
     // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
     // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
     goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
@@ -462,6 +464,15 @@ export function generatePackingList(
 
   // Convention L × l × H : la longueur est toujours la plus grande cote au sol
   for (const p of packages) if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+
+  // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi
+  const lineInferred = new Set(allPieces.filter((p) => p.dimsInferred).map((p) => p.lineIdx));
+  const codeLine = new Map(lines.map((l, i) => [l.code, i] as const));
+  for (const p of packages) {
+    const idx = p.contents.map((c) => codeLine.get(c.code)).filter((i): i is number => i !== undefined);
+    if (idx.some((i) => lineInferred.has(i))) p.dimCheck = 'inferred';
+    else if (idx.some((i) => lines[i].confidence === 'estimated' || lines[i].confidence === 'mixed')) p.dimCheck = 'estimated';
+  }
 
   // Indications de dessin : nombre d'unités et forme des articles
   const itemByCode = new Map<string, CatalogItem | undefined>();

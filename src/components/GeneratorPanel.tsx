@@ -236,9 +236,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                     {it && it.pn && it.pn !== it.code && <span className="mono"> · {it.pn}</span>}
                     {it ? (
                       packing && (
-                        <span className="chip">
+                        <span className={packing.dimsInferred ? 'chip chip-check' : 'chip'} title={packing.dimsInferred ? 'Dimensions reconstituées à partir du volume : à vérifier' : undefined}>
                           {packing.qtyPerPackage} / {packLabel(packing.packageType, lang)}
-                          {packing.length ? ` · ${packing.length}×${packing.width}×${packing.height}` : ''}
+                          {packing.length ? ` · ${packing.dimsInferred ? '≈ ' : ''}${packing.length}×${packing.width}×${packing.height}` : ''}
                         </span>
                       )
                     ) : (

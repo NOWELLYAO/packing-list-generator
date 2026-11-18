@@ -28,7 +28,7 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
         )}
         <div className="pkg-grid">
           {groupIdentical(pl.packages).map(({ first: p, nos }) => (
-            <article key={p.no} className={`pkg-card ${p.basis}`}>
+            <article key={p.no} className={`pkg-card ${p.basis}${p.dimCheck ? ' dimcheck' : ''}`}>
               <div className="pkg-head">
                 <div>
                   <div className="pkg-no">
@@ -47,6 +47,12 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
                       <span className="chip-with-tip">
                         <span className="chip chip-accent">groupé</span>
                         <InfoTip k="grouped" />
+                      </span>
+                    )}
+                    {p.dimCheck && (
+                      <span className="chip-with-tip">
+                        <span className="chip chip-check">≈ dimensions à vérifier</span>
+                        <InfoTip k="dimCheck" />
                       </span>
                     )}
                     {p.basis === 'partial' && (

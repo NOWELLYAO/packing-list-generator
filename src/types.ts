@@ -23,6 +23,8 @@ export interface CatalogItem {
   source: string; // fichier d'origine
   /** valeurs estimées à partir d'un colis partagé avec d'autres articles */
   mixed?: boolean;
+  /** L × l × H reconstitués à partir du volume (dimensions illisibles sur la PL) */
+  dimsInferred?: boolean;
   /** toutes les configurations d'emballage observées dans les PL importées */
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */
@@ -52,6 +54,8 @@ export interface PackVariant {
   source: string;
   /** nombre de fois où cette configuration a été vue */
   count: number;
+  /** L × l × H reconstitués à partir du volume */
+  dimsInferred?: boolean;
 }
 
 /** Champs reconnus lors de l'import d'un PL */
@@ -144,6 +148,8 @@ export interface PLPackage {
   groupSource?: 'history' | 'rule';
   /** pour le dessin : nombre d'unités posées sur la palette et forme des articles (longs : pompes immergées, moteurs) */
   load?: LoadHint;
+  /** dimensions à vérifier : 'inferred' = reconstituées à partir du volume, 'estimated' = calculées (jamais expédié ainsi) */
+  dimCheck?: 'inferred' | 'estimated';
 }
 
 export interface LoadHint {
