@@ -337,7 +337,11 @@ tr.hdr td { background: var(--accent-soft); font-weight: 600; }
 
 /* ---------- Mobile ---------- */
 @media (max-width: 760px) {
-  .topbar { padding: 0.55rem 1rem; padding-top: calc(0.55rem + env(safe-area-inset-top)); }
+  /* pas de flou sur l'en-tête sur mobile : Safari rattacherait la barre d'onglets (position fixe) à l'en-tête au lieu de l'écran */
+  .topbar {
+    padding: 0.55rem 1rem; padding-top: calc(0.55rem + env(safe-area-inset-top));
+    background: rgba(255, 255, 255, 0.97); backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
   .nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; justify-content: space-around;
     background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
