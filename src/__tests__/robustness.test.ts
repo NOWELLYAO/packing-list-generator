@@ -296,3 +296,18 @@ describe('cohérence physique (une fois pour toutes)', () => {
     expect(p.grossWeight - p.netWeight).toBeGreaterThanOrEqual(15);
   });
 });
+
+describe('palette dont seul le volume est connu', () => {
+  it('une seule pompe (0,207 m³) : demi-palette 80 × 60 × 43, pas une 120 × 80 de 22 cm', () => {
+    const item = { ...CATALOG[0], code: 'SL-1', pn: 'SL-1', description: 'Pompe test SL', variants: [{ qtyPerPackage: 1, packageType: 'PALLET', length: 0, width: 0, height: 0, volumePerPackage: 0.207, netWeightPerUnit: 96, grossWeightPerUnit: 116, mixed: false, source: 'a', count: 1 }] };
+    const p = generatePackingList([item], [req('SL-1', 1)], { consolidate: true }).packages[0];
+    expect([p.length, p.width, p.height]).toEqual([80, 60, 43]);
+    expect(p.dimCheck).toBe('inferred');
+  });
+  it('un carton de réemballage reste signalé « à vérifier »', () => {
+    const item = { ...CATALOG[0], code: 'F-2', pn: 'F-2', description: 'Flotteur test', variants: [{ qtyPerPackage: 50, packageType: 'Pallet', length: 120, width: 80, height: 54, volumePerPackage: 0.5184, netWeightPerUnit: 1.55, grossWeightPerUnit: 2.4, mixed: false, source: 'a', count: 1 }] };
+    const p = generatePackingList([item], [req('F-2', 1)], { consolidate: true }).packages[0];
+    expect(p.type).toBe('Carton');
+    expect(p.dimCheck).toBe('estimated');
+  });
+});

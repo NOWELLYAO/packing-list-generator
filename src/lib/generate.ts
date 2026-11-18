@@ -586,7 +586,7 @@ export function generatePackingList(
 
   // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi
   const lineInferred = new Set(allPieces.filter((p) => p.dimsInferred).map((p) => p.lineIdx));
-  const lineSimilar = new Set(allPieces.filter((p) => p.similar).map((p) => p.lineIdx));
+  const lineSimilar = new Set(allPieces.filter((p) => p.similar || p.repacked).map((p) => p.lineIdx));
   const codeLine = new Map(lines.map((l, i) => [l.code, i] as const));
   for (const p of packages) {
     const idx = p.contents.map((c) => codeLine.get(c.code)).filter((i): i is number => i !== undefined);

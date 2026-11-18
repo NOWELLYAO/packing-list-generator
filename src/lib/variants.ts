@@ -51,6 +51,13 @@ export function completeDims<V extends { packageType: string; length: number; wi
         : /pal|eur|plate/.test(t)
           ? [120, 80]
           : null;
+  // palette sans empreinte connue : une charge de moins de 20 cm sur une 120 × 80 n'est pas plausible (une pompe de 96 kg
+  // ne fait pas 7 cm de haut) → on prend la demi-palette 80 × 60 si elle donne une hauteur réaliste
+  if (fp && !same && !named && fp[0] === 120 && fp[1] === 80) {
+    const h120 = (v.volumePerPackage * 1e6) / (120 * 80);
+    const h80 = (v.volumePerPackage * 1e6) / (80 * 60);
+    if (h120 < 35 && h80 >= 30) [fp[0], fp[1]] = [80, 60];
+  }
   if (fp) {
     const h = Math.round((v.volumePerPackage * 1e6) / (fp[0] * fp[1]));
     // palette « par défaut » sans place pour une charge (< 20 cm) : ce n'était pas une palette
