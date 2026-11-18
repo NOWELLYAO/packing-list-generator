@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { PackingList } from '../types';
-import { loadPlanDrawing, planLoad, VEHICLES, type TransportMode } from '../lib/loadPlan';
+import { loadPlan3D, loadPlanDrawing, planLoad, VEHICLES, type TransportMode } from '../lib/loadPlan';
 import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
@@ -151,12 +151,14 @@ export default function TransportPanel({ pl, accent, mode, setMode }: Props) {
                 {plan.bins.length > 1 ? ` n° ${i + 1}` : ''} · {fmt(b.weight, 0)} kg · {b.placements.length} colis · {fmt(b.usedLength / 100, 2)} m
                 utilisés
               </div>
+              <Drawing pic={loadPlan3D(b, lang, 760)} className="plan-svg plan-3d" title="Vue 3D du chargement" />
+              <div className="plan-sub">Vue de dessus (rangement exact)</div>
               <Drawing pic={loadPlanDrawing(b, accent, lang, 640)} className="plan-svg" title="Plan de chargement" />
             </div>
           ))}
           {plan.unplaced.length > 0 && <div className="banner warn">Colis {plan.unplaced.join(', ')} : trop grand(s) pour ce véhicule.</div>}
           <p className="hint">
-            Vue de dessus, colis posés au sol sans gerbage (hypothèse prudente), les plus lourds vers le fond. Point rouge :
+            Vue 3D : véhicule ouvert (paroi avant et toit retirés), chaque colis numéroté comme sur la PL. Vue de dessus : colis posés au sol sans gerbage (hypothèse prudente), les plus lourds vers le fond. Dimensions des véhicules indicatives. Point rouge :
             centre de gravité <InfoTip k="cog" />.
             {mode === 'sea' && ' En dessous d’environ 15 m³, le groupage (LCL) est souvent plus économique qu’un conteneur complet.'}
           </p>

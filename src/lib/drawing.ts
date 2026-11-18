@@ -51,7 +51,7 @@ export function familyOf(type: string): Family {
   return 'other';
 }
 
-const KRAFT = '#d2b48c';
+export const KRAFT = '#d2b48c';
 const INK = '#2b3442';
 
 /* ------------------------------------------------------------------ */
@@ -59,22 +59,36 @@ const INK = '#2b3442';
 /* ------------------------------------------------------------------ */
 
 const C30 = Math.cos(Math.PI / 6);
-const iso = (a: number, b: number, z: number): Pt => [(a - b) * C30, (a + b) * 0.5 - z];
+const isoProj = (a: number, b: number, z: number): Pt => [(a - b) * C30, (a + b) * 0.5 - z];
+/** Projection courante : isométrique pour les schémas de colis, oblique pour les véhicules */
+let PROJ: (a: number, b: number, z: number) => Pt = isoProj;
+const iso = (a: number, b: number, z: number): Pt => PROJ(a, b, z);
+/** Exécute fn avec une autre projection (linéaire) puis revient à l'isométrique */
+export function withProjection<T>(proj: (a: number, b: number, z: number) => Pt, fn: () => T): T {
+  const prev = PROJ;
+  PROJ = proj;
+  try {
+    return fn();
+  } finally {
+    PROJ = prev;
+  }
+}
+export { iso as project };
 
 
 
 /* ---------- primitives de rendu réaliste (repère modèle, en cm) ---------- */
-type V3 = [number, number, number];
+export type V3 = [number, number, number];
 const I3 = (p: V3) => iso(p[0], p[1], p[2]);
 const add3 = (p: V3, q: V3, f = 1): V3 => [p[0] + q[0] * f, p[1] + q[1] * f, p[2] + q[2] * f];
-type Push = (s: Shape[]) => void;
+export type Push = (s: Shape[]) => void;
 
 /** Quadrilatère plan o, o+u, o+u+v, o+v */
-function quad(o: V3, u: V3, v: V3, fill: string, stroke?: string, sw?: number, opacity?: number): Shape {
+export function quad(o: V3, u: V3, v: V3, fill: string, stroke?: string, sw?: number, opacity?: number): Shape {
   return { kind: 'poly', pts: [I3(o), I3(add3(o, u)), I3(add3(add3(o, u), v)), I3(add3(o, v))], fill, stroke, sw, opacity };
 }
 /** Face avec dégradé (bandes successives le long de u) */
-function gradQuad(o: V3, u: V3, v: V3, base: string, k0: number, k1: number, n: number): Shape[] {
+export function gradQuad(o: V3, u: V3, v: V3, base: string, k0: number, k1: number, n: number): Shape[] {
   const out: Shape[] = [];
   for (let i = 0; i < n; i++) {
     const c = shade(base, n === 1 ? k0 : k0 + ((k1 - k0) * i) / (n - 1));
@@ -83,7 +97,7 @@ function gradQuad(o: V3, u: V3, v: V3, base: string, k0: number, k1: number, n: 
   return out;
 }
 /** Arêtes visibles d'un pavé */
-function edges(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, stroke: string, sw: number): Shape[] {
+export function edges(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, stroke: string, sw: number): Shape[] {
   const L = (p: V3, q: V3): Shape => ({ kind: 'line', a: I3(p), b: I3(q), stroke, sw });
   return [
     L([a0, b1, z0], [a1, b1, z0]), L([a1, b1, z0], [a1, b0, z0]),
@@ -92,7 +106,7 @@ function edges(a0: number, a1: number, b0: number, b1: number, z0: number, z1: n
   ];
 }
 /** Pavé plein éclairé en haut à gauche, avec dégradés */
-function solid(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, base: string, stroke: string, n = 1, sw = 0.45): Shape[] {
+export function solid(a0: number, a1: number, b0: number, b1: number, z0: number, z1: number, base: string, stroke: string, n = 1, sw = 0.45): Shape[] {
   return [
     ...gradQuad([a0, b1, z0], [a1 - a0, 0, 0], [0, 0, z1 - z0], base, -0.02, -0.16, n),
     ...gradQuad([a1, b0, z0], [0, b1 - b0, 0], [0, 0, z1 - z0], base, -0.24, -0.36, Math.max(1, Math.ceil(n / 2))),
@@ -103,9 +117,9 @@ function solid(a0: number, a1: number, b0: number, b1: number, z0: number, z1: n
 /** variation de teinte déterministe (planches) */
 const tone = (i: number) => [0.03, -0.05, 0.06, -0.02, 0.0, -0.07, 0.04][i % 7];
 
-const WOOD_PALLET = '#d4ad7a';
+export const WOOD_PALLET = '#d4ad7a';
 
-function drawPallet(push: Push, L: number, l: number, H: number, px: number) {
+export function drawPallet(push: Push, L: number, l: number, H: number, px: number) {
   const pb = Math.min(14.4, H * 0.35); // socle
   const t = pb * 0.16; // épaisseur des planches
   const dark = shade(WOOD_PALLET, -0.55);
@@ -187,9 +201,9 @@ function drawLoad(push: Push, L: number, l: number, z0: number, H: number, px: n
   void px;
 }
 
-const CRATE = '#d9b483';
+export const CRATE = '#d9b483';
 
-function drawCrate(push: Push, L: number, l: number, H: number, px: number) {
+export function drawCrate(push: Push, L: number, l: number, H: number, px: number) {
   const dark = shade(CRATE, -0.55);
   const sk = H >= 25 ? Math.min(9, H * 0.15) : 0; // patins (passage de fourches)
   if (sk > 0) {
@@ -269,7 +283,7 @@ function drawCrate(push: Push, L: number, l: number, H: number, px: number) {
   void px;
 }
 
-function drawCarton(push: Push, L: number, l: number, H: number, px: number, z0: number) {
+export function drawCarton(push: Push, L: number, l: number, H: number, px: number, z0: number) {
   const dark = shade(KRAFT, -0.5);
   push(solid(0, L, 0, l, z0, H, KRAFT, dark, 14, 0.5));
   // cannelure visible (épaisseur du carton) sur les arêtes hautes

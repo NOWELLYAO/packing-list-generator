@@ -89,11 +89,11 @@ export const GLOSSARY = {
   },
   loadPlan: {
     title: 'Plan de chargement',
-    text: "Vue de dessus du véhicule : chaque rectangle est un colis, numéroté comme sur la PL. Les colis sont posés au sol sans être empilés (hypothèse prudente), les plus lourds vers le fond. L'application essaie plusieurs rangements et garde celui qui demande le moins de véhicules et équilibre le mieux la charge.",
+    text: "Vue 3D du véhicule ouvert (paroi avant et toit retirés) puis vue de dessus : chaque colis est numéroté comme sur la PL. Les colis sont posés au sol sans être empilés (hypothèse prudente), les plus lourds vers le fond. L'application essaie plusieurs rangements et garde celui qui demande le moins de véhicules et équilibre le mieux la charge.",
   },
   vehicle: {
     title: 'Transport proposé',
-    text: "Le plus petit moyen de transport dans lequel tous les colis tiennent au sol, en respectant la hauteur de porte (228 cm pour un conteneur standard, 258 cm pour un High Cube) et la charge utile. Vous pouvez imposer un autre véhicule avec les boutons au-dessus.",
+    text: "Le plus petit moyen de transport dans lequel tous les colis tiennent au sol, en respectant la hauteur de porte (228 cm pour un conteneur standard, 258 cm pour un High Cube) et la charge utile. Flotte : conteneurs 10' (sur demande), 20', 40', 40' HC ; mini-utilitaire, fourgon 12 m³, camion 20 m³, porteurs 12 t et 19 t, semi-remorque. Dimensions intérieures indicatives. Vous pouvez imposer un autre véhicule avec les boutons au-dessus.",
   },
   ldm: {
     title: 'Mètres de plancher (LDM)',

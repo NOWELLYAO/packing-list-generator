@@ -429,6 +429,8 @@ label.has-error input { border-color: var(--danger); }
 .plan-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.6rem; margin-bottom: 0.6rem; overflow-x: auto; }
 .plan-title { font-weight: 600; font-size: 0.88rem; margin: 0.1rem 0.3rem 0.3rem; }
 .plan-svg { width: 100%; min-width: 520px; height: auto; display: block; }
+.plan-3d { margin-bottom: 0.4rem; }
+.plan-sub { font-size: 0.75rem; color: var(--muted); margin: 0.2rem 0.3rem; }
 .vehicle-select { margin-bottom: 0.2rem; }
 .vehicle-select button:disabled { opacity: 0.35; cursor: not-allowed; }
 

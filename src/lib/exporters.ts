@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
 import { formatNos, groupIdentical, packageDrawing, pictureToSvg, scaleStrip, type Picture } from './drawing';
-import { loadPlanDrawing, planLoad } from './loadPlan';
+import { loadPlan3D, loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
 
 /* ------------------------------------------------------------------ */
@@ -347,13 +347,20 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     const tmode = settings.transportMode ?? 'sea';
     const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
     if (plan) {
-      const firstPlan = loadPlanDrawing(plan.bins[0], settings.accent || DEFAULT_ACCENT, lang, 640);
-      // hauteur du dessin : 50 mm, réduite jusqu’à 32 mm si cela évite une page presque vide
+      // par véhicule : vue 3D (≤ 62 mm) puis vue de dessus (≤ 34 mm) ; réduites jusqu'à 70 % si cela évite une page presque vide
+      const D3_H = 62;
+      const TOP_H = 34;
       const tail = 3 + 6 + plan.warnings.length * 4.5; // espace sous le dessin + légende + alertes
+      const fitW = (pic: { w: number; h: number }, maxH: number) => Math.min(W - 2 * M, (maxH * pic.w) / pic.h);
+      const blockH = (b: (typeof plan.bins)[number], sc: number) => {
+        const p3 = loadPlan3D(b, lang, 640);
+        const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
+        return (p3.h * fitW(p3, D3_H * sc)) / p3.w + (pt.h * fitW(pt, TOP_H * sc)) / pt.w + 4;
+      };
       const room = bottom - yy - (6 + 18 + tail) - 0.5;
-      const PLAN_MAX_H = plan.bins.length === 1 && room >= 32 && room < 50 ? room : 50;
-      const planW = (pic: { w: number; h: number }) => Math.min(W - 2 * M, (PLAN_MAX_H * pic.w) / pic.h);
-      ensure(6 + 18 + (firstPlan.h * planW(firstPlan)) / firstPlan.w + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier plan
+      const full = blockH(plan.bins[0], 1);
+      const sc = plan.bins.length === 1 && room < full && room >= full * 0.7 ? Math.max(0.7, (room / full) * 0.99) : 1;
+      ensure(6 + 18 + blockH(plan.bins[0], sc) + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier véhicule
       yy = section(T.loadPlan, yy);
       const vName = lang === 'fr' ? plan.summary : plan.summaryEn;
       const facts: [string, string][] = [
@@ -378,10 +385,13 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       });
       yy += 18;
       for (const [i, b] of plan.bins.entries()) {
-        const pic = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
-        const pw = planW(pic);
-        const ph = (pic.h * pw) / pic.w;
-        ensure(ph + (plan.bins.length > 1 ? 6 : 2));
+        const p3 = loadPlan3D(b, lang, 640);
+        const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
+        const w3 = fitW(p3, D3_H * sc);
+        const wt = fitW(pt, TOP_H * sc);
+        const h3 = (p3.h * w3) / p3.w;
+        const ht = (pt.h * wt) / pt.w;
+        ensure(h3 + ht + 4 + (plan.bins.length > 1 ? 4 : 0));
         if (plan.bins.length > 1) {
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(9);
@@ -389,8 +399,10 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
           doc.text(`${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn} n° ${i + 1} — ${nf(b.weight, 0)} kg`, M, yy + 2);
           yy += 4;
         }
-        drawPicturePdf(doc, pic, M + (W - 2 * M - pw) / 2, yy, pw);
-        yy += ph + 3;
+        drawPicturePdf(doc, p3, M + (W - 2 * M - w3) / 2, yy, w3);
+        yy += h3 + 1;
+        drawPicturePdf(doc, pt, M + (W - 2 * M - wt) / 2, yy, wt);
+        yy += ht + 3;
       }
       ensure(6 + plan.warnings.length * 4.5);
       doc.setFont('helvetica', 'normal');
@@ -760,12 +772,15 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     for (const [i, b] of plan.bins.entries()) {
       ws3.getCell(r, 1).value = `${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn}${plan.bins.length > 1 ? ` n° ${i + 1}` : ''} — ${nf(b.weight, 0)} kg`;
       ws3.getCell(r, 1).font = { bold: true };
-      const img = await pictureToPng(loadPlanDrawing(b, accentHex, lang, 640));
-      if (img) {
-        const h = (720 * img.h) / img.w;
-        ws3.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: 0, row: r }, ext: { width: 720, height: h } });
-        r += Math.ceil(h / 20) + 2;
-      } else r += 2;
+      for (const pic of [loadPlan3D(b, lang, 640), loadPlanDrawing(b, accentHex, lang, 640)]) {
+        const img = await pictureToPng(pic);
+        if (img) {
+          const h = (720 * img.h) / img.w;
+          ws3.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: 0, row: r }, ext: { width: 720, height: h } });
+          r += Math.ceil(h / 20) + 1;
+        } else r += 1;
+      }
+      r += 1;
     }
     ws3.getCell(r, 1).value = T.loadNote;
     ws3.getCell(r, 1).font = { size: 9, color: { argb: 'FF6E7887' } };
