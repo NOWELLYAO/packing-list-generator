@@ -4,6 +4,8 @@
  * puis rendus par Drawing.tsx (SVG) ou drawShapesPdf (PDF) : mêmes schémas partout.
  */
 
+import type { LoadHint } from '../types';
+
 export type Pt = [number, number];
 export type Shape =
   | { kind: 'poly'; pts: Pt[]; fill: string; stroke?: string; sw?: number; opacity?: number }
@@ -119,7 +121,7 @@ const tone = (i: number) => [0.03, -0.05, 0.06, -0.02, 0.0, -0.07, 0.04][i % 7];
 
 export const WOOD_PALLET = '#d4ad7a';
 
-export function drawPallet(push: Push, L: number, l: number, H: number, px: number) {
+export function drawPallet(push: Push, L: number, l: number, H: number, px: number, hint?: LoadHint) {
   const pb = Math.min(14.4, H * 0.35); // socle
   const t = pb * 0.16; // épaisseur des planches
   const dark = shade(WOOD_PALLET, -0.55);
@@ -149,35 +151,108 @@ export function drawPallet(push: Push, L: number, l: number, H: number, px: numb
   for (const a of cols) push([{ kind: 'circle', c: iso(a + blkA / 2, l, pb / 2), r: 0.55, fill: '#5b4630' }]);
 
   const hl = H - pb;
-  if (hl > 0.5) drawLoad(push, L, l, pb, H, px);
+  if (hl > 0.5) drawLoad(push, L, l, pb, H, px, hint);
 }
 
-/** Charge de palette : cartons empilés sous film étirable */
-function drawLoad(push: Push, L: number, l: number, z0: number, H: number, px: number) {
-  const hl = H - z0;
+/**
+ * Disposition des unités sur la palette (en cellules nx × ny × nz) :
+ * - articles longs (SP, moteurs…) : couchés dans la plus grande longueur de la palette, en rangées et couches ;
+ * - autres : cartons dont la taille découle du nombre réel d'unités ;
+ * - sans indication : cartons d'environ 40 cm.
+ */
+export function loadGrid(L: number, l: number, hl: number, hint?: LoadHint): { nx: number; ny: number; nz: number; count: number } {
+  const q = hint?.units ?? 0;
+  if (q >= 1 && q <= 80) {
+    let best = { nx: 1, ny: 1, nz: 1, count: q, cost: Infinity };
+    for (let nx = 1; nx <= 12; nx++)
+      for (let ny = 1; ny <= 12; ny++)
+        for (let nz = 1; nz <= 12; nz++) {
+          const n = nx * ny * nz;
+          if (n < q || n > q * 1.5 + 1) continue;
+          const cx = L / nx;
+          const cy = l / ny;
+          const cz = hl / nz;
+          let cost: number;
+          if (hint!.long) {
+            // un article long occupe toute la longueur ; section à peu près carrée (carton tubulaire)
+            const along = L >= l ? nx : ny;
+            if (along !== 1) continue;
+            const cross = L >= l ? cy : cx;
+            // le moins de places vides possible ; cartons plutôt plus larges que hauts (couchés)
+            cost = (n - q) / q + 0.5 * Math.max(0, Math.log(cz / cross)) + 0.15 * Math.max(0, Math.log(cross / cz));
+          } else {
+            const d = [cx, cy, cz].sort((a, b) => b - a);
+            cost = Math.log(d[0] / d[2]) + 1.2 * ((n - q) / q) + (cz < 8 ? 2 : 0);
+          }
+          if (cost < best.cost) best = { nx, ny, nz, count: q, cost };
+        }
+    if (best.cost < Infinity) return best;
+  }
   const nx = Math.max(1, Math.min(4, Math.round(L / 42)));
   const ny = Math.max(1, Math.min(3, Math.round(l / 42)));
   const nz = Math.max(1, Math.min(5, Math.round(hl / 32)));
+  return { nx, ny, nz, count: nx * ny * nz };
+}
+
+/** Charge de palette : unités (cartons) empilées sous film étirable */
+function drawLoad(push: Push, L: number, l: number, z0: number, H: number, px: number, hint?: LoadHint) {
+  const hl = H - z0;
+  const { nx, ny, nz, count } = loadGrid(L, l, hl, hint);
   const cx = L / nx;
   const cy = l / ny;
   const cz = hl / nz;
-  const g = Math.min(0.6, cx * 0.02);
-  for (let kz = 0; kz < nz; kz++) {
-    const cells: [number, number][] = [];
-    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i === nx - 1 || j === ny - 1 || kz === nz - 1) cells.push([i, j]);
-    cells.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
-    for (const [i, j] of cells) {
-      const a0 = i * cx + g;
-      const b0 = j * cy + g;
-      const zz = z0 + kz * cz;
-      const base = shade(KRAFT, tone(i * 3 + j + kz * 2) * 0.7);
-      push(solid(a0, (i + 1) * cx - g, b0, (j + 1) * cy - g, zz, zz + cz - g * 0.5, base, shade(KRAFT, -0.45), 6, 0.3));
-      // ruban sur le dessus des cartons du haut
-      if (kz === nz - 1) {
-        const tw = Math.min(cy * 0.08, 2.5);
-        const bm = b0 + (cy - 2 * g) / 2;
-        push([quad([a0, bm - tw, zz + cz - g * 0.5], [cx - 2 * g, 0, 0], [0, 2 * tw, 0], '#c79e63', undefined, undefined, 0.8)]);
+  const g = Math.min(0.6, Math.min(cx, cy) * 0.03);
+  const long = !!hint?.long;
+  // ordre de remplissage : couche par couche, en partant du fond ; la dernière couche peut être incomplète
+  const cells: [number, number, number][] = [];
+  for (let kz = 0; kz < nz; kz++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) cells.push([i, j, kz]);
+  const used = cells.slice(0, count);
+  // peintre : couche après couche, puis du fond vers l'avant
+  used.sort((p, q) => p[2] - q[2] || p[0] + p[1] - (q[0] + q[1]));
+  const topOf = new Map<string, number>();
+  for (const [i, j, kz] of used) topOf.set(`${i},${j}`, Math.max(topOf.get(`${i},${j}`) ?? -1, kz));
+  for (const [i, j, kz] of used) {
+    let a0 = i * cx + g;
+    let a1 = (i + 1) * cx - g;
+    let b0 = j * cy + g;
+    let b1 = (j + 1) * cy - g;
+    if (long) {
+      // section réaliste d'un carton de pompe : pas plus large que 1,4 × sa hauteur, centré dans sa place
+      const maxW = cz * 1.4;
+      if (L >= l && b1 - b0 > maxW) {
+        const m = (b0 + b1) / 2;
+        [b0, b1] = [m - maxW / 2, m + maxW / 2];
+      } else if (L < l && a1 - a0 > maxW) {
+        const m = (a0 + a1) / 2;
+        [a0, a1] = [m - maxW / 2, m + maxW / 2];
       }
+    }
+    const zz = z0 + kz * cz;
+    const z1 = zz + cz - g * 0.5;
+    const base = shade(KRAFT, tone(i * 3 + j + kz * 2) * 0.7);
+    push(solid(a0, a1, b0, b1, zz, z1, base, shade(KRAFT, -0.45), long ? 2 : 4, 0.3));
+    const isTop = topOf.get(`${i},${j}`) === kz;
+    if (long) {
+      // carton long : bandes de ruban aux deux extrémités et au milieu
+      const alongA = L >= l;
+      for (const f of [0.08, 0.5, 0.92]) {
+        const w = Math.min((alongA ? a1 - a0 : b1 - b0) * 0.025, 3);
+        if (alongA) {
+          const x = a0 + (a1 - a0) * f - w;
+          push([quad([x, b1, zz], [2 * w, 0, 0], [0, 0, z1 - zz], '#c79e63', undefined, undefined, 0.85)]);
+          if (isTop) push([quad([x, b0, z1], [2 * w, 0, 0], [0, b1 - b0, 0], '#c79e63', undefined, undefined, 0.85)]);
+        } else {
+          const y = b0 + (b1 - b0) * f - w;
+          push([quad([a1, y, zz], [0, 2 * w, 0], [0, 0, z1 - zz], '#c79e63', undefined, undefined, 0.85)]);
+          if (isTop) push([quad([a0, y, z1], [a1 - a0, 0, 0], [0, 2 * w, 0], '#c79e63', undefined, undefined, 0.85)]);
+        }
+      }
+      // étiquette produit en bout de carton
+      if (alongA && b1 - b0 > 8 && z1 - zz > 7) push([quad([a1, b0 + (b1 - b0) * 0.3, zz + (z1 - zz) * 0.35], [0, (b1 - b0) * 0.4, 0], [0, 0, (z1 - zz) * 0.3], '#efe9dc', undefined, undefined, 0.8)]);
+    } else if (isTop) {
+      const tw = Math.min((b1 - b0) * 0.08, 2.5);
+      const bm = (b0 + b1) / 2;
+      push([quad([a0, bm - tw, z1], [a1 - a0, 0, 0], [0, 2 * tw, 0], '#c79e63', undefined, undefined, 0.8)]);
     }
   }
   // film étirable : voile clair + reflets
@@ -334,6 +409,7 @@ export function drawCarton(push: Push, L: number, l: number, H: number, px: numb
 }
 
 export interface PackageLike {
+  load?: LoadHint;
   no: number;
   type: string;
   length: number;
@@ -353,7 +429,24 @@ export interface DrawLabels {
  * Colis en perspective isométrique, à l'échelle de ses propres dimensions,
  * avec cotes L / l / H et poids brut.
  */
-export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabels, title?: string): Picture {
+/** Échelle qui ferait remplir la vignette par ce colis (sert de référence entre colis d'une même PL) */
+export function fitScale(p: { length: number; width: number; height: number }): number {
+  const L = Math.max(1, p.length || 40);
+  const l = Math.max(1, p.width || 30);
+  const H = Math.max(1, p.height || 30);
+  const corners = [0, L].flatMap((a) => [0, l].flatMap((b) => [0, H].map((z) => isoProj(a, b, z))));
+  const xs = corners.map((c) => c[0]);
+  const ys = corners.map((c) => c[1]);
+  return Math.min(150 / (Math.max(...xs) - Math.min(...xs)), 118 / (Math.max(...ys) - Math.min(...ys)));
+}
+/** Échelle de référence d'un ensemble de colis : celle du plus encombrant */
+export const refScale = (pkgs: { length: number; width: number; height: number }[]) => Math.min(...pkgs.filter((p) => p.length > 0).map(fitScale), Infinity);
+
+/**
+ * refK : échelle du plus gros colis de la PL. Les colis plus petits sont dessinés plus petits
+ * (taille relative adoucie, au moins 45 % de la vignette) pour que la différence de taille se voie.
+ */
+export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabels, title?: string, refK?: number): Picture {
   const W = 220;
   const Hh = 190;
   const L = Math.max(1, p.length || 40);
@@ -368,7 +461,8 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
   const ys = corners.map((c) => c[1]);
   const bw = Math.max(...xs) - Math.min(...xs);
   const bh = Math.max(...ys) - Math.min(...ys);
-  const k = Math.min(150 / bw, 118 / bh);
+  const kFit = Math.min(150 / bw, 118 / bh);
+  const k = refK && Number.isFinite(refK) && refK < kFit ? kFit * Math.max(0.45, Math.sqrt(refK / kFit)) : kFit;
   const ox = (W - bw * k) / 2 - Math.min(...xs) * k;
   const oy = 16 + (126 - bh * k) / 2 - Math.min(...ys) * k;
   const T = (pt: Pt): Pt => [ox + pt[0] * k, oy + pt[1] * k];
@@ -386,13 +480,13 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
     push([{ kind: 'poly', pts: [iso(0, 0, 0), iso(L, 0, 0), iso(L, l, 0), iso(0, l, 0)].map(([x, y]) => [x + off / k, y + (off * 0.7) / k] as Pt), fill: '#1b2430', opacity: op }]);
 
   const px = 1 / k; // 1 unité de dessin exprimée en cm du modèle
-  if (fam === 'pallet') drawPallet(push, L, l, H, px);
+  if (fam === 'pallet') drawPallet(push, L, l, H, px, p.load);
   else if (fam === 'crate') drawCrate(push, L, l, H, px);
   else if (fam === 'carton') drawCarton(push, L, l, H, px, 0);
   else push(solid(0, L, 0, l, 0, H, '#c9d1db', shade('#c9d1db', -0.5), 8));
 
   // ---- cotes ----
-  const d = Math.max(L, l, H) * 0.09;
+  const d = Math.max(Math.max(L, l, H) * 0.09, 9 / k); // écart des cotes : au moins 9 unités à l'écran
   const dimColor = shade(INK, 0.15);
   const fmt = (v: number) => `${Math.round(v).toLocaleString(labels.locale)} ${labels.cm}`;
   // longueur L : le long de l'arête avant gauche (b = l), décalée vers l'extérieur
@@ -476,8 +570,9 @@ export function scaleStrip(pkgs: PackageLike[], _accent: string, labels: DrawLab
       const hl = h - pb;
       if (hl > 0.5) {
         shapes.push(rect(x, base - pb, x + w, base - h, KRAFT, shade(KRAFT, -0.45), 0.4));
-        const nx = Math.max(1, Math.min(4, Math.round(Math.max(p.length, p.width) / 42)));
-        const nz = Math.max(1, Math.min(5, Math.round((p.height - 14.4) / 32)));
+        const grid = loadGrid(Math.max(p.length, p.width), Math.min(p.length, p.width), p.height - 14.4, p.load);
+        const nx = grid.nx;
+        const nz = grid.nz;
         for (let i = 1; i < nx; i++) shapes.push({ kind: 'line', a: [x + (w * i) / nx, base - pb], b: [x + (w * i) / nx, base - h], stroke: shade(KRAFT, -0.4), sw: 0.4 });
         for (let j = 1; j < nz; j++) shapes.push(hline(base - pb - (hl * j) / nz, x, x + w, shade(KRAFT, -0.4), 0.4));
         shapes.push(rect(x, base - pb, x + w, base - h, '#ffffff', undefined, undefined, 0.18));

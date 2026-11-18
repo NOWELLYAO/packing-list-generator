@@ -1,4 +1,5 @@
 import type { PLPackage } from '../types';
+import type { LoadHint } from '../types';
 import { CRATE, drawCarton, drawCrate, drawPallet, familyOf, KRAFT, project, quad, shade, solid, withProjection, WOOD_PALLET, type Picture, type Pt, type Shape } from './drawing';
 import { round } from './parseValues';
 
@@ -52,6 +53,7 @@ export interface Placement {
   kg: number;
   type: string;
   rotated: boolean;
+  load?: LoadHint;
 }
 
 export interface Bin {
@@ -123,7 +125,7 @@ function fillOne(v: Vehicle, items: PLPackage[], lambda: number): { placed: Plac
       rest.push(it);
       continue;
     }
-    const p: Placement = { no: it.no, x: best.x, y: best.y, l: best.l, w: best.w, h: it.height, kg: it.grossWeight, type: it.type, rotated: best.rot };
+    const p: Placement = { no: it.no, x: best.x, y: best.y, l: best.l, w: best.w, h: it.height, kg: it.grossWeight, type: it.type, rotated: best.rot, load: it.load };
     placed.push(p);
     weight += it.grossWeight;
     // découpe MaxRects des espaces libres intersectés
@@ -487,7 +489,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
       const small = Math.min(p.l, p.w) * kEst < 26;
       const h = Math.max(1, p.h);
       if (!small) {
-        if (fam === 'pallet') drawPallet(push, p.l, p.w, h, 1);
+        if (fam === 'pallet') drawPallet(push, p.l, p.w, h, 1, p.load);
         else if (fam === 'crate') drawCrate(push, p.l, p.w, h, 1);
         else if (fam === 'carton') drawCarton(push, p.l, p.w, h, 1, 0);
         else push(solid(0, p.l, 0, p.w, 0, h, '#c9d1db', '#5d6670', 4, 0.5));

@@ -4,6 +4,20 @@ import { round } from './parseValues';
 import { applyVariant, preferredVariant, variantsOf } from './variants';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
+/**
+ * Article long (pompes immergées SP/SQ, moteurs MS…) : emballé couché, dans la longueur.
+ * Reconnu par la désignation ou par un emballage unitaire très allongé déjà observé.
+ */
+export function isLongItem(item: CatalogItem | undefined): boolean {
+  if (!item) return false;
+  if (/^\s*(SP|SQE?|MS|MMS)\s?-?\d/i.test(item.description)) return true;
+  const elongated = (l: number, w: number, h: number) => {
+    const d = [l, w, h].filter((x) => x > 0).sort((a, b) => b - a);
+    return d.length === 3 && d[0] >= 3 * d[1];
+  };
+  return (item.variants ?? []).some((v) => v.qtyPerPackage === 1 && elongated(v.length, v.width, v.height)) || (item.qtyPerPackage === 1 && elongated(item.length, item.width, item.height));
+}
+
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
   const c = norm(code).replace(/\s/g, '');
   const p = norm(pn).replace(/\s/g, '');
@@ -448,6 +462,14 @@ export function generatePackingList(
 
   // Convention L × l × H : la longueur est toujours la plus grande cote au sol
   for (const p of packages) if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+
+  // Indications de dessin : nombre d'unités et forme des articles
+  const itemByCode = new Map<string, CatalogItem | undefined>();
+  lines.forEach((l, i) => itemByCode.set(l.code, lineItems[i]));
+  for (const p of packages) {
+    const units = Math.round(p.contents.reduce((s, c) => s + c.quantity, 0));
+    if (units >= 1) p.load = { units, long: p.contents.some((c) => isLongItem(itemByCode.get(c.code))) };
+  }
 
   // Poids par ligne article (hors tare des palettes groupées)
   for (const p of allPieces) {

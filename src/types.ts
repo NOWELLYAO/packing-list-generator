@@ -142,6 +142,13 @@ export interface PLPackage {
   basis: 'reference' | 'partial' | 'grouped';
   /** regroupement : 'history' = articles déjà réunis par Grundfos dans un même colis ; 'rule' = petits articles réunis */
   groupSource?: 'history' | 'rule';
+  /** pour le dessin : nombre d'unités posées sur la palette et forme des articles (longs : pompes immergées, moteurs) */
+  load?: LoadHint;
+}
+
+export interface LoadHint {
+  units: number;
+  long: boolean;
 }
 
 export interface GenerateOptions {

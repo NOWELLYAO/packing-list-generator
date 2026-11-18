@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
-import { formatNos, groupIdentical, packageDrawing, pictureToSvg, scaleStrip, type Picture } from './drawing';
+import { formatNos, groupIdentical, packageDrawing, pictureToSvg, refScale, scaleStrip, type Picture } from './drawing';
 import { loadPlan3D, loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
 
@@ -320,7 +320,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     // un schéma par groupe de colis identiques (sinon des dizaines de pages pour des palettes toutes pareilles)
     for (const { first: p, nos } of groups) {
       const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
-      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title);
+      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title, refScale(drawable));
       const cellH = (pic.h * cellW) / pic.w;
       if (col === 0) ensure(cellH + 8);
       const cx = M + col * cellW;
@@ -736,7 +736,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     let col = 0;
     for (const { first: p, nos } of groupIdentical(drawable)) {
       const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
-      const img = await pictureToPng(packageDrawing(p, accentHex, labels, title));
+      const img = await pictureToPng(packageDrawing(p, accentHex, labels, title, refScale(drawable)));
       ws2.getCell(r, col * 3 + 1).value = typeOf(p, lang);
       ws2.getCell(r, col * 3 + 1).font = { size: 9, color: { argb: 'FF6E7887' } };
       if (img) ws2.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: col * 3, row: r }, ext: { width: 230, height: (230 * img.h) / img.w } });
