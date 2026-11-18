@@ -5,7 +5,7 @@ import { familyOf } from '../lib/drawing';
 import { accuracySummary, blindTest } from '../lib/realCheck';
 import { labelQrText } from '../lib/labels';
 import { variantsOf } from '../lib/variants';
-import { generatePackingList } from '../lib/generate';
+import { generatePackingList, isLongItem } from '../lib/generate';
 import { formatNos, groupIdentical, scaleStrip } from '../lib/drawing';
 import { packLabel } from '../lib/i18n';
 import { parseSapPackingList, sapToCatalog } from '../lib/sapPackingList';
@@ -308,6 +308,21 @@ describe('palette dont seul le volume est connu', () => {
     const item = { ...CATALOG[0], code: 'F-2', pn: 'F-2', description: 'Flotteur test', variants: [{ qtyPerPackage: 50, packageType: 'Pallet', length: 120, width: 80, height: 54, volumePerPackage: 0.5184, netWeightPerUnit: 1.55, grossWeightPerUnit: 2.4, mixed: false, source: 'a', count: 1 }] };
     const p = generatePackingList([item], [req('F-2', 1)], { consolidate: true }).packages[0];
     expect(p.type).toBe('Carton');
+    expect(p.dimCheck).toBe('estimated');
+  });
+});
+
+describe('articles longs (pompes immergées)', () => {
+  it('SQ, SQE, SQF, SP, MS sont reconnus comme longs', () => {
+    for (const d of ['SQF 3A-10Rp 1', 'SQ 5-70 1.85kW', 'SQE 2-55', 'SP3A-25 Rp1¼', 'MS402 3x380']) expect(isLongItem({ ...CATALOG[0], description: d, variants: [] })).toBe(true);
+    expect(isLongItem({ ...CATALOG[0], description: 'CR10-10 A-A-A-E', variants: [] })).toBe(false);
+  });
+  it('1 SQF d’une palette de 5 : carton long, pas un carton 60 × 40 × 40', () => {
+    const item = { ...CATALOG[0], code: 'SQF-1', pn: 'SQF-1', description: 'SQF 3A-10Rp 1', variants: [{ qtyPerPackage: 5, packageType: 'Pallet', length: 122, width: 80, height: 32, volumePerPackage: 0.312, netWeightPerUnit: 10.9, grossWeightPerUnit: 15.4, mixed: false, source: 'a', count: 2 }] };
+    const p = generatePackingList([item], [req('SQF-1', 1)], { consolidate: true }).packages[0];
+    expect(p.type).toBe('Carton');
+    expect(p.length).toBeGreaterThanOrEqual(110);
+    expect(p.width).toBeLessThan(30);
     expect(p.dimCheck).toBe('estimated');
   });
 });

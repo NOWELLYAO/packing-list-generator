@@ -10,7 +10,8 @@ import { applyVariant, preferredVariant, variantsOf } from './variants';
  */
 export function isLongItem(item: CatalogItem | undefined): boolean {
   if (!item) return false;
-  if (/^\s*(SP|SQE?|MS|MMS)\s?-?\d/i.test(item.description)) return true;
+  // pompes immergées SP, SQ, SQE, SQF, moteurs MS / MMS : longues, emballées couchées
+  if (/^\s*(SP|SQ[EF]?|MS|MMS)\s?-?\d/i.test(item.description)) return true;
   const elongated = (l: number, w: number, h: number) => {
     const d = [l, w, h].filter((x) => x > 0).sort((a, b) => b - a);
     return d.length === 3 && d[0] >= 3 * d[1];
@@ -246,7 +247,15 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
       const repack = !isLongItem(item) && goodsRem > 0 && goodsRem <= REPACK_MAX_M3 && rem * item.netWeightPerUnit <= REPACK_MAX_KG
         ? REPACK_CARTONS.find(([l, w, h]) => (l * w * h * FILL) / 1e6 >= goodsRem)
         : undefined;
-      if (repack) {
+      // article long (pompe immergée) en petit reliquat : carton long à sa longueur, section d'après la palette observée
+      if (!repack && isLongItem(item) && goodsRem > 0 && goodsRem <= REPACK_MAX_M3 && rem * item.netWeightPerUnit <= REPACK_MAX_KG) {
+        const len = Math.max(item.length, item.width) - 2;
+        const side = Math.max(10, Math.ceil(Math.sqrt((goodsRem * 1e6) / len)));
+        const vol = (len * side * side) / 1e6;
+        const cartonTare = round(0.3 + vol * 8, 2);
+        const piece = mk(rem, side, 'reference', vol, rem * innerPerUnit + cartonTare);
+        out.push({ ...piece, gross: rem * item.netWeightPerUnit + rem * innerPerUnit + cartonTare, type: 'Carton', l: len, w: side, h: side, goodsVolume: goodsRem, repacked: true });
+      } else if (repack) {
         // petit reliquat (ex. 1 flotteur sur une palette de 50) : réemballé dans un carton à sa taille
         const [cl, cw, ch] = repack;
         const cartonTare = round(0.3 + (cl * cw * ch) / 1e6 * 8, 2);
