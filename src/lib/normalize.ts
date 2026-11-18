@@ -251,7 +251,7 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
     if (!merged.coPacked?.length) delete merged.coPacked;
     // fichier de corrections (fiche « corrigée à la main » plus récente, ou retour explicite au choix automatique) :
     // il l'emporte sur la fiche existante
-    const newer = !prev.updatedAt || (it.updatedAt || '') > prev.updatedAt;
+    const newer = !prev.updatedAt || (it.updatedAt || '') >= prev.updatedAt;
     if (it.manual === true && newer) {
       map.set(k, { ...merged, ...packFields(it), manual: true, mixed: false, packShare: undefined, dimsInferred: undefined, unit: it.unit || merged.unit });
       continue;
