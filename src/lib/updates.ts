@@ -46,21 +46,91 @@ export async function newVersionAvailable(): Promise<boolean> {
 
 import { registerSW } from 'virtual:pwa-register';
 
-/** Active la nouvelle version (service hors ligne) puis recharge ; à défaut, simple rechargement */
-let applyUpdate: (() => Promise<void>) | null = null;
-export async function updateNow() {
-  if (applyUpdate) await applyUpdate();
-  else window.location.reload();
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Attend qu'un service worker passe à l'état voulu (ou abandonne après `ms`) */
+function waitState(sw: ServiceWorker, states: string[], ms: number): Promise<boolean> {
+  if (states.includes(sw.state)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(false), ms);
+    sw.addEventListener('statechange', () => {
+      if (states.includes(sw.state)) {
+        clearTimeout(t);
+        resolve(true);
+      } else if (sw.state === 'redundant') {
+        clearTimeout(t);
+        resolve(false);
+      }
+    });
+  });
+}
+
+/** Recharge en contournant tout cache (adresse unique) */
+function hardReload() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('v', String(Date.now()));
+  window.location.replace(url.toString());
+}
+
+/**
+ * Passe à la nouvelle version, de façon fiable :
+ * 1. le service hors ligne télécharge la nouvelle version si ce n'est pas déjà fait ;
+ * 2. il l'active, puis la page se recharge ;
+ * 3. à défaut (téléchargement bloqué, iPhone…), le service et ses caches sont effacés
+ *    et la page est rechargée depuis le serveur.
+ * La base d'articles, l'historique et les réglages (stockage du navigateur) ne sont pas touchés.
+ */
+export async function updateNow(): Promise<void> {
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        let waiting = reg.waiting;
+        if (!waiting) {
+          await reg.update().catch(() => {});
+          const installing = reg.installing;
+          if (installing && (await waitState(installing, ['installed', 'activated'], 20_000))) waiting = reg.waiting;
+          else waiting = reg.waiting;
+        }
+        if (waiting) {
+          const switched = new Promise<boolean>((resolve) => {
+            navigator.serviceWorker.addEventListener('controllerchange', () => resolve(true), { once: true });
+            setTimeout(() => resolve(false), 8_000);
+          });
+          waiting.postMessage({ type: 'SKIP_WAITING' });
+          if (await switched) {
+            hardReload();
+            return;
+          }
+        }
+        // repli : on repart de zéro (l'application se remet en cache au chargement suivant)
+        await Promise.all((await navigator.serviceWorker.getRegistrations()).map((r) => r.unregister()));
+      }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => /workbox|precache|runtime/i.test(k)).map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* on recharge quand même */
+  }
+  await wait(50);
+  hardReload();
 }
 
 export function installUpdateHandlers(onNewVersion: () => void) {
+  // nettoie le paramètre ajouté par le rechargement forcé
+  const u = new URL(window.location.href);
+  if (u.searchParams.has('v')) {
+    u.searchParams.delete('v');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  }
   // Service hors ligne : l'application reste utilisable sans réseau une fois ouverte une première fois
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    const update = registerSW({
+    registerSW({
       onNeedRefresh: () => onNewVersion(),
       onOfflineReady: () => {},
     });
-    applyUpdate = () => update(true);
   }
   // Vite signale ici l'échec de chargement d'un module à la demande
   window.addEventListener('vite:preloadError', (event) => {

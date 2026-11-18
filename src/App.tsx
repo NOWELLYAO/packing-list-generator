@@ -72,6 +72,7 @@ export default function App() {
     window.addEventListener(STORAGE_ERROR_EVENT, onErr);
     return () => window.removeEventListener(STORAGE_ERROR_EVENT, onErr);
   }, []);
+  const [updating, setUpdating] = useState(false);
   useEffect(() => installUpdateHandlers(() => setUpdateReady(true)), []);
 
   useEffect(() => {
@@ -169,8 +170,15 @@ export default function App() {
       {updateReady && (
         <div className="update-banner">
           <span>Une nouvelle version est disponible.</span>
-          <button className="btn small primary" onClick={() => void updateNow()}>
-            Mettre à jour
+          <button
+            className="btn small primary"
+            disabled={updating}
+            onClick={() => {
+              setUpdating(true);
+              void updateNow();
+            }}
+          >
+            {updating ? 'Mise à jour…' : 'Mettre à jour'}
           </button>
         </div>
       )}
