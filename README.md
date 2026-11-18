@@ -2,6 +2,8 @@
 
 Application web (React + TypeScript + Vite) qui génère des **Packing Lists** à partir des Packing Lists que vous avez déjà émises.
 
+👉 **Application en ligne : https://plgen.vercel.app** (installable sur téléphone : Partager → Sur l'écran d'accueil)
+
 ## Fonctionnement
 
 1. **Importer des PL** (Excel `.xlsx/.xls`, CSV, PDF texte ou scanné)
