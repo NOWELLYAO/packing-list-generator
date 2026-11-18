@@ -149,6 +149,7 @@ export default function SettingsPanel({ settings, setSettings, toast, cloud }: P
           Base d'articles, historique et réglages sont enregistrés dans ce navigateur, sur cet appareil. Pour les retrouver
           sur un autre appareil, sauvegardez la base (Articles → Plus… → Sauvegarder) puis chargez-la là-bas.
         </p>
+        <p className="hint">Version de l'application : {__BUILD__}</p>
       </div>
     </div>
   );

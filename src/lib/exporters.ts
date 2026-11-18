@@ -470,6 +470,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     doc.text(`${settings.companyName ? settings.companyName + ' — ' : ''}${T.footer(fmtDate(pl.date, lang))}`, M, H - 6.5);
     doc.text(T.page(i, pages), W - M, H - 6.5, { align: 'right' });
   }
+  doc.setProperties({ creator: `PL Generator ${__BUILD__}` });
   return doc.output('blob');
 }
 

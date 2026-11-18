@@ -3,7 +3,11 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
+// version visible (Réglages, propriétés des PDF) : savoir quelle version a produit un document
+const BUILD = `${new Date().toISOString().slice(0, 16).replace('T', ' ')} · ${(process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}`
+
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(BUILD) },
   plugins: [
     react(),
     // Application installable et utilisable hors ligne (entrepôt sans réseau)
