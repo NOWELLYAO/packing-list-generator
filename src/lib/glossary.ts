@@ -123,6 +123,10 @@ export const GLOSSARY = {
     title: 'Emballages observés',
     text: "Toutes les façons dont cet article a été emballé dans vos PL (par exemple 4 ou 6 pompes par palette). À la génération, l'application choisit la plus adaptée à la quantité : d'abord un envoi identique s'il existe, sinon le moins de colis possible.",
   },
+  health: {
+    title: 'Santé de la base',
+    text: "Part des articles dont l'emballage repose sur une mesure réellement relevée sur une PL (ou corrigée à la main). Les autres reposent sur une estimation : dimensions illisibles reconstituées à partir du volume, article vu seulement dans un colis partagé, emballage repris d'un article similaire, ou données fausses. Corrigez-les en priorité (les plus graves et les plus expédiés sont en tête de liste) : ouvrez l'article et saisissez les dimensions et poids réels du colis. L'article devient alors « Fiable » et toutes vos PL en profitent.",
+  },
   toCheck: {
     title: 'À vérifier',
     text: 'Articles dont les données sont incomplètes ou approximatives : vus seulement en colis mixte, sans dimensions ou sans poids. Corrigez-les en priorité, surtout ceux que vous expédiez souvent.',

@@ -578,3 +578,19 @@ td.delta small { font-weight: 500; }
 .labels-form .segmented { display: flex; width: 100%; }
 .labels-form .segmented button { flex: 1; white-space: normal; }
 .modal.labels { width: min(560px, 100%); }
+
+/* ---------- Santé de la base ---------- */
+.health-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem 1rem; margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; box-shadow: var(--shadow); }
+.health-main { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.health-main > div:nth-child(2) { flex: 1; min-width: 200px; }
+.health-main .section-title { margin: 0; }
+.health-score { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 74px; height: 74px; border-radius: 50%; font-variant-numeric: tabular-nums; flex: none; }
+.health-score b { font-size: 1.25rem; line-height: 1; }
+.health-score small { font-size: 0.68rem; font-weight: 600; }
+.health-score.good { background: #e7f6ee; color: var(--ok); }
+.health-score.mid { background: var(--warn-soft); color: var(--warn); }
+.health-score.low { background: var(--danger-soft); color: var(--danger); }
+.health-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip.health-suspect, .chip.health-nodata { background: var(--danger-soft); color: var(--danger); }
+.chip.health-shared, .chip.health-inferred, .chip.health-similar { background: #fff1e6; color: #c2410c; }
+.health-reason { font-size: 0.78rem; color: #9a3412; white-space: normal !important; overflow: visible !important; }

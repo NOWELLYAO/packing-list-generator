@@ -95,12 +95,12 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal aria-labelledby="item-editor-title" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <div className="row">
             <BoxIcon l={draft.length} w={draft.width} h={draft.height} size={40} />
             <div>
-              <h2>{isNew ? 'Nouvel article' : draft.description || draft.code}</h2>
+              <h2 id="item-editor-title">{isNew ? 'Nouvel article' : draft.description || draft.code}</h2>
               {!isNew && <span className="hint mono">{draft.code}</span>}
             </div>
           </div>
@@ -125,10 +125,10 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
               </span>
             </div>
           )}
-          <h4>Identification</h4>
+          <h3 className="card-title">Identification</h3>
           <div className="form-grid">{IDENT.map(input)}</div>
 
-          <h4>
+          <h3 className="card-title">
             Emballage de référence
             {draft.manual && (
               <span className="chip-with-tip">
@@ -142,7 +142,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
                 <InfoTip k="mixed" />
               </span>
             )}
-          </h4>
+          </h3>
           <div className="form-grid">{PACK.map(input)}</div>
           {draft.manual && variants.length > 1 && (
             <button
@@ -158,9 +158,9 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
 
           {variants.length > 1 && (
             <>
-              <h4>
+              <h3 className="card-title">
                 Emballages observés dans vos PL ({variants.length}) <InfoTip k="variants" />
-              </h4>
+              </h3>
               <p className="hint">
                 À la génération, l'application choisit automatiquement l'emballage le plus compact pour la quantité
                 demandée{draft.manual ? ' — sauf si la fiche est corrigée à la main' : ''}.

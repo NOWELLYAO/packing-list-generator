@@ -11,6 +11,7 @@ import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
 import { sanitizeCatalog } from '../lib/validate';
 import { hasError, itemIssues, needsCheck } from '../lib/quality';
 import { downloadCatalogBackup } from '../lib/backup';
+import { catalogHealth, HEALTH_LABEL, HEALTH_ORDER, type HealthStatus } from '../lib/health';
 
 interface Props {
   catalog: CatalogItem[];
@@ -18,7 +19,7 @@ interface Props {
   toast: (msg: string) => void;
 }
 
-type Filter = 'all' | 'errors' | 'check' | 'variants';
+type Filter = 'all' | 'health' | 'errors' | 'check' | 'variants';
 const PAGE = 60;
 
 
@@ -33,17 +34,31 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [snapKey, setSnapKey] = useState(0);
   const snapshots = useMemo(() => listSnapshots(), [snapKey, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const health = useMemo(() => catalogHealth(catalog), [catalog]);
   const filtered = useMemo(() => {
     const tokens = norm(q).split(' ').filter(Boolean);
-    return catalog
-      .filter((c) => (filter === 'errors' ? hasError(c) : filter === 'check' ? needsCheck(c) : filter === 'variants' ? (c.variants?.length ?? 0) > 1 : true))
+    const rank = (c: CatalogItem) => HEALTH_ORDER.indexOf(health.map.get(c.id)?.status ?? 'ok');
+    const list = catalog
+      .filter((c) =>
+        filter === 'health'
+          ? health.map.get(c.id)?.status !== 'ok'
+          : filter === 'errors'
+            ? hasError(c)
+            : filter === 'check'
+              ? needsCheck(c)
+              : filter === 'variants'
+                ? (c.variants?.length ?? 0) > 1
+                : true,
+      )
       .filter((c) => {
         if (!tokens.length) return true;
         const hay = norm(`${c.code} ${c.pn} ${c.description}`);
         return tokens.every((t) => hay.includes(t));
       })
       .sort((a, b) => String(a.description || a.code || '').localeCompare(String(b.description || b.code || '')));
-  }, [catalog, q, filter]);
+    // santé : les plus graves d'abord, puis les articles les plus expédiés
+    return filter === 'health' ? list.sort((a, b) => rank(a) - rank(b) || (health.map.get(b.id)?.seen ?? 0) - (health.map.get(a.id)?.seen ?? 0)) : list;
+  }, [catalog, q, filter, health]);
   const toCheck = useMemo(() => catalog.filter(needsCheck).length, [catalog]);
   const errorsCount = useMemo(() => catalog.filter(hasError).length, [catalog]);
   const withVariants = useMemo(() => catalog.filter((c) => (c.variants?.length ?? 0) > 1).length, [catalog]);
@@ -170,6 +185,47 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
         </div>
       </div>
 
+      {catalog.length > 0 && (
+        <section className="health-card" aria-labelledby="health-title">
+          <div className="health-main">
+            <div className={`health-score ${health.okPct >= 90 ? 'good' : health.okPct >= 70 ? 'mid' : 'low'}`}>
+              <b>{health.okPct} %</b>
+              <small>fiable</small>
+            </div>
+            <div>
+              <h3 id="health-title" className="section-title">
+                Santé de la base <InfoTip k="health" />
+              </h3>
+              <p className="hint">
+                {health.toFix === 0
+                  ? 'Tous les articles reposent sur un emballage réellement relevé.'
+                  : `${health.counts.ok} articles fiables · ${health.toFix} reposent sur une estimation : saisissez leurs vraies dimensions pour fiabiliser vos PL.`}
+              </p>
+            </div>
+            {health.toFix > 0 && (
+              <button
+                className={filter === 'health' ? 'btn' : 'btn primary'}
+                onClick={() => {
+                  setFilter(filter === 'health' ? 'all' : 'health');
+                  setLimit(PAGE);
+                }}
+              >
+                {filter === 'health' ? 'Afficher tous les articles' : `Corriger les ${health.toFix} articles`}
+              </button>
+            )}
+          </div>
+          {health.toFix > 0 && (
+            <div className="health-chips">
+              {HEALTH_ORDER.filter((k) => k !== 'ok' && health.counts[k] > 0).map((k) => (
+                <span key={k} className={`chip health-${k}`}>
+                  {HEALTH_LABEL[k]} : {health.counts[k]}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="filter-bar">
         <div className="search-box small">
           <span className="search-icon">⌕</span>
@@ -186,6 +242,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           {(
             [
               ['all', 'Tous'],
+              ...(health.toFix ? ([['health', `À fiabiliser (${health.toFix})`]] as [Filter, string][]) : []),
               ...(errorsCount ? ([['errors', `Données suspectes (${errorsCount})`]] as [Filter, string][]) : []),
               ['check', `À vérifier (${toCheck})`],
               ['variants', `Multi-emballages (${withVariants})`],
@@ -225,6 +282,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
                   {c.code}
                   {c.pn && c.pn !== c.code ? ` · ${c.pn}` : ''}
                 </span>
+                {filter === 'health' && <span className="health-reason">{health.map.get(c.id)?.reason}</span>}
               </div>
               <div className="item-pack">
                 <span>
@@ -238,6 +296,10 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               <div className="item-flags">
                 {(c.variants?.length ?? 0) > 1 && <span className="chip">{c.variants!.length} emb.</span>}
                 {c.manual && <span className="chip chip-accent">manuel</span>}
+                {(() => {
+                  const st: HealthStatus = health.map.get(c.id)?.status ?? 'ok';
+                  return st !== 'ok' && st !== 'suspect' ? <span className={`chip health-${st}`}>{HEALTH_LABEL[st]}</span> : null;
+                })()}
                 {hasError(c) ? (
                   <span className="chip chip-danger" title={itemIssues(c).filter((i) => i.severity === 'error').map((i) => i.message).join(' ; ')}>
                     données suspectes

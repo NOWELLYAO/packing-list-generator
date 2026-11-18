@@ -110,10 +110,10 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal quick" role="dialog" aria-modal onClick={(e) => e.stopPropagation()}>
+      <div className="modal quick" role="dialog" aria-modal aria-labelledby="quick-item-title" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <div>
-            <h2>Dimensions de l'article</h2>
+            <h2 id="quick-item-title">Dimensions de l'article</h2>
             <span className="hint mono">{code || pn}</span>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Fermer">
@@ -130,23 +130,23 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
             <input value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="Ex. : Pompe CR 15-3" />
           </label>
 
-          <h4>Dimensions d'une unité</h4>
+          <h3 className="card-title">Dimensions d'une unité</h3>
           <div className="dims-grid">
             {input('length', 'Longueur', 'cm')}
             {input('width', 'Largeur', 'cm')}
             {input('height', 'Hauteur', 'cm')}
           </div>
 
-          <h4>
+          <h3 className="card-title">
             Poids d'une unité <InfoTip k="netGross" />
-          </h4>
+          </h3>
           <div className="dims-grid two">
             {input('net', 'Poids net', 'kg')}
             {input('gross', 'Poids brut', 'kg')}
           </div>
           <p className="hint">Brut = article + son emballage. Laissé vide, il est pris égal au net.</p>
 
-          <h4>Emballage</h4>
+          <h3 className="card-title">Emballage</h3>
           <div className="segmented">
             {PACK_TYPES.map((t) => (
               <button key={t} className={f.packageType === t ? 'on' : ''} onClick={() => set('packageType', t)}>
