@@ -175,3 +175,21 @@ describe('configuration dont seul le volume est connu', () => {
     expect(planLoad(pl.packages, 'auto', 'road')!.bins[0].placements).toHaveLength(1);
   });
 });
+
+describe('petit reliquat d’une grosse palette', () => {
+  const item = {
+    ...CATALOG[0],
+    code: 'F-1',
+    pn: 'F-1',
+    description: 'Float switch test',
+    variants: [{ qtyPerPackage: 50, packageType: 'Pallet', length: 120, width: 80, height: 54, volumePerPackage: 0.5184, netWeightPerUnit: 1.55, grossWeightPerUnit: 2.4, mixed: false, source: 'a', count: 1 }],
+  };
+  for (const strategy of ['smart', 'grundfos'] as const) {
+    it(`${strategy} : 1 pièce part en carton, pas sur une palette de 50`, () => {
+      const pl = generatePackingList([item], [req('F-1', 1)], { consolidate: true, strategy });
+      expect(pl.packages).toHaveLength(1);
+      expect(pl.packages[0].type).toBe('Carton');
+      expect(pl.packages[0].grossWeight).toBeLessThan(5);
+    });
+  }
+});

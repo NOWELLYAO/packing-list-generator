@@ -49,6 +49,17 @@ const CARTONS: [number, number, number][] = [
   [60, 40, 40],
   [80, 60, 50],
 ];
+/** cartons de réemballage d'un petit reliquat (du plus petit au plus grand) */
+const REPACK_CARTONS: [number, number, number][] = [
+  [30, 20, 15],
+  [40, 30, 20],
+  [40, 30, 30],
+  [60, 40, 40],
+  [80, 60, 50],
+];
+/** au-delà, le reliquat reste sur palette */
+const REPACK_MAX_M3 = 0.09;
+const REPACK_MAX_KG = 30;
 const PALLETS: { type: string; l: number; w: number; tare: number }[] = [
   { type: 'Demi-palette groupée', l: 80, w: 60, tare: 10 },
   { type: 'Palette groupée', l: 120, w: 80, tare: 25 },
@@ -67,6 +78,8 @@ interface Piece {
   gross: number;
   basis: 'reference' | 'partial';
   dimsInferred?: boolean;
+  /** petit reliquat réemballé dans un carton à sa taille */
+  repacked?: boolean;
   /** volume réellement occupé par la marchandise (pour le regroupement) */
   goodsVolume: number;
 }
@@ -108,7 +121,8 @@ function partialHeight(item: CatalogItem, n: number): number {
     if (slope > 0) return Math.max(PALLET_BASE_CM + 10, Math.min(a1.h, Math.ceil(a1.h - slope * (a1.n - n))));
   }
   const load = Math.max(0, upper.h - PALLET_BASE_CM);
-  if (load <= SINGLE_LAYER_CM) return upper.h;
+  // une seule couche (pompes couchées) : la hauteur ne change pas… sauf pour de nombreux petits articles empilés
+  if (load <= SINGLE_LAYER_CM && (isLongItem(item) || item.qtyPerPackage <= 12)) return upper.h;
   return Math.ceil(PALLET_BASE_CM + (load * n) / upper.n);
 }
 
@@ -163,11 +177,26 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
   for (let i = 0; i < full; i++) out.push(mk(perPkg, item.height, 'reference', refVol, tare));
   if (rem > 0) {
     if (hasDims && perPkg > 1 && isPalletLike(item)) {
-      // palette incomplète : hauteur estimée d'après les envois réels de cet article
-      const h = Math.min(item.height, partialHeight(item, rem));
-      const vol = (item.length * item.width * h) / 1e6;
-      // le poids de la palette vide ne dépend pas du chargement (25 kg pour une 120×80, constaté dans vos PL)
-      out.push(mk(rem, h, 'partial', vol, tare));
+      // tare d'une palette pleine = palette vide (25 kg pour une 120 × 80, 10 kg pour une demi) + emballages des unités
+      const emptyPallet = Math.min(tare, item.length * item.width >= 9000 ? 25 : 10);
+      const innerPerUnit = Math.max(0, tare - emptyPallet) / perPkg;
+      const goodsRem = goodsUnitVol * rem;
+      const repack = !isLongItem(item) && goodsRem > 0 && goodsRem <= REPACK_MAX_M3 && rem * item.netWeightPerUnit <= REPACK_MAX_KG
+        ? REPACK_CARTONS.find(([l, w, h]) => (l * w * h * FILL) / 1e6 >= goodsRem)
+        : undefined;
+      if (repack) {
+        // petit reliquat (ex. 1 flotteur sur une palette de 50) : réemballé dans un carton à sa taille
+        const [cl, cw, ch] = repack;
+        const cartonTare = round(0.3 + (cl * cw * ch) / 1e6 * 8, 2);
+        const piece = mk(rem, ch, 'reference', (cl * cw * ch) / 1e6, rem * innerPerUnit + cartonTare);
+        out.push({ ...piece, type: 'Carton', l: cl, w: cw, h: ch, goodsVolume: goodsRem, repacked: true });
+      } else {
+        // palette incomplète : hauteur estimée d'après les envois réels de cet article ;
+        // tare = palette vide + emballages des seules unités présentes
+        const h = Math.min(item.height, partialHeight(item, rem));
+        const vol = (item.length * item.width * h) / 1e6;
+        out.push(mk(rem, h, 'partial', vol, emptyPallet + innerPerUnit * rem));
+      }
     } else if (hasDims && perPkg > 1) {
       // carton incomplet : l'emballeur prend un carton plus bas (constaté : 4 DDC → 55 cm, 2 DDC → 27 cm)
       const h = Math.min(item.height, Math.ceil(item.height * Math.max(rem / perPkg, 0.3)));
@@ -341,7 +370,10 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
     const tare = Math.max(0, h.grossWeightPerUnit - h.netWeightPerUnit) * h.qtyPerPackage;
     const exactRem = Math.abs(h.qtyPerPackage - rem) < 1e-9;
     if (!exactRem) exactAll = false;
-    pieces.push({
+    // petit reliquat d'une palette (ex. 1 flotteur sur 50) : même un fournisseur le réemballe en carton
+    const repacked = !exactRem && h.qtyPerPackage > 1 ? piecesFor(h, rem, lineIdx).filter((x) => x.repacked) : [];
+    if (repacked.length === 1) pieces.push(repacked[0]);
+    else pieces.push({
       lineIdx,
       code: item.code || item.pn,
       qty: rem,
