@@ -46,6 +46,10 @@ describe('sauvegarde en ligne : service serveur', () => {
     const r = await handle({ method: 'GET', headers: h }, {}, fakeRedis().fetcher);
     expect(r.status).toBe(503);
   });
+  it('stockage connecté avec un préfixe personnalisé (STORAGE_…) reconnu', async () => {
+    const r = await handle({ method: 'GET', headers: h }, { STORAGE_REST_API_URL: 'https://x.upstash.io', STORAGE_REST_API_TOKEN: 't' }, fakeRedis().fetcher);
+    expect(r.status).toBe(404);
+  });
   it('code invalide refusé', async () => {
     const r = await handle({ method: 'GET', headers: { 'x-plgen-space': 'court' } }, env, fakeRedis().fetcher);
     expect(r.status).toBe(400);

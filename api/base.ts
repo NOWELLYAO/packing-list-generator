@@ -31,8 +31,21 @@ const VERSIONS = 10;
 const CODE_RE = /^[A-Z0-9-]{12,64}$/;
 
 export function storeConfig(env: Record<string, string | undefined>) {
-  const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
-  const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  let url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
+  let token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  // préfixe personnalisé choisi à la connexion du stockage (ex. STORAGE_REST_API_URL / STORAGE_REST_API_TOKEN)
+  if (!url || !token) {
+    for (const k of Object.keys(env)) {
+      if (!k.endsWith('_REST_API_URL')) continue;
+      const prefix = k.slice(0, -'_REST_API_URL'.length);
+      const t = env[`${prefix}_REST_API_TOKEN`];
+      if (env[k] && t) {
+        url = env[k];
+        token = t;
+        break;
+      }
+    }
+  }
   return url && token ? { url: url.replace(/\/$/, ''), token } : null;
 }
 
