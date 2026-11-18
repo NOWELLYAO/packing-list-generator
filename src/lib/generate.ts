@@ -1,4 +1,4 @@
-import type { CatalogItem, GenerateOptions, PackingList, PLLine, PLPackage, RequestLine } from '../types';
+import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
 import { applyVariant, preferredVariant, variantsOf } from './variants';
@@ -53,6 +53,62 @@ export function withSimilarPacking(item: CatalogItem, catalog: CatalogItem[]): C
   const tarePerUnit = Math.max(0, best.v.grossWeightPerUnit - best.v.netWeightPerUnit);
   const v = { ...best.v, netWeightPerUnit: net, grossWeightPerUnit: round(net + tarePerUnit, 4), count: 1, source: `emballage de ${best.it.code} (${best.it.description})` };
   return { ...applyVariant(item, v), variants: [v], similarFrom: `${best.it.code} ${best.it.description}`, coPacked: item.coPacked };
+}
+
+/**
+ * Colis mixte : à l'import, poids et volume sont répartis au prorata des quantités
+ * (20 kits garniture + 2 coffrets LC 232 → 0,72 kg par coffret, faux).
+ * Quand les autres articles du colis ont un emballage propre connu, on retire leur part réelle
+ * et le reste revient aux articles inconnus du colis.
+ */
+export function refineMixedShare(item: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+  if (item.manual || !item.variants?.length) return item;
+  const ownPerUnit = (o: CatalogItem) => {
+    const v = variantsOf(o).filter((x) => !x.mixed && x.qtyPerPackage > 0 && x.grossWeightPerUnit > 0).sort((a, b) => b.count - a.count)[0];
+    if (!v) return null;
+    const vol = v.length > 0 && v.width > 0 && v.height > 0 ? (v.length * v.width * v.height) / 1e6 : v.volumePerPackage;
+    return { g: v.grossWeightPerUnit, n: v.netWeightPerUnit, vol: vol > 0 ? vol / v.qtyPerPackage : 0 };
+  };
+  if (ownPerUnit(item)) return item;
+  const refine = (v: PackVariant): PackVariant => {
+    if (!v.mixed || !v.packShare || v.packShare >= 1 || !(v.qtyPerPackage > 0)) return v;
+    const huG = (v.grossWeightPerUnit * v.qtyPerPackage) / v.packShare;
+    const huN = (v.netWeightPerUnit * v.qtyPerPackage) / v.packShare;
+    const huV = v.length > 0 && v.width > 0 && v.height > 0 ? (v.length * v.width * v.height) / 1e6 : v.volumePerPackage;
+    const totalQty = v.qtyPerPackage / v.packShare;
+    let knownQty = 0;
+    let kG = 0;
+    let kN = 0;
+    let kV = 0;
+    let volKnown = true;
+    for (const code of item.coPacked ?? []) {
+      const o = catalog.find((c) => c !== item && (c.code === code || c.pn === code));
+      if (!o) continue;
+      // même colis : même source, mêmes dimensions et même poids total de colis (±3 %)
+      const mv = (o.variants ?? []).find(
+        (x) => x.mixed && x.source === v.source && x.packShare && x.length === v.length && x.width === v.width && x.height === v.height &&
+          Math.abs((x.grossWeightPerUnit * x.qtyPerPackage) / x.packShare - huG) <= huG * 0.03 + 0.05,
+      );
+      const own = mv && ownPerUnit(o);
+      if (!mv || !own) continue;
+      knownQty += mv.qtyPerPackage;
+      kG += mv.qtyPerPackage * own.g;
+      kN += mv.qtyPerPackage * own.n;
+      if (own.vol > 0) kV += mv.qtyPerPackage * own.vol;
+      else volKnown = false;
+    }
+    const unknownQty = totalQty - knownQty;
+    if (!knownQty || unknownQty < v.qtyPerPackage - 1e-6 || kG >= huG * 0.95) return v;
+    const g = (huG - kG) / unknownQty;
+    const n = Math.min((g * huN) / huG, Math.max(0, huN - kN) / unknownQty || g);
+    const share = volKnown && huV > 0 && kV < huV * 0.95 ? (v.qtyPerPackage * ((huV - kV) / unknownQty)) / huV : v.packShare;
+    return { ...v, grossWeightPerUnit: round(g, 4), netWeightPerUnit: round(n, 4), packShare: round(Math.min(1, share), 4) };
+  };
+  const variants = item.variants.map(refine);
+  if (variants.every((v, i) => v === item.variants![i])) return item;
+  const top = variants.find((_, i) => item.variants![i].source === item.source && item.variants![i].mixed);
+  const base = top && item.mixed ? { ...item, netWeightPerUnit: top.netWeightPerUnit, grossWeightPerUnit: top.grossWeightPerUnit, packShare: top.packShare } : item;
+  return { ...base, variants };
 }
 
 export function findItem(catalog: CatalogItem[], code: string, pn: string): CatalogItem | undefined {
@@ -172,6 +228,20 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
   // Donnée issue d'un colis mixte : les dimensions sont celles du colis entier.
   // On ne garde que la part de l'article (hauteur réduite), sinon chaque article compterait tout le colis.
   const share = item.mixed && item.packShare && item.packShare < 1 ? item.packShare : 1;
+  // petit article vu seulement dans un carton mixte : il part dans son propre carton, à la taille de sa part
+  if (share < 1 && item.length > 0 && item.width > 0 && item.height > 0 && !isPalletLike(item) && !isLongItem(item) && item.qtyPerPackage > 0) {
+    const goodsAll = ((item.length * item.width * item.height) / 1e6) * share * (qty / item.qtyPerPackage);
+    const box = goodsAll > 0 && goodsAll <= REPACK_MAX_M3 && qty * item.netWeightPerUnit <= REPACK_MAX_KG
+      ? REPACK_CARTONS.find(([l, w, h]) => (l * w * h * FILL) / 1e6 >= goodsAll)
+      : undefined;
+    if (box) {
+      const [cl, cw, ch] = box;
+      const vol = (cl * cw * ch) / 1e6;
+      const cartonTare = round(0.3 + vol * 8, 2);
+      const inner = Math.max(0, item.grossWeightPerUnit - item.netWeightPerUnit) * 0.5;
+      return [{ lineIdx, code: item.code || item.pn, qty, type: 'Carton', l: cl, w: cw, h: ch, volume: vol, net: qty * item.netWeightPerUnit, gross: qty * (item.netWeightPerUnit + inner) + cartonTare, basis: 'reference', dimsInferred: item.dimsInferred, fromMixed: true, repacked: true, goodsVolume: goodsAll }];
+    }
+  }
   if (share < 1 && item.length > 0 && item.width > 0 && item.height > 0) {
     const h = isPalletLike(item)
       ? Math.ceil(PALLET_BASE_CM + Math.max(0, item.height - PALLET_BASE_CM) * share)
@@ -527,7 +597,7 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem = withSimilarPacking(item, catalog);
+    const packItem = withSimilarPacking(refineMixedShare(item, catalog), catalog);
     const gf = grundfos ? grundfosPieces(packItem, qty, lineIdx) : null;
     const { item: chosen, note, confidence } = gf ? { item: packItem, note: gf.note, confidence: gf.confidence } : chooseVariant(packItem, qty);
     const warnings: string[] = [];

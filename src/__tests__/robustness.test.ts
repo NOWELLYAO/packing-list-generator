@@ -326,3 +326,22 @@ describe('articles longs (pompes immergées)', () => {
     expect(p.dimCheck).toBe('estimated');
   });
 });
+
+describe('article vu seulement dans un carton mixte', () => {
+  const src = 'test.pdf (PL 1) – colis mixte';
+  const base = { unit: 'PCS', hsCode: '', origin: '', updatedAt: '', packageType: '600x400x', length: 60, width: 40, height: 63, volumePerPackage: 0.1512, mixed: true } as const;
+  // carton 18 kg : 20 kits (0,4 kg chacun, connus par ailleurs) + 2 coffrets → part réelle des coffrets ≈ 5 kg chacun, pas 0,75
+  const kitMixed = { ...base, qtyPerPackage: 20, netWeightPerUnit: 0.7188, grossWeightPerUnit: 0.75, packShare: 20 / 22, source: src, count: 1 };
+  const kitOwn = { ...base, mixed: false, packageType: '300x200x', length: 30, width: 20, height: 27, volumePerPackage: 0.0162, qtyPerPackage: 5, netWeightPerUnit: 0.3, grossWeightPerUnit: 0.4, source: 'x', count: 2 };
+  const boxMixed = { ...base, qtyPerPackage: 2, netWeightPerUnit: 0.7188, grossWeightPerUnit: 0.75, packShare: 2 / 22, source: src, count: 1 };
+  const KIT = { ...kitOwn, id: 'k', code: 'KIT-1', pn: 'KIT-1', description: 'Kit test', coPacked: ['BOX-1'], variants: [kitOwn, kitMixed] };
+  const BOX = { ...boxMixed, id: 'b', code: 'BOX-1', pn: 'BOX-1', description: 'Coffret test', coPacked: ['KIT-1'], variants: [boxMixed] };
+  it('le poids des autres articles connus est retiré, et le coffret part dans un carton à sa taille', () => {
+    const pl = generatePackingList([KIT, BOX], [req('BOX-1', 1)], { consolidate: true });
+    const p = pl.packages[0];
+    expect(p.grossWeight).toBeGreaterThan(4);
+    expect(p.netWeight).toBeLessThanOrEqual(p.grossWeight);
+    expect(p.length * p.width * p.height).toBeLessThan(60 * 40 * 63);
+    expect(p.type).toBe('Carton');
+  });
+});
