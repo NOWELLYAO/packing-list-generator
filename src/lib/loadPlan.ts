@@ -411,7 +411,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
   const kEst = (width - 40) / (rear - front + W * DC);
 
   const raw: Shape[] = [];
-  const overlay: { at: Pt; text: string; r: number; check?: boolean }[] = [];
+  const overlay: { at: Pt; cands: Pt[]; hidden: boolean; top: Pt[]; text: string; r: number; check?: boolean }[] = [];
   const P = (s: Shape[]) => raw.push(...s);
 
   withProjection(oblique, () => {
@@ -506,7 +506,15 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
     P(door(0));
 
     // colis
-    for (const p of paintOrder(bin.placements)) {
+    const order = paintOrder(bin.placements);
+    // silhouette projetée de chaque colis : sert à savoir si le dessus d'un colis est masqué par un colis dessiné devant
+    const hulls = order.map((q) => {
+      const hq = Math.max(1, q.h);
+      const pts: Pt[] = [];
+      for (const [a, b, z] of [[0, 0, 0], [q.l, 0, 0], [0, q.w, 0], [q.l, q.w, 0], [0, 0, hq], [q.l, 0, hq], [0, q.w, hq], [q.l, q.w, hq]]) pts.push(project(q.x + a, q.y + b, z));
+      return convexHull(pts);
+    });
+    for (const [idx, p] of order.entries()) {
       const fam = familyOf(p.type, { length: p.l, width: p.w, height: p.h });
       const off = project(p.x, p.y, 0);
       const push = (sh: Shape[]) => {
@@ -537,7 +545,13 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
         push(solid(0, p.l, 0, p.w, 0, h, CRATE, shade(CRATE, -0.55), 2, 0.4));
         for (let z = 14; z < h; z += 14) push([{ kind: 'line', a: project(0, p.w, z), b: project(p.l, p.w, z), stroke: shade(CRATE, -0.4), sw: 0.3, opacity: 0.7 }]);
       } else push(solid(0, p.l, 0, p.w, 0, h, fam === 'carton' ? KRAFT : '#c9d1db', '#6b5a45', 2, 0.4));
-      overlay.push({ at: project(p.x + p.l / 2, p.y + p.w / 2, h), text: String(p.no), r: Math.min(p.l, p.w), check: !!p.dimCheck });
+      // point d'accroche du numéro : la partie visible du dessus la plus proche du centre
+      const samples: { pt: Pt; d: number }[] = [];
+      for (const u of [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92, 0.97, 0.03])
+        for (const v of [0.5, 0.25, 0.75, 0.1, 0.9]) samples.push({ pt: project(p.x + p.l * u, p.y + p.w * v, h), d: Math.abs(u - 0.5) + Math.abs(v - 0.5) * 0.6 });
+      const visible = samples.filter((sm) => !hulls.slice(idx + 1).some((hq) => insideHull(sm.pt, hq, 1.5))).sort((a, b) => a.d - b.d);
+      const top = [project(p.x, p.y, h), project(p.x + p.l, p.y, h), project(p.x + p.l, p.y + p.w, h), project(p.x, p.y + p.w, h)];
+      overlay.push({ at: samples[0].pt, cands: visible.map((sm) => sm.pt), hidden: visible.length < samples.length * 0.5, top, text: String(p.no), r: Math.min(p.l, p.w), check: !!p.dimCheck });
     }
 
     // cadre arrière, longeron bas et arêtes du volume (côté ouvert)
@@ -596,9 +610,23 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
     return { ...sh, at: T(sh.at) };
   });
   // étiquettes numérotées sur le dessus de chaque colis
+  const taken: { c: Pt; r: number }[] = [];
+  const free = (c: Pt, r: number) => taken.every((t) => Math.hypot(t.c[0] - c[0], t.c[1] - c[1]) >= t.r + r + 1);
   for (const o of overlay) {
-    const c = T(o.at);
     const br = Math.max(4, Math.min(6.5, o.r * k * 0.28));
+    let c = T(o.at);
+    if (o.hidden) {
+      // colis en grande partie caché derrière d'autres : contour pointillé de son dessus, pour le situer
+      const tp = o.top.map(T);
+      for (let i = 0; i < 4; i++) shapes.push({ kind: 'line', a: tp[i], b: tp[(i + 1) % 4], stroke: o.check ? '#c2410c' : '#2b3442', sw: 0.8, dash: true, opacity: 0.85 });
+    }
+    if (o.cands.length) {
+      const cs = o.cands.map(T);
+      c = cs.find((x) => free(x, br)) ?? cs[0];
+    }
+    // dernier recours : décaler la pastille pour qu'aucun numéro n'en recouvre un autre
+    for (let step = 1; step < 12 && !free(c, br); step++) c = [c[0], c[1] - br * 0.9];
+    taken.push({ c, r: br });
     shapes.push({ kind: 'circle', c, r: br, fill: o.check ? '#fff1e6' : '#ffffff', stroke: o.check ? '#c2410c' : '#2b3442', sw: o.check ? 1.1 : 0.8 });
     shapes.push({ kind: 'text', at: [c[0], c[1] + 0.3], text: o.text, size: br * 1.25, color: o.check ? '#c2410c' : '#2b3442', anchor: 'middle', bold: true });
   }
@@ -607,3 +635,33 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
 }
 
 type V3 = [number, number, number];
+
+/** enveloppe convexe (chaîne monotone) */
+function convexHull(pts: Pt[]): Pt[] {
+  const ps = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const p of ps) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: Pt[] = [];
+  for (const p of ps.reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/** point strictement à l'intérieur d'une enveloppe convexe (marge en unités du dessin) */
+function insideHull(pt: Pt, hull: Pt[], margin = 0): boolean {
+  if (hull.length < 3) return false;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const cr = ((b[0] - a[0]) * (pt[1] - a[1]) - (b[1] - a[1]) * (pt[0] - a[0])) / len;
+    if (cr < margin) return false;
+  }
+  return true;
+}
