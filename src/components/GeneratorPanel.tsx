@@ -13,6 +13,7 @@ import QuickItemForm from './QuickItemForm';
 import TransportPanel from './TransportPanel';
 import InfoTip from './InfoTip';
 import LabelsDialog from './LabelsDialog';
+import { useLogoInfo } from '../lib/useLogoInfo';
 import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { packLabel } from '../lib/i18n';
@@ -179,6 +180,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   };
 
   const [showLabels, setShowLabels] = useState(false);
+  const logoInfo = useLogoInfo(settings.logo);
   const run = async (label: string, fn: () => Promise<unknown>) => {
     if (!pl) return;
     setBusy(label);
@@ -464,10 +466,11 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             </div>
           </div>
 
-          {deferredPl && <PackingListView pl={deferredPl} accent={settings.accent || DEFAULT_ACCENT} />}
+          {deferredPl && <PackingListView pl={deferredPl} accent={settings.accent || DEFAULT_ACCENT} logo={logoInfo} />}
           <TransportPanel
             pl={deferredPl ?? pl}
             accent={settings.accent || DEFAULT_ACCENT}
+            logo={logoInfo}
             mode={settings.transportMode ?? 'sea'}
             setMode={(m) => setSettings({ ...settings, transportMode: m })}
           />

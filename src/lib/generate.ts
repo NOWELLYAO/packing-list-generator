@@ -333,6 +333,27 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
     kg += p.gross;
   }
   if (cur.length) groups.push(cur);
+  // répartition équilibrée : 100 pompes → 34 + 33 + 33 plutôt que 49 + 49 + 2 (même nombre de palettes)
+  if (groups.length > 1) {
+    const k = groups.length;
+    const bins: { ps: Piece[]; vol: number; kg: number }[] = Array.from({ length: k }, () => ({ ps: [], vol: 0, kg: 0 }));
+    let ok = true;
+    for (const p of [...queue].sort((a, b) => goods(b) - goods(a) || b.gross - a.gross)) {
+      const fits = bins.filter((b) => b.vol + goods(p) <= maxVol + 1e-9 && b.kg + p.gross <= MAX_PALLET_KG);
+      if (!fits.length) {
+        ok = false;
+        break;
+      }
+      const b = fits.reduce((x, y) => (y.vol < x.vol - 1e-9 || (Math.abs(y.vol - x.vol) <= 1e-9 && y.kg < x.kg) ? y : x));
+      b.ps.push(p);
+      b.vol += goods(p);
+      b.kg += p.gross;
+    }
+    if (ok && bins.every((b) => b.ps.length)) {
+      groups.length = 0;
+      groups.push(...bins.map((b) => b.ps));
+    }
+  }
 
   for (const g of groups) {
     const v = g.reduce((s, p) => s + goods(p), 0);

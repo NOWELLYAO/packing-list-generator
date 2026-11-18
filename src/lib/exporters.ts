@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, packLabel, type Lang } from './i18n';
-import { formatNos, groupIdentical, packageDrawing, pictureToSvg, refScale, scaleStrip, type Picture } from './drawing';
+import { formatNos, groupIdentical, loadLogoInfo, packageDrawing, pictureToSvg, refScale, scaleStrip, type LogoInfo, type Picture } from './drawing';
 import { loadPlan3D, loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
 
@@ -95,6 +95,17 @@ function drawPicturePdf(doc: any, pic: Picture, x: number, y: number, width: num
         doc.setLineWidth((sh.sw ?? 0.5) * s);
       }
       doc.circle(c[0], c[1], sh.r * s, sh.stroke ? 'FD' : 'F');
+    } else if (sh.kind === 'image') {
+      // image posée sur un parallélogramme (perspective) : carré unité transformé par une matrice affine
+      const [p0, p1, p3] = [P(sh.p0), P(sh.p1), P(sh.p3)];
+      try {
+        doc.advancedAPI((pdf: any) => {
+          pdf.setCurrentTransformationMatrix(new pdf.Matrix(p1[0] - p0[0], p1[1] - p0[1], p3[0] - p0[0], p3[1] - p0[1], p0[0], p0[1]));
+          pdf.addImage(sh.href, 0, 0, 1, 1);
+        });
+      } catch {
+        /* image illisible : ignorée */
+      }
     } else {
       const at = P(sh.at);
       doc.setFont('helvetica', sh.bold ? 'bold' : 'normal');
@@ -145,6 +156,16 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
   const T = DOC[lang];
   numLocale = T.locale;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  // logo des Réglages posé sur les colis dessinés (étiquette d'expédition)
+  let logoInfo: LogoInfo | undefined;
+  if (settings.logo) {
+    try {
+      const pr = doc.getImageProperties(settings.logo);
+      logoInfo = { href: settings.logo, ratio: pr.width / pr.height };
+    } catch {
+      logoInfo = undefined;
+    }
+  }
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 14;
@@ -337,7 +358,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     // un schéma par groupe de colis identiques (sinon des dizaines de pages pour des palettes toutes pareilles)
     for (const { first: p, nos } of groups) {
       const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
-      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title, refScale(drawable));
+      const pic = packageDrawing({ ...p, type: p.type }, settings.accent || DEFAULT_ACCENT, labels, title, refScale(drawable), logoInfo);
       const cellH = (pic.h * cellW) / pic.w;
       if (col === 0) ensure(cellH + 8);
       const cx = M + col * cellW;
@@ -371,7 +392,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       const tail = 3 + 6 + planWarnings.length * 4.5; // espace sous le dessin + légende + alertes
       const fitW = (pic: { w: number; h: number }, maxH: number) => Math.min(W - 2 * M, (maxH * pic.w) / pic.h);
       const blockH = (b: (typeof plan.bins)[number], sc: number) => {
-        const p3 = loadPlan3D(b, lang, 640);
+        const p3 = loadPlan3D(b, lang, 640, logoInfo);
         const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
         return (p3.h * fitW(p3, D3_H * sc)) / p3.w + (pt.h * fitW(pt, TOP_H * sc)) / pt.w + 4;
       };
@@ -403,7 +424,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       });
       yy += 18;
       for (const [i, b] of plan.bins.entries()) {
-        const p3 = loadPlan3D(b, lang, 640);
+        const p3 = loadPlan3D(b, lang, 640, logoInfo);
         const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
         const w3 = fitW(p3, D3_H * sc);
         const wt = fitW(pt, TOP_H * sc);
@@ -572,6 +593,7 @@ export async function exportComparisonPdf(g: PackingList, sm: PackingList, setti
 /* ------------------------------------------------------------------ */
 
 export async function exportPackingListXlsx(pl: PackingList, settings: Settings) {
+  const logoInfo = await loadLogoInfo(settings.logo);
   const ExcelJS = (await import('exceljs')).default;
   const lang: Lang = settings.lang ?? 'fr';
   const T = DOC[lang];
@@ -760,7 +782,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     let col = 0;
     for (const { first: p, nos } of groupIdentical(drawable)) {
       const title = nos.length > 1 ? `${labels.packageWord} ${formatNos(nos, lang === 'fr' ? 'à' : 'to')} (×${nos.length})` : undefined;
-      const img = await pictureToPng(packageDrawing(p, accentHex, labels, title, refScale(drawable)));
+      const img = await pictureToPng(packageDrawing(p, accentHex, labels, title, refScale(drawable), logoInfo));
       ws2.getCell(r, col * 3 + 1).value = typeOf(p, lang);
       ws2.getCell(r, col * 3 + 1).font = { size: 9, color: { argb: 'FF6E7887' } };
       if (img) ws2.addImage(wb.addImage({ base64: img.data, extension: 'png' }), { tl: { col: col * 3, row: r }, ext: { width: 230, height: (230 * img.h) / img.w } });
@@ -796,7 +818,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     for (const [i, b] of plan.bins.entries()) {
       ws3.getCell(r, 1).value = `${lang === 'fr' ? b.vehicle.name : b.vehicle.nameEn}${plan.bins.length > 1 ? ` n° ${i + 1}` : ''} — ${nf(b.weight, 0)} kg`;
       ws3.getCell(r, 1).font = { bold: true };
-      for (const pic of [loadPlan3D(b, lang, 640), loadPlanDrawing(b, accentHex, lang, 640)]) {
+      for (const pic of [loadPlan3D(b, lang, 640, logoInfo), loadPlanDrawing(b, accentHex, lang, 640)]) {
         const img = await pictureToPng(pic);
         if (img) {
           const h = (720 * img.h) / img.w;

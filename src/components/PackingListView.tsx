@@ -1,13 +1,13 @@
 import type { PackingList } from '../types';
 import { packLabel, useLang } from '../lib/i18n';
-import { formatNos, groupIdentical, packageDrawing, refScale, scaleStrip } from '../lib/drawing';
+import { formatNos, groupIdentical, packageDrawing, refScale, scaleStrip, type LogoInfo } from '../lib/drawing';
 import Drawing from './Drawing';
 import InfoTip from './InfoTip';
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Aperçu du colisage et des articles (mis à jour en direct) */
-export default function PackingListView({ pl, accent }: { pl: PackingList; accent: string }) {
+export default function PackingListView({ pl, accent, logo }: { pl: PackingList; accent: string; logo?: LogoInfo }) {
   const lang = useLang();
   const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: lang === 'fr' ? 'fr-FR' : 'en-GB' };
   const refK = refScale(pl.packages);
@@ -66,7 +66,7 @@ export default function PackingListView({ pl, accent }: { pl: PackingList; accen
               </div>
               {p.length > 0 ? (
                 <Drawing
-                  pic={packageDrawing(p, accent, labels, nos.length > 1 ? (lang === 'fr' ? 'Chaque colis' : 'Each package') : undefined, refK)}
+                  pic={packageDrawing(p, accent, labels, nos.length > 1 ? (lang === 'fr' ? 'Chaque colis' : 'Each package') : undefined, refK, logo)}
                   className="pkg-svg"
                   title={`Colis ${p.no}`}
                 />

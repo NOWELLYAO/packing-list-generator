@@ -4,6 +4,7 @@ import { loadPlan3D, loadPlanDrawing, planLoad, VEHICLES, type TransportMode } f
 import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
+import type { LogoInfo } from '../lib/drawing';
 import InfoTip from './InfoTip';
 
 const fmt = (n: number, d = 1) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -17,6 +18,7 @@ const MODES: { id: TransportMode; label: string }[] = [
 interface Props {
   pl: PackingList;
   accent: string;
+  logo?: LogoInfo;
   mode: TransportMode;
   setMode: (m: TransportMode) => void;
 }
@@ -25,7 +27,7 @@ interface Props {
  * Transport : un seul mode choisi, et tous les indicateurs en découlent
  * (plan de chargement, nombre de conteneurs ou de camions, poids taxable).
  */
-export default function TransportPanel({ pl, accent, mode, setMode }: Props) {
+export default function TransportPanel({ pl, accent, logo, mode, setMode }: Props) {
   const lang = useLang();
   const [vehicle, setVehicle] = useState<string>('auto');
   const family = mode === 'road' ? 'road' : 'sea';
@@ -151,7 +153,7 @@ export default function TransportPanel({ pl, accent, mode, setMode }: Props) {
                 {plan.bins.length > 1 ? ` n° ${i + 1}` : ''} · {fmt(b.weight, 0)} kg · {b.placements.length} colis · {fmt(b.usedLength / 100, 2)} m
                 utilisés
               </div>
-              <Drawing pic={loadPlan3D(b, lang, 760)} className="plan-svg plan-3d" title="Vue 3D du chargement" />
+              <Drawing pic={loadPlan3D(b, lang, 760, logo)} className="plan-svg plan-3d" title="Vue 3D du chargement" />
               <div className="plan-sub">Vue de dessus (rangement exact)</div>
               <Drawing pic={loadPlanDrawing(b, accent, lang, 640)} className="plan-svg" title="Plan de chargement" />
             </div>

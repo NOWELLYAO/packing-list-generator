@@ -1,6 +1,6 @@
 import type { PLPackage } from '../types';
 import type { LoadHint } from '../types';
-import { CRATE, drawCarton, drawCrate, drawPallet, familyOf, KRAFT, project, quad, shade, solid, withProjection, WOOD_PALLET, type Picture, type Pt, type Shape } from './drawing';
+import { CRATE, shippingLabel, type LogoInfo, drawCarton, drawCrate, drawPallet, familyOf, KRAFT, project, quad, shade, solid, withProjection, WOOD_PALLET, type Picture, type Pt, type Shape } from './drawing';
 import { round } from './parseValues';
 
 /**
@@ -391,7 +391,7 @@ function paintOrder(ps: Placement[]): Placement[] {
   return out;
 }
 
-export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
+export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo): Picture {
   const v = bin.vehicle;
   const L = v.length;
   const W = v.width;
@@ -514,6 +514,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
           if (x.kind === 'poly') raw.push({ ...x, pts: x.pts.map(([u, w]) => [u + off[0], w + off[1]] as Pt) });
           else if (x.kind === 'line') raw.push({ ...x, a: [x.a[0] + off[0], x.a[1] + off[1]], b: [x.b[0] + off[0], x.b[1] + off[1]] });
           else if (x.kind === 'circle') raw.push({ ...x, c: [x.c[0] + off[0], x.c[1] + off[1]], r: x.r / kEst });
+          else if (x.kind === 'image') raw.push({ ...x, p0: [x.p0[0] + off[0], x.p0[1] + off[1]], p1: [x.p1[0] + off[0], x.p1[1] + off[1]], p3: [x.p3[0] + off[0], x.p3[1] + off[1]] });
           else raw.push(x);
         }
       };
@@ -522,8 +523,9 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
       if (!small) {
         if (fam === 'pallet') drawPallet(push, p.l, p.w, h, 1, p.load);
         else if (fam === 'crate') drawCrate(push, p.l, p.w, h, 1);
-        else if (fam === 'carton') drawCarton(push, p.l, p.w, h, 1, 0);
+        else if (fam === 'carton') drawCarton(push, p.l, p.w, h, 1, 0, !!logo);
         else push(solid(0, p.l, 0, p.w, 0, h, '#c9d1db', '#5d6670', 4, 0.5));
+        if (logo) push(shippingLabel(fam, p.l, p.w, h, logo));
       } else if (fam === 'pallet') {
         const pb = Math.min(14.4, h * 0.35);
         push(solid(0, p.l, 0, p.w, 0, pb, WOOD_PALLET, shade(WOOD_PALLET, -0.55), 1, 0.35));
@@ -590,6 +592,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640): Picture {
     if (sh.kind === 'poly') return { ...sh, pts: sh.pts.map(T) };
     if (sh.kind === 'line') return { ...sh, a: T(sh.a), b: T(sh.b) };
     if (sh.kind === 'circle') return { ...sh, c: T(sh.c), r: Math.max(0.2, sh.r * k) };
+    if (sh.kind === 'image') return { ...sh, p0: T(sh.p0), p1: T(sh.p1), p3: T(sh.p3) };
     return { ...sh, at: T(sh.at) };
   });
   // étiquettes numérotées sur le dessus de chaque colis

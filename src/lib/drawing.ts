@@ -11,6 +11,8 @@ export type Shape =
   | { kind: 'poly'; pts: Pt[]; fill: string; stroke?: string; sw?: number; opacity?: number }
   | { kind: 'line'; a: Pt; b: Pt; stroke: string; sw: number; dash?: boolean; opacity?: number }
   | { kind: 'circle'; c: Pt; r: number; fill: string; stroke?: string; sw?: number }
+  /** image (logo) posée sur un parallélogramme : p0 haut-gauche, p1 haut-droit, p3 bas-gauche */
+  | { kind: 'image'; href: string; p0: Pt; p1: Pt; p3: Pt }
   | {
       kind: 'text';
       at: Pt;
@@ -369,7 +371,7 @@ export function drawCrate(push: Push, L: number, l: number, H: number, px: numbe
   void px;
 }
 
-export function drawCarton(push: Push, L: number, l: number, H: number, px: number, z0: number) {
+export function drawCarton(push: Push, L: number, l: number, H: number, px: number, z0: number, noLabel = false) {
   const dark = shade(KRAFT, -0.5);
   push(solid(0, L, 0, l, z0, H, KRAFT, dark, 14, 0.5));
   // cannelure visible (épaisseur du carton) sur les arêtes hautes
@@ -391,7 +393,7 @@ export function drawCarton(push: Push, L: number, l: number, H: number, px: numb
   const h = H - z0;
   const lw = Math.min(L * 0.32, 22);
   const lh = Math.min(h * 0.32, 15);
-  if (lw > 4 && lh > 3) {
+  if (!noLabel && lw > 4 && lh > 3) {
     const la = L * 0.92 - lw;
     const lz = z0 + h * 0.18;
     push([quad([la, l, lz], [lw, 0, 0], [0, 0, lh], '#fbfbf8', '#9a8f7d', 0.3)]);
@@ -417,6 +419,63 @@ export function drawCarton(push: Push, L: number, l: number, H: number, px: numb
     }
   }
   void px;
+}
+
+export interface LogoInfo {
+  href: string;
+  /** largeur / hauteur */
+  ratio: number;
+}
+
+/**
+ * Étiquette d'expédition dessinée sur la grande face avant (b = l) : fond blanc, logo en tête,
+ * deux lignes de texte suggérées. Palette : dans le tiers supérieur de la charge ; caisse et carton : au milieu.
+ */
+export function shippingLabel(fam: Family, L: number, l: number, H: number, logo: LogoInfo): Shape[] {
+  const base = fam === 'pallet' ? Math.min(14.4, H * 0.35) : fam === 'crate' && H >= 25 ? Math.min(9, H * 0.15) : 0;
+  const h = H - base;
+  // étiquette volontairement grande sur le schéma : le logo doit se lire
+  const wl = Math.min(L * 0.6, 70);
+  const hl = Math.min(h * (fam === 'pallet' ? 0.5 : 0.7), wl * 0.62);
+  if (wl < 3 || hl < 2) return [];
+  const a0 = fam === 'carton' ? L * 0.92 - wl : (L - wl) / 2;
+  const z1 = fam === 'pallet' ? H - h * 0.24 : base + h * 0.5 + hl / 2;
+  const z0 = z1 - hl;
+  const out: Shape[] = [
+    { kind: 'poly', pts: [iso(a0 + 0.6, l, z0 - 0.6), iso(a0 + wl + 0.6, l, z0 - 0.6), iso(a0 + wl + 0.6, l, z1 - 0.6), iso(a0 + 0.6, l, z1 - 0.6)], fill: '#000', opacity: 0.12 },
+    { kind: 'poly', pts: [iso(a0, l, z0), iso(a0 + wl, l, z0), iso(a0 + wl, l, z1), iso(a0, l, z1)], fill: '#ffffff', stroke: '#b9b2a4', sw: 0.35 },
+  ];
+  // logo : en haut de l'étiquette, proportions respectées
+  const pad = Math.min(wl, hl) * 0.1;
+  let lw = wl - 2 * pad;
+  let lh = lw / Math.max(0.2, logo.ratio);
+  if (lh > hl * 0.62) {
+    lh = hl * 0.62;
+    lw = lh * logo.ratio;
+  }
+  const la = a0 + (wl - lw) / 2;
+  const lz = z1 - pad;
+  out.push({ kind: 'image', href: logo.href, p0: iso(la, l, lz), p1: iso(la + lw, l, lz), p3: iso(la, l, lz - lh) });
+  // lignes de texte de l'étiquette
+  for (const [f, w] of [
+    [0.22, 0.8],
+    [0.1, 0.55],
+  ] as const) {
+    const z = z0 + hl * f;
+    out.push({ kind: 'line', a: iso(a0 + pad, l, z), b: iso(a0 + pad + (wl - 2 * pad) * w, l, z), stroke: '#8d96a3', sw: 0.5 });
+  }
+  return out;
+}
+
+/** Proportions d'un logo (data URL) — navigateur uniquement */
+export function loadLogoInfo(href: string): Promise<LogoInfo | undefined> {
+  if (!href) return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth && img.naturalHeight ? { href, ratio: img.naturalWidth / img.naturalHeight } : undefined);
+    img.onerror = () => resolve(undefined);
+    img.src = href;
+  });
 }
 
 export interface PackageLike {
@@ -459,7 +518,7 @@ export const refScale = (pkgs: { length: number; width: number; height: number }
  * refK : échelle du plus gros colis de la PL. Les colis plus petits sont dessinés plus petits
  * (taille relative adoucie, au moins 45 % de la vignette) pour que la différence de taille se voie.
  */
-export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabels, title?: string, refK?: number): Picture {
+export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabels, title?: string, refK?: number, logo?: LogoInfo): Picture {
   const W = 220;
   const Hh = 190;
   const L = Math.max(1, p.length || 40);
@@ -484,6 +543,7 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
       if (sh.kind === 'poly') shapes.push({ ...sh, pts: sh.pts.map(T) });
       else if (sh.kind === 'line') shapes.push({ ...sh, a: T(sh.a), b: T(sh.b) });
       else if (sh.kind === 'circle') shapes.push({ ...sh, c: T(sh.c) });
+      else if (sh.kind === 'image') shapes.push({ ...sh, p0: T(sh.p0), p1: T(sh.p1), p3: T(sh.p3) });
       else shapes.push(sh);
     }
   };
@@ -495,8 +555,11 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
   const px = 1 / k; // 1 unité de dessin exprimée en cm du modèle
   if (fam === 'pallet') drawPallet(push, L, l, H, px, p.load);
   else if (fam === 'crate') drawCrate(push, L, l, H, px);
-  else if (fam === 'carton') drawCarton(push, L, l, H, px, 0);
+  else if (fam === 'carton') drawCarton(push, L, l, H, px, 0, !!logo);
   else push(solid(0, L, 0, l, 0, H, '#c9d1db', shade('#c9d1db', -0.5), 8));
+
+  // étiquette d'expédition au logo de la société, collée sur la face latérale (là où il faut la coller en vrai)
+  if (logo) push(shippingLabel(fam, L, l, H, logo));
 
   // ---- cotes ----
   const d = Math.max(Math.max(L, l, H) * 0.09, 9 / k); // écart des cotes : au moins 9 unités à l'écran
@@ -657,6 +720,10 @@ export function pictureToSvg(pic: Picture): string {
           return `<polygon points="${s.pts.map((p) => p.map((n) => n.toFixed(2)).join(',')).join(' ')}" fill="${s.fill}"${s.opacity !== undefined ? ` fill-opacity="${s.opacity}"` : ''} stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}" stroke-linejoin="round"/>`;
         case 'line':
           return `<line x1="${s.a[0].toFixed(2)}" y1="${s.a[1].toFixed(2)}" x2="${s.b[0].toFixed(2)}" y2="${s.b[1].toFixed(2)}" stroke="${s.stroke}" stroke-width="${s.sw}"${s.opacity !== undefined ? ` stroke-opacity="${s.opacity}"` : ''}${s.dash ? ' stroke-dasharray="3 2"' : ''}/>`;
+        case 'image': {
+          const m = [s.p1[0] - s.p0[0], s.p1[1] - s.p0[1], s.p3[0] - s.p0[0], s.p3[1] - s.p0[1], s.p0[0], s.p0[1]].map((n) => n.toFixed(3)).join(' ');
+          return `<image href="${s.href}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" transform="matrix(${m})"/>`;
+        }
         case 'circle':
           return `<circle cx="${s.c[0].toFixed(2)}" cy="${s.c[1].toFixed(2)}" r="${Math.max(0.1, s.r).toFixed(2)}" fill="${s.fill}" stroke="${s.stroke ?? 'none'}" stroke-width="${s.sw ?? 0}"/>`;
         case 'text': {

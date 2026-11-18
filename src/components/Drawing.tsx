@@ -20,6 +20,19 @@ export default function Drawing({ pic, className, title }: { pic: Picture; class
             );
           case 'line':
             return <line key={i} x1={s.a[0]} y1={s.a[1]} x2={s.b[0]} y2={s.b[1]} stroke={s.stroke} strokeWidth={s.sw} strokeOpacity={s.opacity} strokeLinecap="round" strokeDasharray={s.dash ? '3 2' : undefined} />;
+          case 'image':
+            return (
+              <image
+                key={i}
+                href={s.href}
+                x={0}
+                y={0}
+                width={1}
+                height={1}
+                preserveAspectRatio="none"
+                transform={`matrix(${s.p1[0] - s.p0[0]} ${s.p1[1] - s.p0[1]} ${s.p3[0] - s.p0[0]} ${s.p3[1] - s.p0[1]} ${s.p0[0]} ${s.p0[1]})`}
+              />
+            );
           case 'circle':
             return <circle key={i} cx={s.c[0]} cy={s.c[1]} r={s.r} fill={s.fill} stroke={s.stroke} strokeWidth={s.sw} />;
           case 'text':
