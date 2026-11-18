@@ -37,6 +37,8 @@ export interface CatalogItem {
   packShare?: number;
   /** (calcul) hauteurs réelles observées pour d'autres quantités sur le même emballage */
   heightAnchors?: { n: number; h: number }[];
+  /** colis d'une seule unité connu (carton individuel) : sert aux reliquats et aux palettes incomplètes (calcul interne) */
+  unitBox?: { l: number; w: number; h: number; net: number; gross: number };
   updatedAt: string;
 }
 

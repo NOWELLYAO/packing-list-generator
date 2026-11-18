@@ -347,6 +347,24 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
       const emptyPallet = Math.min(tare, item.length * item.width >= 9000 ? 25 : 10);
       const innerPerUnit = Math.max(0, tare - emptyPallet) / perPkg;
       const goodsRem = goodsUnitVol * rem;
+      const ubx = item.unitBox;
+      if (ubx) {
+        // l'article a son propre carton : quelques unités partent dans leurs cartons, sinon palette montée couche par couche
+        if (rem * ubx.gross <= SMALL_PKG_KG) {
+          const v1 = (ubx.l * ubx.w * ubx.h) / 1e6;
+          for (let i = 0; i < rem; i++)
+            out.push({ lineIdx, code: item.code || item.pn, qty: 1, type: 'Carton', l: ubx.l, w: ubx.w, h: ubx.h, volume: v1, net: ubx.net, gross: ubx.gross, basis: 'reference', goodsVolume: v1 });
+          return out;
+        }
+        const perLayer = Math.max(
+          1,
+          Math.floor(item.length / ubx.l) * Math.floor(item.width / ubx.w),
+          Math.floor(item.length / ubx.w) * Math.floor(item.width / ubx.l),
+        );
+        const h = Math.min(item.height, Math.ceil(PALLET_BASE_CM + Math.ceil(rem / perLayer) * ubx.h));
+        out.push(mk(rem, h, 'partial', (item.length * item.width * h) / 1e6, emptyPallet + innerPerUnit * rem));
+        return out;
+      }
       const repack = !isLongItem(item) && goodsRem > 0 && goodsRem <= REPACK_MAX_M3 && rem * item.netWeightPerUnit <= REPACK_MAX_KG
         ? REPACK_CARTONS.find(([l, w, h]) => (l * w * h * FILL) / 1e6 >= goodsRem)
         : undefined;
@@ -630,7 +648,10 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem = withSimilarPacking(refineMixedShare(item, catalog), catalog);
+    const packItem0 = withSimilarPacking(refineMixedShare(item, catalog), catalog);
+    // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
+    const ub = variantsOf(packItem0).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType));
+    const packItem = ub ? { ...packItem0, unitBox: { l: ub.length, w: ub.width, h: ub.height, net: ub.netWeightPerUnit, gross: ub.grossWeightPerUnit } } : packItem0;
     const gf = grundfos ? grundfosPieces(packItem, qty, lineIdx) : null;
     const { item: chosen, note, confidence } = gf ? { item: packItem, note: gf.note, confidence: gf.confidence } : chooseVariant(packItem, qty);
     const warnings: string[] = [];

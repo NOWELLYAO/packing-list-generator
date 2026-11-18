@@ -362,3 +362,26 @@ describe('base importée avec une ancienne version (part du colis mixte absente)
     expect(p.height).toBeLessThan(63);
   });
 });
+
+describe('emballages saisis depuis la fiche article (SAP)', () => {
+  const S = 'Fiche article fabricant (saisie)';
+  const pc = { qtyPerPackage: 1, packageType: 'Carton', length: 50.4, width: 35.2, height: 31.1, volumePerPackage: 0.0552, netWeightPerUnit: 19.52, grossWeightPerUnit: 21.18, mixed: false, source: S, count: 10 };
+  const pal = { qtyPerPackage: 12, packageType: 'Palette', length: 120, width: 80, height: 107.7, volumePerPackage: 1.0339, netWeightPerUnit: 19.52, grossWeightPerUnit: 23.0117, mixed: false, source: S, count: 10 };
+  const M = { ...pc, id: 'm', code: 'MAG-1', pn: 'MAG-1', description: 'Circulateur test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [pc, pal] };
+  const gen = (q: number) => generatePackingList([M], [req('MAG-1', q)], { consolidate: true }).packages;
+  it('1 → son carton ; 12 → la palette SAP', () => {
+    expect(gen(1)[0]).toMatchObject({ length: 50.4, width: 35.2, height: 31.1, grossWeight: 21.18 });
+    expect(gen(12)).toHaveLength(1);
+    expect(gen(12)[0].grossWeight).toBeCloseTo(276.14, 1);
+  });
+  it('13 → palette de 12 + 1 carton individuel (pas un carton de réemballage)', () => {
+    const p = gen(13);
+    expect(p).toHaveLength(2);
+    expect(p[1]).toMatchObject({ length: 50.4, grossWeight: 21.18 });
+  });
+  it('4 → une couche sur palette (base + 1 carton de haut)', () => {
+    const p = gen(4);
+    expect(p).toHaveLength(1);
+    expect(p[0].height).toBeLessThanOrEqual(47);
+  });
+});

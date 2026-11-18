@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CatalogItem } from '../types';
+import type { CatalogItem, PackVariant } from '../types';
 import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
 import { readUserNumber } from '../lib/validate';
@@ -48,7 +48,8 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
   const [packChanged, setPackChanged] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const variants = variantsOf(item);
+  const variants = variantsOf(draft);
+  const [addOpen, setAddOpen] = useState(false);
   const lang = useLang();
 
   const set = (f: Field, v: string) => {
@@ -156,6 +157,17 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
             </button>
           )}
 
+          <AddPacking
+            open={addOpen}
+            setOpen={setAddOpen}
+            onAdd={(v) => {
+              // emballage de la fiche article du fabricant : fiable, il devient une variante (le choix par quantité reste automatique)
+              const vs = [...(draft.variants?.length ? draft.variants : variantsOf(draft)).filter((x) => !(x.source === v.source && x.qtyPerPackage === v.qtyPerPackage)), v];
+              setDraft({ ...applyVariant({ ...draft, variants: vs }, preferredVariant(vs)), variants: vs, manual: false, mixed: false });
+              setPackChanged(false);
+            }}
+          />
+
           {variants.length > 1 && (
             <>
               <h3 className="card-title">
@@ -190,6 +202,17 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
                     >
                       Utiliser
                     </button>
+                    {v.source === SAP_SOURCE && (
+                      <button
+                        className="btn ghost small danger"
+                        onClick={() => {
+                          const vs = (draft.variants ?? []).filter((x) => !(x.source === SAP_SOURCE && x.qtyPerPackage === v.qtyPerPackage));
+                          setDraft(vs.length ? { ...applyVariant({ ...draft, variants: vs }, preferredVariant(vs)), variants: vs } : { ...draft, variants: undefined });
+                        }}
+                      >
+                        Retirer
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -212,6 +235,93 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
             Enregistrer
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+const SAP_SOURCE = 'Fiche article fabricant (saisie)';
+const TYPES = ['Carton', 'Palette', 'Demi-palette', 'Caisse'];
+
+/** Saisie d'un emballage depuis la fiche article du fabricant (SAP MM03 → Unités de mesure) : quantité, dimensions, poids du colis entier */
+function AddPacking({ open, setOpen, onAdd }: { open: boolean; setOpen: (b: boolean) => void; onAdd: (v: PackVariant) => void }) {
+  const [f, setF] = useState({ qty: '1', type: 'Carton', unit: 'mm', l: '', w: '', h: '', gross: '', net: '' });
+  const [err, setErr] = useState('');
+  if (!open)
+    return (
+      <button className="btn ghost small" onClick={() => setOpen(true)}>
+        + Ajouter un emballage (fiche article SAP)
+      </button>
+    );
+  const field = (k: keyof typeof f, label: string) => (
+    <label key={k}>
+      <span>{label}</span>
+      <input inputMode="decimal" value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+    </label>
+  );
+  const add = () => {
+    const n = (k: keyof typeof f) => readUserNumber(f[k].trim());
+    const [qty, l, w, h, gross, net] = [n('qty'), n('l'), n('w'), n('h'), n('gross'), n('net')];
+    if (![qty, l, w, h, gross].every((x) => Number.isFinite(x) && x > 0)) return setErr('Renseignez la quantité, les 3 dimensions et le poids brut.');
+    const netOk = Number.isFinite(net) && net > 0 ? net : gross;
+    if (netOk > gross) return setErr('Le poids net doit être ≤ au brut.');
+    const k = f.unit === 'mm' ? 0.1 : 1;
+    const [L, W, H] = [l, w, h].map((x) => Math.round(x * k * 10) / 10);
+    if ([L, W, H].some((x) => x > 1500)) return setErr('Dimension trop grande : vérifiez l’unité (mm ou cm).');
+    onAdd({
+      qtyPerPackage: qty,
+      packageType: f.type,
+      length: Math.max(L, W),
+      width: Math.min(L, W),
+      height: H,
+      volumePerPackage: Math.round(((L * W * H) / 1e6) * 10000) / 10000,
+      netWeightPerUnit: Math.round((netOk / qty) * 10000) / 10000,
+      grossWeightPerUnit: Math.round((gross / qty) * 10000) / 10000,
+      mixed: false,
+      source: SAP_SOURCE,
+      count: 10,
+    });
+    setF({ ...f, qty: '', l: '', w: '', h: '', gross: '', net: '' });
+    setErr('');
+  };
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h3 className="card-title">Emballage de la fiche article (SAP)</h3>
+      <p className="hint">
+        Une ligne de « Unités de mesure » à la fois (ex. PC = 1 pièce, PAL = palette de 12). Poids du colis entier, tels qu'affichés.
+        Après l'ajout, l'appli choisit l'emballage selon la quantité demandée.
+      </p>
+      <div className="form-grid">
+        {field('qty', 'Quantité dans ce colis')}
+        <label>
+          <span>Emballage</span>
+          <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
+            {TYPES.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+        {field('l', 'Longueur')}
+        {field('w', 'Largeur')}
+        {field('h', 'Hauteur')}
+        <label>
+          <span>Unité des dimensions</span>
+          <select value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })}>
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+          </select>
+        </label>
+        {field('gross', 'Poids brut du colis (kg)')}
+        {field('net', 'Poids net du colis (kg)')}
+      </div>
+      {err && <div className="form-error">{err}</div>}
+      <div className="row" style={{ gap: 8, marginTop: 8 }}>
+        <button className="btn primary small" onClick={add}>
+          Ajouter
+        </button>
+        <button className="btn ghost small" onClick={() => setOpen(false)}>
+          Fermer
+        </button>
       </div>
     </div>
   );
