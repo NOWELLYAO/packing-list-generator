@@ -704,7 +704,9 @@ export function generatePackingList(
   //    et règle de la proposition optimisée si l'option est activée)
   if (grundfosGrouping || (!grundfosMode && options.consolidate)) {
     const small = pool.filter(isSmall);
-    if (small.length >= 2) {
+    // 2 ou 3 articles déjà dans leur propre carton : ils partent tels quels (pas de suremballage)
+    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !PALLET_RE.test(p.type));
+    if (small.length >= 2 && !ownCartons) {
       groups.push({ pieces: small, source: 'rule' });
       pool = pool.filter((p) => !small.includes(p));
     }

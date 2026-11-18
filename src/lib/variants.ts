@@ -8,6 +8,9 @@ import { round } from './parseValues';
  * et la génération choisit la variante la plus adaptée à la quantité demandée.
  */
 
+/** emballage saisi depuis la fiche article du fabricant (SAP) */
+export const SAP_SOURCE = 'Fiche article fabricant (saisie)';
+
 const sig = (v: Pick<PackVariant, 'qtyPerPackage' | 'length' | 'width' | 'height' | 'volumePerPackage'>) =>
   `${round(v.qtyPerPackage, 3)}|${[v.length, v.width, v.height].map((n) => Math.round(n)).sort((a, b) => b - a).join('x')}|${v.length ? '' : round(v.volumePerPackage, 3)}`;
 
@@ -87,7 +90,9 @@ export function variantsOf(item: CatalogItem): PackVariant[] {
   const weightOutlier = (v: PackVariant) => medNet > 0 && v.netWeightPerUnit > 0 && (v.netWeightPerUnit / medNet > 20 || medNet / v.netWeightPerUnit > 20);
   const absurd = (v: PackVariant) => (v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || weightOutlier(v);
   const sane = vs.some((v) => !absurd(v)) ? vs.filter((v) => !absurd(v)) : vs;
-  const kept = sane.filter((v) => hasDims(v) || !measured(v));
+  // fiche article du fabricant saisie : les relevés de PL sans dimensions (volume seul) deviennent inutiles
+  const hasSap = sane.some((v) => v.source === SAP_SOURCE && hasDims(v));
+  const kept = sane.filter((v) => (hasSap ? hasDims(v) && !v.dimsInferred : hasDims(v) || !measured(v)));
   return kept.map((v) => completeDims(v, kept));
 }
 

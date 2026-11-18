@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CatalogItem, PackVariant } from '../types';
-import { applyVariant, preferredVariant, variantsOf } from '../lib/variants';
+import { applyVariant, preferredVariant, SAP_SOURCE, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
 import { readUserNumber } from '../lib/validate';
 import { itemIssues } from '../lib/quality';
@@ -240,7 +240,6 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
   );
 }
 
-const SAP_SOURCE = 'Fiche article fabricant (saisie)';
 const TYPES = ['Carton', 'Palette', 'Demi-palette', 'Caisse'];
 
 /** Saisie d'un emballage depuis la fiche article du fabricant (SAP MM03 → Unités de mesure) : quantité, dimensions, poids du colis entier */
