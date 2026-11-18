@@ -9,7 +9,7 @@ import { generatePackingList, isLongItem } from '../lib/generate';
 import { formatNos, groupIdentical, scaleStrip } from '../lib/drawing';
 import { packLabel } from '../lib/i18n';
 import { parseSapPackingList, sapToCatalog } from '../lib/sapPackingList';
-import { CATALOG, req } from './fixtures';
+import { CATALOG, PUMP, req } from './fixtures';
 
 describe('saisie des nombres (audit, point 2)', () => {
   it.each([
@@ -398,5 +398,16 @@ describe('fiche corrigée à la main incohérente', () => {
     const B = { ...base, id: 'b', code: 'VO-1', pn: 'VO-1', description: 'Pompe', qtyPerPackage: 4, packageType: 'PALPLATE', length: 0, width: 0, height: 0, volumePerPackage: 0.48, netWeightPerUnit: 29, grossWeightPerUnit: 31.6 };
     const p = generatePackingList([B], [req('VO-1', 4)], { consolidate: true }).packages[0];
     expect(p.length * p.width * p.height).toBeGreaterThan(0);
+  });
+});
+
+describe('fichier de corrections chargé dans la base', () => {
+  it('une fiche corrigée plus récente remplace une fiche corrigée à la main ; resetManual la remet en automatique', async () => {
+    const { mergeCatalog } = await import('../lib/normalize');
+    const old = { ...PUMP, manual: true, qtyPerPackage: 2026, updatedAt: '2026-01-01' };
+    const fix = { ...PUMP, manual: true, qtyPerPackage: 1, updatedAt: '2026-02-01' };
+    expect(mergeCatalog([old], [fix]).catalog[0].qtyPerPackage).toBe(1);
+    const reset = { ...PUMP, manual: false, resetManual: true, updatedAt: '2026-03-01' };
+    expect(mergeCatalog([old], [reset]).catalog[0].manual).toBe(false);
   });
 });

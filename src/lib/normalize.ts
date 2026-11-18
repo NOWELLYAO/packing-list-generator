@@ -209,6 +209,17 @@ export function normalizeRows(
  * - désignation, code SH, origine sont complétés si l'import les fournit ;
  * - une fiche corrigée à la main garde ses valeurs.
  */
+const packFields = (i: CatalogItem) => ({
+  qtyPerPackage: i.qtyPerPackage,
+  packageType: i.packageType,
+  length: i.length,
+  width: i.width,
+  height: i.height,
+  volumePerPackage: i.volumePerPackage,
+  netWeightPerUnit: i.netWeightPerUnit,
+  grossWeightPerUnit: i.grossWeightPerUnit,
+});
+
 export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
   const map = new Map(catalog.map((c) => [itemKey(c.code, c.pn), c]));
   let added = 0;
@@ -216,7 +227,7 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
   for (const it of incoming) {
     const k = itemKey(it.code, it.pn);
     const prev = map.get(k);
-    const incomingVariants = variantsOf(it);
+    const incomingVariants = (it as { resetManual?: boolean }).resetManual ? [] : variantsOf(it);
     if (!prev) {
       added++;
       const variants = mergeVariants([], incomingVariants);
@@ -238,6 +249,17 @@ export function mergeCatalog(catalog: CatalogItem[], incoming: CatalogItem[]) {
       coPacked: [...new Set([...(prev.coPacked ?? []), ...(it.coPacked ?? [])])].filter(Boolean),
     };
     if (!merged.coPacked?.length) delete merged.coPacked;
+    // fichier de corrections (fiche « corrigée à la main » plus récente, ou retour explicite au choix automatique) :
+    // il l'emporte sur la fiche existante
+    const newer = !prev.updatedAt || (it.updatedAt || '') > prev.updatedAt;
+    if (it.manual === true && newer) {
+      map.set(k, { ...merged, ...packFields(it), manual: true, mixed: false, packShare: undefined, dimsInferred: undefined, unit: it.unit || merged.unit });
+      continue;
+    }
+    if (it.manual === false && prev.manual && newer && (it as { resetManual?: boolean }).resetManual) {
+      map.set(k, { ...applyVariant(merged, preferredVariant(variants)), manual: false });
+      continue;
+    }
     map.set(k, prev.manual ? merged : applyVariant(merged, preferredVariant(variants)));
   }
   return { catalog: [...map.values()], added, updated };
