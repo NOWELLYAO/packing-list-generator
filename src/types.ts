@@ -196,7 +196,7 @@ export interface Settings {
   /** mode de transport retenu pour le plan de chargement et les indicateurs */
   transportMode?: 'sea' | 'road' | 'air';
   /** étiquettes de colis : derniers réglages utilisés */
-  labels?: { format: 'a6' | '100x150'; marking: string; reference: string; fragile: boolean; noStack: boolean };
+  labels?: { format: 'a6' | '100x150'; marking: string; reference: string; fragile: boolean; noStack: boolean; twoForLarge?: boolean };
 }
 
 /** PL générée, conservée dans l'historique */

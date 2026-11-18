@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { PackingList, Settings } from '../types';
 import type { LabelOptions } from '../lib/labels';
+import { familyOf } from '../lib/drawing';
+import LabelPlacement from './LabelPlacement';
 
 interface Props {
   pl: PackingList;
@@ -9,17 +11,19 @@ interface Props {
   onClose: () => void;
 }
 
-const DEFAULTS: LabelOptions = { format: 'a6', marking: '', reference: '', fragile: false, noStack: false };
+const DEFAULTS: LabelOptions = { format: 'a6', marking: '', reference: '', fragile: false, noStack: false, twoForLarge: true };
 
 /** Réglages des étiquettes de colis, puis génération du PDF */
 export default function LabelsDialog({ pl, settings, setSettings, onClose }: Props) {
   // seuls le format et les pictogrammes sont mémorisés ; destinataire et référence repartent vides à chaque fois
   const remembered = settings.labels ?? DEFAULTS;
-  const [o, setO] = useState<LabelOptions>({ ...DEFAULTS, format: remembered.format, fragile: remembered.fragile, noStack: remembered.noStack });
+  const [o, setO] = useState<LabelOptions>({ ...DEFAULTS, format: remembered.format, fragile: remembered.fragile, noStack: remembered.noStack, twoForLarge: remembered.twoForLarge ?? true });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const n = pl.packages.length;
+  const large = pl.packages.filter((p) => ['pallet', 'crate'].includes(familyOf(p.type, p))).length;
+  const n = pl.packages.length + (o.twoForLarge !== false ? large : 0);
   const sheets = o.format === 'a6' ? Math.ceil(n / 4) : n;
+  const [help, setHelp] = useState(false);
 
   const generate = async () => {
     setBusy(true);
@@ -88,6 +92,29 @@ export default function LabelsDialog({ pl, settings, setSettings, onClose }: Pro
               <input type="checkbox" checked={o.noStack} onChange={(e) => setO({ ...o, noStack: e.target.checked })} /> Ne pas gerber
             </label>
           </fieldset>
+          <fieldset className="field">
+            <legend>Nombre d'étiquettes</legend>
+            <label className="check">
+              <input type="checkbox" checked={o.twoForLarge !== false} onChange={(e) => setO({ ...o, twoForLarge: e.target.checked })} /> 2 étiquettes
+              par palette et par caisse (deux faces), 1 par carton
+            </label>
+            <button type="button" className="link-btn" onClick={() => setHelp(!help)} aria-expanded={help}>
+              {help ? 'Masquer' : 'Où coller les étiquettes ?'}
+            </button>
+            {help && <LabelPlacement />}
+          </fieldset>
+          <div className={settings.logo ? 'label-logo ok' : 'label-logo missing'}>
+            {settings.logo ? (
+              <>
+                <img src={settings.logo} alt="Logo imprimé sur les étiquettes" />
+                <span>Ce logo est imprimé en tête de chaque étiquette (modifiable dans Réglages → Logo).</span>
+              </>
+            ) : (
+              <span>
+                Aucun logo : ajoutez le fichier du logo officiel dans <b>Réglages → Logo</b> pour l'imprimer sur chaque étiquette.
+              </span>
+            )}
+          </div>
           <p className="hint">
             Chaque étiquette porte le n° du colis sur le total, ses dimensions et poids, son contenu et un QR code qui reprend ces informations
             (lisible avec l'appareil photo d'un téléphone). Langue : {(settings.lang ?? 'fr') === 'fr' ? 'français' : 'anglais'}, comme la PL.

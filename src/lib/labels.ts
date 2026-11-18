@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import type { PackingList, PLPackage, Settings } from '../types';
 import { packLabel } from './i18n';
+import { familyOf } from './drawing';
 
 /**
  * Étiquettes de colis (marquage d'expédition) :
@@ -21,6 +22,15 @@ export interface LabelOptions {
   reference: string;
   fragile: boolean;
   noStack: boolean;
+  /** palettes et caisses : 2 étiquettes (deux faces adjacentes), l'usage en logistique */
+  twoForLarge?: boolean;
+}
+
+/** Nombre d'étiquettes à imprimer pour un colis */
+export function copiesFor(p: PLPackage, opts: Pick<LabelOptions, 'twoForLarge'>): number {
+  if (opts.twoForLarge === false) return 1;
+  const fam = familyOf(p.type, p);
+  return fam === 'pallet' || fam === 'crate' ? 2 : 1;
 }
 
 const L = {
@@ -133,11 +143,11 @@ async function drawLabel(doc: jsPDF, pl: PackingList, p: PLPackage, settings: Se
   if (settings.logo) {
     try {
       const props = doc.getImageProperties(settings.logo);
-      const lh = 9;
-      const lw = Math.min(28, (props.width / props.height) * lh);
+      const lh = 11;
+      const lw = Math.min(36, (props.width / props.height) * lh);
       doc.setFillColor(255, 255, 255);
-      doc.roundedRect(lx - 1, y + 4, lw + 2, lh + 2, 1, 1, 'F');
-      doc.addImage(settings.logo, lx, y + 5, lw, lh);
+      doc.roundedRect(lx - 1.5, y + 2.75, lw + 3, lh + 2, 1.2, 1.2, 'F');
+      doc.addImage(settings.logo, lx, y + 3.75, lw, lh);
       lx += lw + 4;
     } catch {
       /* logo illisible : ignoré */
@@ -253,7 +263,7 @@ async function drawLabel(doc: jsPDF, pl: PackingList, p: PLPackage, settings: Se
 
 /** PDF d'étiquettes : un document, une étiquette par colis */
 export async function buildLabelsPdf(pl: PackingList, settings: Settings, opts: LabelOptions): Promise<jsPDF> {
-  const pkgs = pl.packages;
+  const pkgs = pl.packages.flatMap((p) => Array.from({ length: copiesFor(p, opts) }, () => p));
   if (opts.format === '100x150') {
     const doc = new jsPDF({ unit: 'mm', format: [100, 150], orientation: 'portrait' });
     for (const [i, p] of pkgs.entries()) {

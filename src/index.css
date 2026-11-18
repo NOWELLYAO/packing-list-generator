@@ -612,3 +612,15 @@ td.delta small { font-weight: 500; }
 .brand .cloud-dot.synced { color: var(--ok); }
 .brand .cloud-dot.offline, .brand .cloud-dot.syncing { color: var(--warn); }
 .brand .cloud-dot.error, .brand .cloud-dot.not_configured { color: var(--danger); }
+
+/* ---------- Aide : où coller l'étiquette ---------- */
+.label-help { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem; }
+.label-help-figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.label-help-figs figure { margin: 0; text-align: center; }
+.label-help-figs svg { width: 100%; height: auto; }
+.label-help-figs figcaption { font-size: 0.78rem; color: var(--ink-2); }
+.label-help-rules { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.82rem; color: var(--ink-2); }
+.label-logo { display: flex; align-items: center; gap: 0.7rem; font-size: 0.82rem; padding: 0.6rem 0.7rem; border-radius: 10px; }
+.label-logo.ok { background: var(--accent-soft); color: var(--ink-2); }
+.label-logo.ok img { height: 34px; max-width: 120px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.label-logo.missing { background: var(--warn-soft); color: var(--warn); }
