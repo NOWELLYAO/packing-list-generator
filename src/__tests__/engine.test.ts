@@ -67,7 +67,8 @@ describe('regroupements', () => {
 
   it('la palette de regroupement est au moins aussi longue que le plus long colis', () => {
     const pl = gen([req('L-1', 1), req('A-1', 1), req('B-1', 1)]);
-    const g = pl.packages.find((p) => p.basis === 'grouped');
+    // (un appareil lourd dans son propre carton peut désormais rester seul : on ne vérifie que si le long colis est dans le groupe)
+    const g = pl.packages.find((p) => p.basis === 'grouped' && p.contents.some((c) => c.code === 'L-1'));
     if (g) expect(Math.max(g.length, g.width)).toBeGreaterThanOrEqual(160);
   });
 });
