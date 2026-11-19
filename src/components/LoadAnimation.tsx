@@ -11,8 +11,15 @@ import Drawing from './Drawing';
 export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr' | 'en'; logo?: LogoInfo }) {
   const order = useMemo(() => loadingOrder(bin), [bin]);
   const n = order.length;
-  // durée par colis : 0,9 s, plus court quand il y en a beaucoup (25 s au plus)
-  const per = Math.max(250, Math.min(900, 25000 / Math.max(1, n)));
+  // durée par colis : 2 s en vitesse normale (plus court quand il y en a beaucoup : 90 s au plus)
+  const [speed, setSpeed] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem('plgen:animSpeed')) || 1;
+    } catch {
+      return 1;
+    }
+  });
+  const per = Math.max(600, Math.min(2000, 90000 / Math.max(1, n))) / speed;
   const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [t, setT] = useState<number | null>(null); // temps écoulé (ms), null = vue complète
   const [playing, setPlaying] = useState(false);
@@ -86,6 +93,27 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
             ⏹ Vue finale
           </button>
         )}
+        <label className="hint load-anim-speed">
+          Vitesse{' '}
+          <select
+            value={speed}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              // garde la position dans l'animation quand on change de vitesse
+              if (t !== null) setT((t * speed) / v);
+              setSpeed(v);
+              try {
+                localStorage.setItem('plgen:animSpeed', String(v));
+              } catch {
+                /* stockage indisponible */
+              }
+            }}
+          >
+            <option value={0.5}>lente</option>
+            <option value={1}>normale</option>
+            <option value={2}>rapide</option>
+          </select>
+        </label>
         <span className="hint" aria-live="polite">
           {cur
             ? `${frame.idx + 1} / ${n} · colis n° ${cur.no} — ${packLabel(cur.type, lang)} ${Math.round(cur.l)} × ${Math.round(cur.w)} × ${Math.round(cur.h)} cm, ${Math.round(cur.kg)} kg`
