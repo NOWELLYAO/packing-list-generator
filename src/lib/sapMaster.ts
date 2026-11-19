@@ -14,8 +14,14 @@ const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 export interface SapMasterResult {
   items: CatalogItem[];
   skipped: string[];
+  /** lignes aux valeurs impossibles (densité, poids, dimensions) */
+  rejected: string[];
   warnings: string[];
 }
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+/** facteur vers m³ */
+const VOL_UNIT: Record<string, number> = { M3: 1, CDM: 0.001, DM3: 0.001, L: 0.001, CCM: 1e-6, CM3: 1e-6, MMQ: 1e-9, MM3: 1e-9, HL: 0.1, FT3: 0.0283168, GLL: 0.0037854, GAL: 0.0037854 };
 
 function num(s: string | undefined): number {
   if (s === undefined || s.trim() === '') return 0;
@@ -38,12 +44,15 @@ export function parseSapMaster(tables: ParsedTable[]): SapMasterResult | null {
         wid: col('width', 'largeur', 'breit'),
         hei: col('height', 'hauteur', 'hoehe'),
         dunit: col('unit', 'unit of dimension', 'meabm', 'unite'),
+        vol: col('volume', 'volum'),
+        vunit: col('volume unit', 'voleh'),
         qty: col('numerator', 'y', 'quantity', 'qty', 'quantite', 'umrez', 'counter'),
         aun: col('aun', 'alt unit', 'alternative unit', 'meinh', 'aun measure'),
       };
       if (c.mat < 0 || c.gross < 0 || c.len < 0 || c.wid < 0 || c.hei < 0) continue;
       const byCode = new Map<string, CatalogItem>();
       const skipped: string[] = [];
+      const rejected: string[] = [];
       const warnings: string[] = [];
       for (const r of t.rows.slice(hr + 1)) {
         const code = (r[c.mat] ?? '').trim();
@@ -53,8 +62,21 @@ export function parseSapMaster(tables: ParsedTable[]): SapMasterResult | null {
         if (aun === 'PL' || /layer|couche/i.test(r.join(' '))) continue; // une couche de palette n'est pas un colis
         const du = c.dunit >= 0 ? (r[c.dunit] ?? '').trim().toUpperCase() : 'MM';
         const k = du === 'CM' ? 1 : du === 'M' ? 100 : 0.1;
-        const [L, W, H] = [num(r[c.len]), num(r[c.wid]), num(r[c.hei])].map((x) => Math.round(x * k * 10) / 10);
-        const wk = c.wunit >= 0 && /^G$/i.test((r[c.wunit] ?? '').trim()) ? 0.001 : 1;
+        let [L, W, H] = [num(r[c.len]), num(r[c.wid]), num(r[c.hei])].map((x) => x * k);
+        // volume SAP (unité propre) : sert à repérer une unité de dimensions mal saisie (MM au lieu de CM…)
+        const vs = c.vol >= 0 ? num(r[c.vol]) * (VOL_UNIT[(c.vunit >= 0 ? r[c.vunit] ?? '' : 'CDM').trim().toUpperCase()] ?? 0) : 0;
+        const vd = (L * W * H) / 1e6;
+        const close = (a: number, b: number) => a > 0 && b > 0 && Math.abs(a - b) <= b * 0.15;
+        if (vs > 0 && vd > 0 && !close(vd, vs)) {
+          const sc = [10, 0.1, 100, 0.01].find((f) => close(vd * f ** 3, vs) && Math.max(L, W, H) * f <= 1500 && Math.min(L, W, H) * f >= 0.5);
+          if (sc) {
+            [L, W, H] = [L, W, H].map((x) => x * sc);
+            warnings.push(`${code} : dimensions converties (unité SAP probablement fausse, volume ${round1(vs * 1000)} dm³)`);
+          } else warnings.push(`${code} : volume SAP ${round1(vs * 1000)} dm³ ≠ dimensions ${round1(vd * 1000)} dm³ (dimensions retenues)`);
+        }
+        [L, W, H] = [L, W, H].map((x) => Math.round(x * 10) / 10);
+        const wu = c.wunit >= 0 ? (r[c.wunit] ?? '').trim().toUpperCase() : 'KG';
+        const wk = wu === 'G' ? 0.001 : wu === 'LB' ? 0.4536 : wu === 'T' || wu === 'TO' ? 1000 : 1;
         const gross = num(r[c.gross]) * wk;
         const net = (c.net >= 0 ? num(r[c.net]) : 0) * wk || gross;
         const qty = Math.max(1, Math.round(c.qty >= 0 ? num(r[c.qty]) : aun === 'PAL' ? 0 : 1) || 1);
@@ -62,10 +84,24 @@ export function parseSapMaster(tables: ParsedTable[]): SapMasterResult | null {
           skipped.push(`${code} ${desc}`.trim());
           continue;
         }
+        // fiches SAP physiquement impossibles : écartées (la donnée actuelle de la base est conservée)
+        const vol = (L * W * H) / 1e6;
+        const dens = gross / vol;
+        const why =
+          Math.max(L, W, H) < 2 && gross > 1 ? 'dimensions de 1 mm'
+          : dens > 3000 ? `${round1(gross)} kg dans ${round1(vol * 1000)} dm³`
+          : vol > 0.03 && gross < (0.3 + vol * 8) * 0.5 ? `${gross} kg pour un colis de ${round1(vol * 1000)} dm³`
+          : '';
+        if (why) {
+          rejected.push(`${code} ${desc} (${why})`.trim());
+          continue;
+        }
         const pallet = qty > 1 && Math.max(L, W) >= 100 && Math.min(L, W) >= 60;
         const v: PackVariant = {
           qtyPerPackage: qty,
-          packageType: pallet ? 'Palette' : 'Carton',
+          // pièce seule : empreinte de palette → palette ; lourde ou très longue (pompe immergée…) → caisse
+          packageType:
+            pallet || (qty === 1 && Math.max(L, W) >= 100 && Math.min(L, W) >= 60) ? 'Palette' : qty === 1 && (gross >= 60 || Math.max(L, W, H) >= 150) ? 'Caisse' : 'Carton',
           length: Math.max(L, W),
           width: Math.min(L, W),
           height: H,
@@ -94,18 +130,7 @@ export function parseSapMaster(tables: ParsedTable[]): SapMasterResult | null {
           variants: [v],
         } as CatalogItem);
       }
-      // volume indiqué ≠ dimensions : on garde les dimensions, on le signale
-      for (const r of t.rows.slice(hr + 1)) {
-        const vc = h.findIndex((x) => x === 'volume');
-        const code = (r[c.mat] ?? '').trim();
-        const it = byCode.get(code);
-        if (vc < 0 || !it || it.qtyPerPackage !== 1) continue;
-        const vu = (r[h.findIndex((x) => x === 'volume unit')] ?? 'CDM').trim().toUpperCase();
-        const vol = num(r[vc]) * (vu === 'M3' ? 1 : vu === 'CDM' || vu === 'DM3' || vu === 'L' ? 0.001 : 0.001);
-        if (vol > 0 && Math.abs(vol - it.volumePerPackage) > it.volumePerPackage * 0.1)
-          warnings.push(`${code} : volume SAP ${Math.round(vol * 1000 * 10) / 10} dm³ ≠ dimensions ${Math.round(it.volumePerPackage * 1000 * 10) / 10} dm³ (dimensions retenues)`);
-      }
-      if (byCode.size || skipped.length) return { items: [...byCode.values()], skipped, warnings };
+      if (byCode.size || skipped.length) return { items: [...byCode.values()], skipped, rejected, warnings };
     }
   }
   return null;

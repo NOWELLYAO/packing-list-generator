@@ -85,10 +85,12 @@ export function variantsOf(item: CatalogItem): PackVariant[] {
     return vol > 0 ? (v.grossWeightPerUnit * v.qtyPerPackage) / vol : 0;
   };
   // ou un poids unitaire 20 fois plus faible / plus fort que les autres relevés (1 kg au lieu de 254 kg)
-  const nets = vs.map((v) => v.netWeightPerUnit).filter((n) => n > 0).sort((a, b) => a - b);
+  // la fiche article du fabricant fait référence : c'est elle qui sert d'étalon, et elle n'est jamais écartée
+  const sapVs = vs.filter((v) => v.source === SAP_SOURCE);
+  const nets = (sapVs.length ? sapVs : vs).map((v) => v.netWeightPerUnit).filter((n) => n > 0).sort((a, b) => a - b);
   const medNet = nets.length >= 2 ? nets[Math.floor(nets.length / 2)] : 0;
   const weightOutlier = (v: PackVariant) => medNet > 0 && v.netWeightPerUnit > 0 && (v.netWeightPerUnit / medNet > 20 || medNet / v.netWeightPerUnit > 20);
-  const absurd = (v: PackVariant) => (v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || weightOutlier(v);
+  const absurd = (v: PackVariant) => v.source !== SAP_SOURCE && ((v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || weightOutlier(v));
   const sane = vs.some((v) => !absurd(v)) ? vs.filter((v) => !absurd(v)) : vs;
   // fiche article du fabricant saisie : les relevés de PL sans dimensions (volume seul) deviennent inutiles
   const hasSap = sane.some((v) => v.source === SAP_SOURCE && hasDims(v));

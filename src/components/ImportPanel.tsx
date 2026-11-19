@@ -97,6 +97,7 @@ export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props)
         const r = onImport(master.items, file.name);
         const extra = [
           master.skipped.length ? `sans dimensions, ignorés : ${master.skipped.join(', ')}` : '',
+          master.rejected.length ? `valeurs SAP impossibles, ignorées : ${master.rejected.join(', ')}` : '',
           ...master.warnings,
         ].filter(Boolean);
         setLog((l) => [{ text: `✅ ${file.name} (fiches article SAP) : ${master.items.length} articles → ${r.added} nouveaux, ${r.updated} complétés${extra.length ? ` ⚠️ ${extra.join(' ; ')}` : ''}` }, ...l]);
