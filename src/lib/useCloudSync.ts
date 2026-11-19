@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CatalogItem, HistoryEntry, Settings } from '../types';
+import type { CatalogItem, HistoryEntry, PendingChange, Settings } from '../types';
 import type { AccuracyRecord } from './realCheck';
 import {
   CloudFailure,
@@ -24,6 +24,8 @@ interface Data {
   history: HistoryEntry[];
   accuracy: AccuracyRecord[];
   settings: Settings;
+  pending: PendingChange[];
+  pendingDone: string[];
 }
 interface Setters {
   /** écriture directe (sans garde-fou « base vide ») : réservé aux restaurations */
@@ -31,6 +33,8 @@ interface Setters {
   setHistory: (h: HistoryEntry[]) => void;
   setAccuracy: (a: AccuracyRecord[]) => void;
   setSettings: (s: Settings) => void;
+  setPending: (p: PendingChange[]) => void;
+  setPendingDone: (d: string[]) => void;
   notify: (msg: string) => void;
 }
 
@@ -56,7 +60,7 @@ export function useCloudSync(data: Data, set: Setters) {
 
   const local = (): Body => {
     const d = ref.current.data;
-    return { catalog: d.catalog, history: d.history, accuracy: d.accuracy, settings: d.settings };
+    return { catalog: d.catalog, history: d.history, accuracy: d.accuracy, settings: d.settings, pending: d.pending, pendingDone: d.pendingDone };
   };
   const apply = (b: Body) => {
     const s = ref.current.set;
@@ -64,6 +68,8 @@ export function useCloudSync(data: Data, set: Setters) {
     s.setHistory(b.history ?? []);
     s.setAccuracy(b.accuracy ?? []);
     if (b.settings) s.setSettings({ ...ref.current.data.settings, ...b.settings });
+    s.setPendingDone(b.pendingDone ?? []);
+    s.setPending((b.pending ?? []).filter((p) => !(b.pendingDone ?? []).includes(p.id)));
   };
 
   const sync = useCallback(async (): Promise<void> => {
@@ -151,7 +157,7 @@ export function useCloudSync(data: Data, set: Setters) {
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void sync(), DEBOUNCE_MS);
     return () => window.clearTimeout(timer.current);
-  }, [data.catalog, data.history, data.accuracy, data.settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data.catalog, data.history, data.accuracy, data.settings, data.pending, data.pendingDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     cloud,

@@ -30,6 +30,8 @@ export interface CloudDoc {
   history?: unknown[];
   accuracy?: unknown[];
   settings?: unknown;
+  pending?: { id: string; by?: { id?: string } }[];
+  pendingDone?: string[];
   device?: string;
 }
 
@@ -267,7 +269,18 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
       const cur = curRaw ? (JSON.parse(curRaw as string) as CloudDoc) : null;
       if (me && cur) {
         // le serveur garde la base et les réglages tels quels si le compte n'a pas le droit de les modifier
-        if (!me.p.includes('catalogEdit') && !me.p.includes('import') && catalogPrint(doc.catalog) !== catalogPrint(cur.catalog)) doc.catalog = cur.catalog;
+        const admin = me.p.includes('users');
+        // seule l'administration modifie la base : les autres comptes passent par des propositions à valider
+        if (!admin && catalogPrint(doc.catalog) !== catalogPrint(cur.catalog)) doc.catalog = cur.catalog;
+        if (!admin) {
+          // propositions : chacun ajoute (ou retire) les siennes ; seules les décisions de l'administrateur les clôturent
+          const curP = cur.pending ?? [];
+          const mine = (doc.pending ?? []).filter((x) => x?.by?.id === me.u);
+          const mineIds = new Set(mine.map((x) => x.id));
+          const canPropose = me.p.includes('catalogEdit') || me.p.includes('import');
+          doc.pending = [...curP.filter((x) => x?.by?.id !== me.u || mineIds.has(x.id)), ...(canPropose ? mine.filter((x) => !curP.some((c) => c.id === x.id)) : [])];
+          doc.pendingDone = cur.pendingDone;
+        }
         // réglages protégés (identité visuelle) ; langue et mode de transport restent libres pour chacun
         if (!me.p.includes('settings')) {
           const keep = (cur.settings ?? {}) as Record<string, unknown>;

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CatalogItem, HistoryEntry, RequestLine, Settings } from './types';
+import type { CatalogItem, HistoryEntry, PendingChange, RequestLine, Settings } from './types';
+import { diffCatalog } from './lib/review';
+import { uid } from './lib/normalize';
+import ReviewPanel from './components/ReviewPanel';
 import { requestPersistence, save, STORAGE_ERROR_EVENT, usePersistent } from './lib/storage';
 import { backupReminderDue, downloadCatalogBackup, snoozeBackupReminder } from './lib/backup';
 import { mergeCatalog } from './lib/normalize';
@@ -21,13 +24,14 @@ import SettingsPanel from './components/SettingsPanel';
 import LoginScreen from './components/LoginScreen';
 import { AccessContext, useAccess, type Perm } from './lib/access';
 
-type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'settings';
+type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'review' | 'settings';
 
 const ICONS: Record<Tab, string> = {
   generate: 'M9 5h10M9 12h10M9 19h10M4.5 5h.01M4.5 12h.01M4.5 19h.01',
   catalog: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   import: 'M12 4v11m0 0l-4-4m4 4l4-4M5 20h14',
   history: 'M12 7v5l3 2M3 12a9 9 0 103-6.7M3 4v4h4',
+  review: 'M9 12l2 2 4-4M5 4h14v16H5z',
   settings: 'M4 7h10M18 7h2M4 17h4M12 17h8M14 5v4M8 15v4',
 };
 
@@ -71,9 +75,13 @@ export default function App() {
   const [settings, setSettings] = usePersistent<Settings>('settings', DEFAULT_SETTINGS);
   const [history, setHistory] = usePersistent<HistoryEntry[]>('history', []);
   const [accuracy, setAccuracy] = usePersistent<AccuracyRecord[]>('accuracy', []);
+  const [pending, setPending] = usePersistent<PendingChange[]>('pending', []);
+  const [pendingDone, setPendingDone] = usePersistent<string[]>('pendingDone', []);
   const [lines, setLines] = usePersistent<RequestLine[]>('requests', []);
   const [consolidate, setConsolidate] = usePersistent<boolean>('consolidate', true);
   const [tab, setTab] = useState<Tab>(catalog.length ? 'generate' : 'import');
+  // juste après l'envoi d'une proposition, le message « enregistré » d'un écran ne doit pas la masquer
+  const lastProposal = useRef(0);
   const [toastMsg, setToastMsg] = useState<{ msg: string; undo?: () => void } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const [confirmState, setConfirmState] = useState<{ o: ConfirmOptions; resolve: (b: boolean) => void } | null>(null);
@@ -83,9 +91,15 @@ export default function App() {
     // plus de temps quand une annulation est possible
     toastTimer.current = window.setTimeout(() => setToastMsg(null), undo ? 10000 : 2600);
   }, []);
-  const toast = (msg: string) => notify(msg);
+  const toast = (msg: string) => {
+    if (Date.now() - lastProposal.current < 800) return;
+    notify(msg);
+  };
   const ask = useCallback((o: ConfirmOptions) => new Promise<boolean>((resolve) => setConfirmState({ o, resolve })), []);
-  const safety = useMemo<Safety>(() => ({ ask, notify }), [ask, notify]);
+  const safety = useMemo<Safety>(
+    () => ({ ask, notify: (m: string, undo?: () => void) => (Date.now() - lastProposal.current < 800 ? undefined : notify(m, undo)) }),
+    [ask, notify],
+  );
   const answer = useCallback(
     (ok: boolean) => {
       confirmState?.resolve(ok);
@@ -96,8 +110,8 @@ export default function App() {
 
   // Sauvegarde en ligne (restauration automatique si le navigateur efface ses données)
   const cloud = useCloudSync(
-    { catalog, history, accuracy, settings },
-    { setCatalog: (c) => { latest.current = c; setCatalogRaw(c); }, setHistory, setAccuracy, setSettings, notify },
+    { catalog, history, accuracy, settings, pending, pendingDone },
+    { setCatalog: (c) => { latest.current = c; setCatalogRaw(c); }, setHistory, setAccuracy, setSettings, setPending, setPendingDone, notify },
   );
   // base vide mais copie de secours locale disponible (et pas de sauvegarde en ligne)
   const [rescue, setRescue] = useState(() => (catalog.length ? null : listSnapshots().find((x) => x.catalog.length > 0) ?? null));
@@ -120,9 +134,9 @@ export default function App() {
   }, [settings.accent]);
 
   // latest garde le catalogue le plus récent même si plusieurs fichiers sont importés avant un nouveau rendu
-  const onImport = (items: CatalogItem[]) => {
+  const onImport = (items: CatalogItem[], fileName?: string) => {
     const r = mergeCatalog(latest.current, items);
-    setCatalog(r.catalog);
+    editCatalog(r.catalog, undefined, fileName ? `Import de ${fileName}` : 'Import');
     return { added: r.added, updated: r.updated };
   };
 
@@ -135,16 +149,36 @@ export default function App() {
 
   // Contrôle d'accès (si activé sur l'espace de sauvegarde)
   const access = useAccess(cloud.cloud?.code);
-  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history' };
+  // protection active et utilisateur non administrateur : ses changements de base deviennent des propositions à valider
+  const reviewMode = access.enabled && !!access.session && !access.session.user.perms.includes('users');
+  const editCatalog = (c: CatalogItem[], o?: { allowEmpty?: boolean }, label?: string) => {
+    if (!reviewMode) return setCatalog(c, o);
+    const d = diffCatalog(latest.current, c);
+    if (!d.upserts.length && !d.removals.length) return;
+    const lbl =
+      label ??
+      (d.removals.length && !d.upserts.length
+        ? `Suppression de ${d.removals.length > 1 ? `${d.removals.length} fiches` : `la fiche ${d.removals[0].code}`}`
+        : d.upserts.length === 1 && !d.removals.length
+          ? `${latest.current.some((i) => i.code === d.upserts[0].code && i.pn === d.upserts[0].pn) ? 'Modification' : 'Ajout'} de la fiche ${d.upserts[0].code}`
+          : `Modification de ${d.upserts.length + d.removals.length} fiches`);
+    const u = access.session!.user;
+    setPending([...pending, { id: uid(), at: new Date().toISOString(), by: { id: u.id, name: u.name }, label: lbl, ...d }]);
+    notify(`${lbl} : envoyée à l'administrateur pour validation`);
+    lastProposal.current = Date.now();
+  };
+  const myPending = reviewMode ? pending.filter((p) => p.by.id === access.session!.user.id) : [];
+  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', review: 'users' };
   const tabs = (
     [
       { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },
       { id: 'catalog', label: 'Articles' },
       { id: 'import', label: 'Importer' },
       { id: 'history', label: 'Historique' },
+      { id: 'review', label: 'Validation', badge: pending.length || undefined },
       { id: 'settings', label: 'Réglages' },
     ] as { id: Tab; label: string; badge?: number }[]
-  ).filter((t) => !NEED[t.id] || access.can(NEED[t.id]!));
+  ).filter((t) => (!NEED[t.id] || access.can(NEED[t.id]!)) && (t.id !== 'review' || access.enabled));
   // onglet devenu interdit (connexion avec un autre profil) → premier onglet permis
   useEffect(() => {
     if (!tabs.some((t) => t.id === tab)) setTab(tabs[0]?.id ?? 'settings');
@@ -273,7 +307,7 @@ export default function App() {
         {tab === 'generate' && (
           <GeneratorPanel
             catalog={catalog}
-            setCatalog={setCatalog}
+            setCatalog={editCatalog}
             settings={settings}
             setSettings={setSettings}
             lines={lines}
@@ -284,7 +318,28 @@ export default function App() {
             toast={toast}
           />
         )}
-        {tab === 'catalog' && <CatalogPanel catalog={catalog} setCatalog={setCatalog} toast={toast} />}
+        {tab === 'catalog' && myPending.length > 0 && (
+          <div className="update-banner" role="status">
+            <span>
+              {myPending.length} proposition{myPending.length > 1 ? 's' : ''} en attente de validation par l'administrateur :{' '}
+              {myPending.map((p) => p.label).join(' · ')}
+            </span>
+          </div>
+        )}
+        {tab === 'catalog' && <CatalogPanel catalog={catalog} setCatalog={editCatalog} toast={toast} />}
+        {tab === 'review' && (
+          <ReviewPanel
+            pending={pending}
+            catalog={catalog}
+            setCatalog={(c) => setCatalog(c)}
+            setPending={setPending}
+            resolve={(id) => {
+              setPending(pending.filter((p) => p.id !== id));
+              setPendingDone([...pendingDone, id].slice(-500));
+            }}
+            toast={toast}
+          />
+        )}
         {tab === 'import' && (
           <ImportPanel onImport={onImport} getCatalog={() => latest.current} onAccuracy={(r) => setAccuracy((a) => [r, ...a].slice(0, 300))} />
         )}

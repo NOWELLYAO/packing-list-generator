@@ -154,3 +154,28 @@ describe('contrôle d’accès (administrateur, utilisateurs, droits)', () => {
     expect((await post(f, { action: 'login', userId: id, pin: '1234' })).status).toBe(429);
   });
 });
+
+
+describe('propositions de modification (validation par l’administrateur)', () => {
+  const post = (fetcher: never, body: unknown, token?: string) => handle({ method: 'POST', headers: { ...h, ...(token ? { 'x-plgen-token': token } : {}) }, body }, env, fetcher);
+  it('un responsable base ne modifie pas la base directement ; sa proposition est conservée, l’admin la clôture', async () => {
+    const { fetcher } = fakeRedis();
+    const f = fetcher as never;
+    await handle({ method: 'PUT', headers: h, body: { doc: doc(3, 1000), base: 0 } }, env, fetcher);
+    const adminTok = ((await post(f, { action: 'setup', name: 'Admin', pin: '1234' })).body as { token: string }).token;
+    const su = await post(f, { action: 'saveUser', user: { name: 'Resp', role: 'user', perms: ['generate', 'catalogView', 'catalogEdit', 'import'], pin: '5678' } }, adminTok);
+    const id = (su.body as { users: { id: string; name: string }[] }).users.find((u) => u.name === 'Resp')!.id;
+    const tok = ((await post(f, { action: 'login', userId: id, pin: '5678' })).body as { token: string }).token;
+    const prop = { id: 'p1', at: 'x', by: { id, name: 'Resp' }, label: 'Ajout', upserts: [CATALOG[4]], removals: [] };
+    const d = { ...doc(4, 2000), pending: [prop] };
+    await handle({ method: 'PUT', headers: { ...h, 'x-plgen-token': tok }, body: { doc: d, base: 1000 } }, env, fetcher);
+    let cur = ((await handle({ method: 'GET', headers: { ...h, 'x-plgen-token': adminTok } }, env, fetcher)).body as { doc: CloudDoc }).doc;
+    expect(cur.catalog.length).toBe(3);
+    expect(cur.pending?.length).toBe(1);
+    // l'admin approuve : base modifiée, proposition close
+    await handle({ method: 'PUT', headers: { ...h, 'x-plgen-token': adminTok }, body: { doc: { ...cur, catalog: CATALOG.slice(0, 4), pending: [], pendingDone: ['p1'], updatedAt: 3000 }, base: cur.updatedAt } }, env, fetcher);
+    cur = ((await handle({ method: 'GET', headers: { ...h, 'x-plgen-token': adminTok } }, env, fetcher)).body as { doc: CloudDoc }).doc;
+    expect(cur.catalog.length).toBe(4);
+    expect(cur.pending?.length).toBe(0);
+  });
+});

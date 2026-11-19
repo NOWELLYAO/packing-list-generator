@@ -219,3 +219,16 @@ export interface HistoryEntry {
   lang?: 'fr' | 'en';
   transportMode?: 'sea' | 'road' | 'air';
 }
+
+/** Modification de la base proposée par un utilisateur, en attente de validation par l'administrateur */
+export interface PendingChange {
+  id: string;
+  at: string;
+  by: { id: string; name: string };
+  /** ex. « Modification de la fiche 96510206 », « Import de 35433112.pdf » */
+  label: string;
+  /** fiches ajoutées ou modifiées, telles que proposées */
+  upserts: CatalogItem[];
+  /** fiches supprimées (clé code|PN) avec leur désignation */
+  removals: { key: string; code: string; description: string }[];
+}

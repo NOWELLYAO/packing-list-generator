@@ -1,5 +1,6 @@
 import { LOCK_EVENT, tokenFor } from './access';
-import type { CatalogItem, HistoryEntry, Settings } from '../types';
+import type { CatalogItem, HistoryEntry, PendingChange, Settings } from '../types';
+import { mergePending } from './review';
 import type { AccuracyRecord } from './realCheck';
 import { itemKey } from './normalize';
 
@@ -16,6 +17,10 @@ export interface CloudDoc {
   history: HistoryEntry[];
   accuracy: AccuracyRecord[];
   settings?: Settings;
+  /** propositions de modification en attente de validation */
+  pending?: PendingChange[];
+  /** identifiants des propositions déjà traitées (approuvées ou refusées) */
+  pendingDone?: string[];
   device?: string;
 }
 
@@ -154,12 +159,14 @@ export function mergeDocs(local: Omit<CloudDoc, 'updatedAt'>, remote: CloudDoc):
     .slice(0, 300);
   // réglages : ceux de cet appareil, sauf s'il n'en a pas encore (navigateur vidé) → ceux de l'espace
   const configured = (s?: Settings) => !!s && !!(s.logo || s.companyName);
-  return { catalog: [...byKey.values()], history, accuracy, settings: configured(local.settings) ? local.settings : (remote.settings ?? local.settings) };
+  const pendingDone = [...new Set([...(local.pendingDone ?? []), ...(remote.pendingDone ?? [])])].slice(-500);
+  const pending = mergePending(local.pending, remote.pending, pendingDone);
+  return { catalog: [...byKey.values()], history, accuracy, pending, pendingDone, settings: configured(local.settings) ? local.settings : (remote.settings ?? local.settings) };
 }
 
 /** Empreinte rapide d'un contenu (pour ne pas renvoyer au serveur ce qu'il a déjà) */
 export function fingerprint(d: Omit<CloudDoc, 'updatedAt'>): string {
-  const s = JSON.stringify([d.catalog?.length, d.history?.length, d.accuracy?.length, d.catalog?.map((c) => c.updatedAt).join(','), d.history?.[0]?.id, d.accuracy?.[0]?.id, d.settings]);
+  const s = JSON.stringify([d.catalog?.length, d.history?.length, d.accuracy?.length, d.catalog?.map((c) => c.updatedAt).join(','), d.history?.[0]?.id, d.accuracy?.[0]?.id, d.settings, d.pending?.map((p) => p.id + p.upserts.length).join(','), d.pendingDone?.length]);
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return String(h);
