@@ -20,7 +20,6 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
     }
   });
   const per = Math.max(600, Math.min(2000, 90000 / Math.max(1, n))) / speed;
-  const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const [t, setT] = useState<number | null>(null); // temps écoulé (ms), null = vue complète
   const [playing, setPlaying] = useState(false);
   const last = useRef<number>(0);
@@ -30,8 +29,13 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
     let raf = 0;
     last.current = performance.now();
     const tick = (now: number) => {
-      // l'horodatage d'une image peut précéder performance.now() : jamais de temps négatif
-      const dt = Math.max(0, now - last.current);
+      // 30 images par seconde suffisent (téléphones : moins de calcul, animation fluide)
+      if (now - last.current < 30) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      // l'horodatage d'une image peut précéder performance.now() : jamais de temps négatif (ni de saut après une pause de l'onglet)
+      const dt = Math.min(200, Math.max(0, now - last.current));
       last.current = now;
       setT((prev) => {
         const next = (prev ?? 0) + dt;
@@ -57,13 +61,14 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
     const v = bin.vehicle;
     const ease = (x: number) => 1 - (1 - x) ** 3;
     const startX = Math.max(p.x, v.length - p.l);
-    const lift0 = Math.max(0, Math.min(25, v.height - p.h - 2));
-    const slide = reduced ? 1 : ease(Math.min(1, f / 0.65));
-    const drop = reduced ? 1 : f < 0.65 ? 0 : ease((f - 0.65) / 0.35);
+    const lift0 = Math.max(0, Math.min(60, v.height - p.h - 2));
+    // animation demandée par l'utilisateur (bouton) : jouée même si le téléphone réduit les animations du système
+    const slide = ease(Math.min(1, f / 0.65));
+    const drop = f < 0.65 ? 0 : ease((f - 0.65) / 0.35);
     const moving = { ...p, x: startX + (p.x - startX) * slide };
     const sub: Bin = { ...bin, placements: [...order.slice(0, idx), moving] };
     return { pic: loadPlan3D(sub, lang, 760, logo, { no: p.no, dz: lift0 * (1 - drop) }), idx };
-  }, [t, bin, order, n, per, lang, logo, reduced]);
+  }, [t, bin, order, n, per, lang, logo]);
 
   const cur = t === null ? null : order[frame.idx];
   return (
