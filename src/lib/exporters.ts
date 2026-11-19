@@ -421,8 +421,24 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       };
       const room = bottom - yy - (6 + 18 + tail) - 0.5;
       const full = blockH(plan.bins[0], 1);
+      // un seul véhicule : réduit jusqu'à 70 %, sinon vue 3D et vue de dessus côte à côte (moitié moins haut)
+      // plutôt qu'une page presque vide pour lui seul
       const sc = plan.bins.length === 1 && room < full && room >= full * 0.7 ? Math.max(0.7, (room / full) * 0.99) : 1;
-      ensure(6 + 18 + blockH(plan.bins[0], sc) + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier véhicule
+      const side = (() => {
+        if (plan.bins.length !== 1 || room >= full * 0.7) return null;
+        const b = plan.bins[0];
+        const p3 = loadPlan3D(b, lang, 640, logoInfo);
+        const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
+        const gap = 4;
+        // largeurs telles que les deux dessins aient la même hauteur, sur toute la largeur utile
+        const r3 = p3.w / p3.h;
+        const rt = pt.w / pt.h;
+        let hh = (W - 2 * M - gap) / (r3 + rt);
+        hh = Math.min(hh, room - 4.5, D3_H);
+        if (hh < 24) return null; // trop petit pour être lisible : page suivante, dessin normal
+        return { p3, pt, h: hh, w3: hh * r3, wt: hh * rt, gap };
+      })();
+      ensure(6 + 18 + (side ? side.h + 4 : blockH(plan.bins[0], sc)) + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier véhicule
       yy = section(T.loadPlan, yy);
       const vName = lang === 'fr' ? plan.summary : plan.summaryEn;
       const facts: [string, string][] = [
@@ -446,7 +462,13 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
         doc.text(doc.splitTextToSize(pdfSafe(v2), fw - 5)[0], x0 + 3, yy + 11);
       });
       yy += 18;
-      for (const [i, b] of plan.bins.entries()) {
+      if (side) {
+        const x0 = M + (W - 2 * M - (side.w3 + side.gap + side.wt)) / 2;
+        drawPicturePdf(doc, side.p3, x0, yy, side.w3);
+        drawPicturePdf(doc, side.pt, x0 + side.w3 + side.gap, yy, side.wt);
+        yy += side.h + 4;
+      }
+      for (const [i, b] of (side ? [] : plan.bins).entries()) {
         const p3 = loadPlan3D(b, lang, 640, logoInfo);
         const pt = loadPlanDrawing(b, settings.accent || DEFAULT_ACCENT, lang, 640);
         const w3 = fitW(p3, D3_H * sc);

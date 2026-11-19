@@ -283,6 +283,12 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
   const totalKg = items.reduce((t, p) => t + p.grossWeight, 0);
   const totalM3 = items.reduce((t, p) => t + (p.length * p.width * p.height) / 1e6, 0);
   const light = totalKg <= 70 && totalM3 <= 0.3;
+  // 1 à 3 palettes / caisses, en route : un réseau de messagerie palette ou le groupage coûte en général moins qu'un véhicule dédié
+  if (!light && family === 'road' && items.length <= 3 && totalKg <= 3000 && chosen.bins.length === 1) {
+    const n = items.length;
+    warnings.push(`${n} colis (${fr(Math.round(totalKg))} kg) : la messagerie palette ou le groupage est souvent moins cher qu'un véhicule dédié — à comparer`);
+    warningsEn.push(`${n} package(s) (${Math.round(totalKg)} kg): a pallet network or groupage service is often cheaper than a dedicated vehicle — compare quotes`);
+  }
   if (light) {
     const kg = Math.round(totalKg * 10) / 10;
     const m3 = Math.round(totalM3 * 1000) / 1000;
