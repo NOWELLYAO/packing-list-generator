@@ -1,3 +1,4 @@
+import { dimsText } from '../lib/i18n';
 import { useMemo, useRef, useState } from 'react';
 import type { CatalogItem, DimUnit, FieldKey, ImportDraft, WeightBasis } from '../types';
 import { detectHeaderRow, detectMapping, FIELD_LABELS, FIELD_ORDER } from '../lib/detect';
@@ -321,7 +322,7 @@ export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props)
                     <td className="num">{it.qtyPerPackage}</td>
                     <td>{it.packageType}</td>
                     <td className={it.length ? '' : 'miss'}>
-                      {it.length ? `${it.length} × ${it.width} × ${it.height}` : it.volumePerPackage ? `${it.volumePerPackage} m³` : '—'}
+                      {it.length ? dimsText(it.length, it.width, it.height) : it.volumePerPackage ? `${it.volumePerPackage} m³` : '—'}
                     </td>
                     <td className={`num ${it.netWeightPerUnit ? '' : 'miss'}`}>{it.netWeightPerUnit}</td>
                     <td className={`num ${it.grossWeightPerUnit ? '' : 'miss'}`}>{it.grossWeightPerUnit}</td>

@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
-import { DOC, packLabel, type Lang } from './i18n';
+import { DOC, dimsText, packLabel, type Lang } from './i18n';
 import { formatNos, groupIdentical, loadLogoInfo, packageDrawing, pictureToSvg, refScale, scaleStrip, type LogoInfo, type Picture } from './drawing';
 import { loadPlan3D, loadPlanDrawing, planLoad } from './loadPlan';
 import { comparePL } from './compare';
@@ -16,7 +16,7 @@ const fileName = (pl: PackingList) =>
 const fmtDate = (d: string, lang: Lang = 'fr') => new Date(d).toLocaleDateString(DOC[lang].locale);
 let numLocale = 'fr-FR';
 const nf = (n: number, d = 2) => n.toLocaleString(numLocale, { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/[\u202f\u00a0]/g, ' ');
-const dimsOf = (p: PLPackage) => (p.length ? `${p.dimCheck ? '≈ ' : ''}${p.length} × ${p.width} × ${p.height}` : '—');
+const dimsOf = (p: PLPackage, lang: Lang = 'fr') => (p.length ? `${p.dimCheck ? '≈ ' : ''}${dimsText(p.length, p.width, p.height, lang)}` : '—');
 const CHECK_RGB: [number, number, number] = [194, 65, 12];
 const contentsOf = (p: PLPackage) => p.contents.map((c) => `${c.code} × ${c.quantity}`).join('\n');
 const basisLabel = (p: PLPackage, lang: Lang) => (p.basis === 'grouped' ? '' : p.basis === 'partial' ? ` (${DOC[lang].partial})` : '');
@@ -260,7 +260,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     ...tableStyle,
     startY: y,
     head: [[T.no, T.packType, T.dims, T.vol, T.netKg, T.grossKg, T.contents]],
-    body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), pdfSafe(dimsOf(p)), nf(p.volume, 3), nf(p.netWeight), nf(p.grossWeight), contentsOf(p)]),
+    body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), pdfSafe(dimsOf(p, lang)), nf(p.volume, 3), nf(p.netWeight), nf(p.grossWeight), contentsOf(p)]),
     foot: [['', T.nPackages(t.packages), '', nf(t.volume, 3), nf(t.netWeight), nf(t.grossWeight), '']],
     columnStyles: {
       0: { halign: 'center', cellWidth: 9 },
@@ -580,7 +580,7 @@ export async function exportComparisonPdf(g: PackingList, sm: PackingList, setti
       ...style,
       startY: y,
       head: [[{ content: `${title} — ${pl.totals.packages} colis`, colSpan: 6, styles: { fillColor: light, textColor: accent } }], ['N°', 'Emballage', 'L × l × H (cm)', 'Vol. (m3)', 'Brut (kg)', 'Contenu']],
-      body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), pdfSafe(dimsOf(p)), nf(p.volume, 3), nf(p.grossWeight), contentsOf(p)]),
+      body: pl.packages.map((p) => [String(p.no), typeOf(p, lang), pdfSafe(dimsOf(p, lang)), nf(p.volume, 3), nf(p.grossWeight), contentsOf(p)]),
       columnStyles: { 0: { cellWidth: 9, halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { fontSize: 7.5 } },
     });
     // @ts-expect-error propriété ajoutée par jspdf-autotable
@@ -725,7 +725,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   const pkgStart = row + 1;
   pl.packages.forEach((p, i) => {
     row++;
-    bodyRow(row, [p.no, typeOf(p, lang), dimsOf(p), contentsOf(p), p.volume, p.netWeight, p.grossWeight], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], i % 2 === 1, pkgAlign);
+    bodyRow(row, [p.no, typeOf(p, lang), dimsOf(p, lang), contentsOf(p), p.volume, p.netWeight, p.grossWeight], [undefined, undefined, undefined, undefined, '0.000', '#,##0.00', '#,##0.00'], i % 2 === 1, pkgAlign);
     ws.getRow(row).height = Math.max(18, 14 * p.contents.length);
     if (p.dimCheck) ws.getCell(row, 3).font = { bold: true, italic: true, size: 10, color: { argb: 'FFC2410C' } };
   });

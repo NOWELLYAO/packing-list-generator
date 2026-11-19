@@ -24,6 +24,10 @@ const PACK_RULES: { re: RegExp; fr: string; en: string }[] = [
   { re: /^colis$/i, fr: 'Colis', en: 'Package' },
 ];
 
+/** cote en cm au format de la langue : 32,7 (fr) / 32.7 (en), une décimale au plus */
+export const dimNum = (n: number, lang: Lang = 'fr') => n.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { maximumFractionDigits: 1 });
+export const dimsText = (l: number, w: number, h: number, lang: Lang = 'fr', sep = ' × ') => [l, w, h].map((x) => dimNum(x, lang)).join(sep);
+
 export function packLabel(raw: string, lang: Lang): string {
   const s = (raw || '').trim();
   for (const r of PACK_RULES) if (r.re.test(s)) return r[lang];

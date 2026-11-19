@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import type { PackingList, PLPackage, Settings } from '../types';
-import { packLabel } from './i18n';
+import { dimsText, packLabel } from './i18n';
 import { familyOf } from './drawing';
 
 /**
@@ -197,7 +197,7 @@ async function drawLabel(doc: jsPDF, pl: PackingList, p: PLPackage, settings: Se
   };
   const half = iw / 2;
   cell(t.gross, `${nf(p.grossWeight, 1, locale)} kg`, x + pad, half, true);
-  cell(t.dims, p.length ? `${p.dimCheck ? '≈ ' : ''}${p.length} × ${p.width} × ${p.height}` : '—', x + pad + half, half, false, !!p.dimCheck);
+  cell(t.dims, p.length ? `${p.dimCheck ? '≈ ' : ''}${dimsText(p.length, p.width, p.height, lang)}` : '—', x + pad + half, half, false, !!p.dimCheck);
   cy += 11;
   cell(t.net, `${nf(p.netWeight, 1, locale)} kg`, x + pad, half);
   cell(t.vol, `${nf(p.volume, 3, locale)} m³`, x + pad + half, half);

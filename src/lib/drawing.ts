@@ -566,7 +566,7 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
   const doubt = !!p.dimCheck;
   const dimColor = doubt ? CHECK : shade(INK, 0.15);
   const dimText = doubt ? CHECK : INK;
-  const fmt = (v: number) => `${doubt ? '≈ ' : ''}${Math.round(v).toLocaleString(labels.locale)} ${labels.cm}`;
+  const fmt = (v: number) => `${doubt ? '≈ ' : ''}${(Math.round(v * 10) / 10).toLocaleString(labels.locale, { maximumFractionDigits: 1 })} ${labels.cm}`;
   // longueur L : le long de l'arête avant gauche (b = l), décalée vers l'extérieur
   const la = T(iso(0, l + d, 0));
   const lb = T(iso(L, l + d, 0));

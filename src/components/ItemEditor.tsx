@@ -5,7 +5,7 @@ import BoxIcon from './BoxIcon';
 import { readUserNumber } from '../lib/validate';
 import { itemIssues } from '../lib/quality';
 import InfoTip from './InfoTip';
-import { packLabel, useLang } from '../lib/i18n';
+import { dimsText, packLabel, useLang } from '../lib/i18n';
 
 interface Props {
   item: CatalogItem;
@@ -200,7 +200,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
                         {v.qtyPerPackage} / {packLabel(v.packageType, lang)}
                       </b>
                       <span>
-                        {v.length ? `${v.length}×${v.width}×${v.height} cm` : `${v.volumePerPackage} m³`} · brut{' '}
+                        {v.length ? `${dimsText(v.length, v.width, v.height, lang, '×')} cm` : `${v.volumePerPackage} m³`} · brut{' '}
                         {v.grossWeightPerUnit} kg/u
                       </span>
                       <span className="hint">

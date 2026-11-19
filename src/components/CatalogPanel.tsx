@@ -6,7 +6,7 @@ import { mergeCatalog, uid } from '../lib/normalize';
 import ItemEditor from './ItemEditor';
 import InfoTip from './InfoTip';
 import BoxIcon from './BoxIcon';
-import { packLabel, useLang } from '../lib/i18n';
+import { dimsText, packLabel, useLang } from '../lib/i18n';
 import { listSnapshots, snapshotCatalog, useSafety } from '../lib/safety';
 import { sanitizeCatalog } from '../lib/validate';
 import { hasError, itemIssues, needsCheck } from '../lib/quality';
@@ -289,7 +289,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
                   {c.qtyPerPackage} / {packLabel(c.packageType, lang)}
                 </span>
                 <span className="hint">
-                  {c.length ? `${c.length}×${c.width}×${c.height}` : c.volumePerPackage ? `${c.volumePerPackage} m³` : '—'} ·{' '}
+                  {c.length ? dimsText(c.length, c.width, c.height, 'fr', '×') : c.volumePerPackage ? `${c.volumePerPackage} m³` : '—'} ·{' '}
                   {c.grossWeightPerUnit} kg/u
                 </span>
               </div>

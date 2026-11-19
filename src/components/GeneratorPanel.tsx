@@ -16,7 +16,7 @@ import LabelsDialog from './LabelsDialog';
 import { useLogoInfo } from '../lib/useLogoInfo';
 import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
-import { packLabel } from '../lib/i18n';
+import { dimsText, packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
 import { usePersistent } from '../lib/storage';
 import { isPieceUnit } from '../lib/validate';
@@ -63,13 +63,13 @@ function ConfidenceChip({ c }: { c: string }) {
  * La configuration de référence de la base reste visible au survol.
  */
 function PackingChip({ pl, code, packing, lang }: { pl: PackingList | null; code: string; packing: CatalogItem; lang: 'fr' | 'en' }) {
-  const base = `${packing.qtyPerPackage} / ${packLabel(packing.packageType, lang)}${packing.length ? ` · ${packing.length}×${packing.width}×${packing.height}` : ''}`;
+  const base = `${packing.qtyPerPackage} / ${packLabel(packing.packageType, lang)}${packing.length ? ` · ${dimsText(packing.length, packing.width, packing.height, lang, '×')}` : ''}`;
   const mine = pl ? pl.packages.filter((p) => p.contents.some((c) => c.code === code)) : [];
   if (!mine.length) return <span className={packing.dimsInferred ? 'chip chip-check' : 'chip'}>{base}</span>;
   const groups = new Map<string, { n: number; label: string }>();
   for (const p of mine) {
     const shared = p.contents.length > 1;
-    const label = shared ? `${packLabel(p.type, lang)} n° ${p.no} (partagé)` : `${packLabel(p.type, lang)} ${p.dimCheck ? '≈ ' : ''}${p.length}×${p.width}×${p.height}`;
+    const label = shared ? `${packLabel(p.type, lang)} n° ${p.no} (partagé)` : `${packLabel(p.type, lang)} ${p.dimCheck ? '≈ ' : ''}${dimsText(p.length, p.width, p.height, lang, '×')}`;
     const k = shared ? `s${p.no}` : label;
     const g = groups.get(k);
     if (g) g.n++;
