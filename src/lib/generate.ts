@@ -2,6 +2,7 @@ import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PL
 import { norm } from './detect';
 import { round } from './parseValues';
 import { applyVariant, completeDims, preferredVariant, variantsOf } from './variants';
+import { adaptSapPacking, buildFamilyIndex } from './packIntel';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
 /**
@@ -657,6 +658,7 @@ export function generatePackingList(
     if (same) same.qty = round(same.qty + qty, 6);
     else merged.push({ req, qty, item });
   }
+  const famIdx = buildFamilyIndex(catalog);
   for (const { req, qty, item } of merged) {
     const lineIdx = lines.length;
     lineItems[lineIdx] = item;
@@ -665,7 +667,7 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem0 = withSimilarPacking(refineMixedShare(sanitizeManual(item), catalog), catalog);
+    const packItem0 = withSimilarPacking(adaptSapPacking(refineMixedShare(sanitizeManual(item), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
     // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
     const ub = variantsOf(packItem0).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType));
     const packItem = ub ? { ...packItem0, unitBox: { l: ub.length, w: ub.width, h: ub.height, net: ub.netWeightPerUnit, gross: ub.grossWeightPerUnit } } : packItem0;

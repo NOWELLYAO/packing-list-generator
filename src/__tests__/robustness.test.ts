@@ -433,3 +433,33 @@ describe('import d’une extraction de fiches article SAP (Excel)', () => {
     expect(r.warnings[0]).toContain('10000001');
   });
 });
+
+describe('emballage intelligent des fiches SAP (famille, poids, désignation)', () => {
+  const S = 'Fiche article fabricant (saisie)';
+  const base = { unit: 'PCS', hsCode: '', origin: '', updatedAt: '', mixed: false } as const;
+  // pompe de la famille X9 expédiée réellement en caisse ; une autre X9 plus grosse n'a que sa fiche SAP
+  const sapA = { qtyPerPackage: 1, packageType: 'Palette', length: 117.2, width: 107.2, height: 186.1, volumePerPackage: 2.34, netWeightPerUnit: 1050, grossWeightPerUnit: 1115, mixed: false, source: S, count: 10 };
+  const crateA = { qtyPerPackage: 1, packageType: 'CRATE', length: 158, width: 128, height: 208, volumePerPackage: 4.207, netWeightPerUnit: 1201, grossWeightPerUnit: 1241, mixed: false, source: 'pl.pdf', count: 1 };
+  const sapB = { ...sapA, length: 160, width: 130, height: 200, volumePerPackage: 4.16, netWeightPerUnit: 2215, grossWeightPerUnit: 2385 };
+  const A = { ...base, ...crateA, id: 'a', code: 'X9-A', pn: 'X9-A', description: 'X9.110.200.850.4', source: 'pl.pdf', variants: [crateA, sapA] };
+  const B = { ...base, ...sapB, id: 'b', code: 'X9-B', pn: 'X9-B', description: 'X9.110.200.1600.4', source: S, variants: [sapB] };
+  it('familyKey lit la désignation', async () => {
+    const { familyKey } = await import('../lib/packIntel');
+    expect(familyKey('S2.110.200.1600.4.70M')).toBe('S2');
+    expect(familyKey('SL1.50.65.30.2 PARK')).toBe('SL1');
+    expect(familyKey('Hydro MPC-E 4 CRIE15-7')).toBe('HYDRO MPC');
+    expect(familyKey('SP60-21 Rp4')).toBe('SP');
+  });
+  it('la caisse réelle d’un article prime sur sa fiche SAP', () => {
+    for (const strategy of ['smart', 'grundfos'] as const) {
+      const p = generatePackingList([A, B], [req('X9-A', 1)], { consolidate: true, strategy }).packages[0];
+      expect([p.length, p.width, p.height]).toEqual([158, 128, 208]);
+    }
+  });
+  it('un article de la même famille sans envoi connu part en caisse, agrandie comme celle de la famille', () => {
+    const p = generatePackingList([A, B], [req('X9-B', 1)], { consolidate: true }).packages[0];
+    expect(p.type).toBe('Caisse');
+    expect(p.height).toBeGreaterThan(200);
+    expect(p.dimCheck).toBe('estimated');
+  });
+});
