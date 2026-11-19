@@ -8,6 +8,7 @@ const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDig
 
 /** Aperçu du colisage et des articles (mis à jour en direct) */
 export default function PackingListView({ pl, accent, logo }: { pl: PackingList; accent: string; logo?: LogoInfo }) {
+  const descOf = new Map(pl.lines.map((l) => [l.code, l.description] as const));
   const lang = useLang();
   const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: lang === 'fr' ? 'fr-FR' : 'en-GB' };
   const refK = refScale(pl.packages);
@@ -89,8 +90,11 @@ export default function PackingListView({ pl, accent, logo }: { pl: PackingList;
               </div>
               <div className="pkg-contents">
                 {p.contents.map((c, i) => (
-                  <span key={i} className="chip">
-                    {c.code} × {c.quantity}
+                  <span key={i} className="chip content-chip">
+                    <b>
+                      {c.code} × {c.quantity}
+                    </b>
+                    {descOf.get(c.code) && <span className="content-desc">{descOf.get(c.code)}</span>}
                   </span>
                 ))}
               </div>

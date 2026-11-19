@@ -650,3 +650,5 @@ fieldset.plain { border: 0; margin: 0; min-width: 0; }
 .check { display: flex; gap: 0.45rem; align-items: center; font-size: 0.9rem; }
 .access-edit { margin-top: 0.6rem; }
 .access-me { justify-content: space-between; margin-bottom: 0.5rem; }
+.content-chip { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; max-width: 100%; white-space: normal; text-align: left; }
+.content-chip .content-desc { font-weight: 400; font-size: 0.78em; color: var(--muted); }
