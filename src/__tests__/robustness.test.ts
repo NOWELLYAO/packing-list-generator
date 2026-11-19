@@ -514,3 +514,14 @@ describe('plusieurs pompes moyennes connues seulement par SAP', () => {
     expect(pk.reduce((t, p) => t + p.contents[0].quantity, 0)).toBe(28);
   });
 });
+
+describe('normes de manutention (proposition optimisée)', () => {
+  it('un carton de plus de 30 kg est posé sur une palette normalisée ; « selon Grundfos » reste fidèle', () => {
+    const v = { qtyPerPackage: 1, packageType: 'Carton', length: 60, width: 40, height: 66, volumePerPackage: 0.158, netWeightPerUnit: 48, grossWeightPerUnit: 59, mixed: false, source: 'x', count: 1 };
+    const N = { ...v, id: 'n', code: 'NK-1', pn: 'NK-1', description: 'NKX test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [v] };
+    const s = generatePackingList([N], [req('NK-1', 1)], { consolidate: true, strategy: 'smart' }).packages[0];
+    expect([s.type, s.length, s.width, s.height, s.grossWeight]).toEqual(['Demi-palette', 80, 60, 81, 69]);
+    const g = generatePackingList([N], [req('NK-1', 1)], { consolidate: true, strategy: 'grundfos' }).packages[0];
+    expect(g.type).toBe('Carton');
+  });
+});

@@ -182,6 +182,8 @@ const PALLET_RE = /pal|euro|half|plywood|plate|skid/i;
 const PALLET_BASE_CM = 15; // hauteur d'une palette vide
 const MAX_PALLET_HEIGHT = 180; // cm, hauteur max d'une palette groupée
 const MAX_PALLET_KG = 1000;
+/** au-delà, un carton n'est plus manutentionnable à la main */
+const MANUAL_KG = 30;
 const FILL = 0.75; // taux de remplissage réaliste d'un colis groupé
 
 /** Seuils : un colis "petit" est regroupé avec d'autres */
@@ -210,6 +212,8 @@ const PALLETS: { type: string; l: number; w: number; tare: number }[] = [
 ];
 
 interface Piece {
+  /** carton lourd posé sur une palette normalisée */
+  palletized?: boolean;
   /** colis unitaire d'après la fiche SAP (pas un colis réellement observé) */
   fromSap?: boolean;
   lineIdx: number;
@@ -794,6 +798,21 @@ export function generatePackingList(
       pool = pool.filter((p) => !list.includes(p));
     }
   }
+
+  // Manutention : un carton de plus de 30 kg ne se porte pas à la main (recommandation courante 25 kg) → posé sur palette
+  // normalisée (demi-palette 80 × 60 ou Europe 120 × 80, socle 15 cm, tare 10 / 25 kg)
+  // (proposition optimisée uniquement : « selon Grundfos » reproduit ce que Grundfos fait réellement)
+  if (!grundfosMode) pool = pool.map((p) => {
+    // une « palette » plus petite que 80 × 50 est en fait un carton (même règle que pour le libellé final)
+    const realPal = /pal|euro|half|skid|plate/i.test(p.type) && Math.max(p.l, p.w) >= 80 && Math.min(p.l, p.w) >= 50;
+    const crateOrPallet = realPal || /crate|caisse|kiste|wood|box/i.test(p.type) || p.gross >= 60 && /pal|euro|half|skid|plate/i.test(p.type) && Math.max(p.l, p.w) >= 150;
+    if (crateOrPallet || p.gross <= MANUAL_KG || !(p.l > 0 && p.w > 0 && p.h > 0)) return p;
+    const [a, b] = [Math.max(p.l, p.w), Math.min(p.l, p.w)];
+    const pal = a <= 80 && b <= 60 ? { type: 'Demi-palette', l: 80, w: 60, tare: 10 } : a <= 120 && b <= 80 ? { type: 'Palette', l: 120, w: 80, tare: 25 } : a <= 120 && b <= 100 ? { type: 'Palette', l: 120, w: 100, tare: 30 } : null;
+    if (!pal) return p;
+    const h = p.h + PALLET_BASE_CM;
+    return { ...p, type: pal.type, l: pal.l, w: pal.w, h, volume: (pal.l * pal.w * h) / 1e6, gross: p.gross + pal.tare, palletized: true };
+  });
 
   const packages: PLPackage[] = [];
   const casesByLine = new Map<number, number[]>();
