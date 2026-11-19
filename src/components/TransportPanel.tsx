@@ -5,6 +5,7 @@ import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
 import LoadAnimation from './LoadAnimation';
+import SafeBoundary from './SafeBoundary';
 import type { LogoInfo } from '../lib/drawing';
 import InfoTip from './InfoTip';
 
@@ -154,7 +155,9 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
                 {plan.bins.length > 1 ? ` n° ${i + 1}` : ''} · {fmt(b.weight, 0)} kg · {b.placements.length} colis · {fmt(b.usedLength / 100, 2)} m
                 utilisés
               </div>
-              <LoadAnimation bin={b} lang={lang} logo={logo} />
+              <SafeBoundary label="La vue 3D">
+                <LoadAnimation bin={b} lang={lang} logo={logo} />
+              </SafeBoundary>
               <div className="plan-sub">Vue de dessus (rangement exact)</div>
               <Drawing pic={loadPlanDrawing(b, accent, lang, 640)} className="plan-svg" title="Plan de chargement" />
             </div>

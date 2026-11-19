@@ -23,7 +23,8 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
     let raf = 0;
     last.current = performance.now();
     const tick = (now: number) => {
-      const dt = now - last.current;
+      // l'horodatage d'une image peut précéder performance.now() : jamais de temps négatif
+      const dt = Math.max(0, now - last.current);
       last.current = now;
       setT((prev) => {
         const next = (prev ?? 0) + dt;
@@ -42,8 +43,9 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
   // bin réduit aux colis déjà chargés + celui en cours (glissé depuis les portes puis posé)
   const frame = useMemo(() => {
     if (t === null) return { pic: loadPlan3D(bin, lang, 760, logo), idx: n };
-    const idx = Math.min(n - 1, Math.floor(t / per));
-    const f = (t - idx * per) / per; // 0 → 1
+    if (!n) return { pic: loadPlan3D(bin, lang, 760, logo), idx: 0 };
+    const idx = Math.max(0, Math.min(n - 1, Math.floor(Math.max(0, t) / per)));
+    const f = Math.max(0, Math.min(1, (t - idx * per) / per)); // 0 → 1
     const p = order[idx];
     const v = bin.vehicle;
     const ease = (x: number) => 1 - (1 - x) ** 3;

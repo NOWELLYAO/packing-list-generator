@@ -12,6 +12,7 @@ import { SafetyContext, type ConfirmOptions, type Safety } from './lib/safety';
 import ConfirmDialog from './components/ConfirmDialog';
 import { installUpdateHandlers, updateNow } from './lib/updates';
 import { sanitizeCatalog } from './lib/validate';
+import SafeBoundary from './components/SafeBoundary';
 import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
@@ -243,6 +244,7 @@ export default function App() {
       )}
 
       <main>
+        <SafeBoundary key={tab} label="Cet écran">
         {tab === 'generate' && (
           <GeneratorPanel
             catalog={catalog}
@@ -278,6 +280,7 @@ export default function App() {
           />
         )}
         {tab === 'settings' && <SettingsPanel settings={settings} setSettings={setSettings} toast={toast} cloud={cloud} />}
+        </SafeBoundary>
       </main>
 
       {toastMsg && (
