@@ -483,3 +483,23 @@ describe('cohérence du plan de chargement (remarques du 19/11)', () => {
     expect(planLoad(pal as never, 'auto', 'road')!.ldm).toBeCloseTo(0.4, 2);
   });
 });
+
+describe('article jumeau (même produit, autre variante)', () => {
+  const S = 'Fiche article fabricant (saisie)';
+  const base = { unit: 'PCS', hsCode: '', origin: '', updatedAt: '', mixed: false } as const;
+  const unitA = { qtyPerPackage: 1, packageType: 'Carton', length: 29, width: 17, height: 11, volumePerPackage: 0.0054, netWeightPerUnit: 1.31, grossWeightPerUnit: 1.44, mixed: false, source: S, count: 10 };
+  const palA = { qtyPerPackage: 50, packageType: 'Pallet/2', length: 120, width: 80, height: 54, volumePerPackage: 0.518, netWeightPerUnit: 1.55, grossWeightPerUnit: 2.4, mixed: false, source: 'pl.pdf', count: 1 };
+  const unitB = { ...unitA, length: 28.2, height: 10.8, netWeightPerUnit: 1.38, grossWeightPerUnit: 1.5, count: 20 };
+  const A = { ...base, ...palA, id: 'a', code: 'FS-10', pn: 'FS-10', description: 'Float switch XY1, 10m cable', source: 'pl.pdf', variants: [palA, unitA] };
+  const B = { ...base, ...unitB, id: 'b', code: 'FS-ACS', pn: 'FS-ACS', description: 'Float switch XY1 ACS, 10m cable', source: S, variants: [unitB] };
+  it('100 unités → 2 palettes de 50 comme le jumeau, dans les deux options ; 1 unité → son carton', () => {
+    for (const strategy of ['smart', 'grundfos'] as const) {
+      const p = generatePackingList([A, B], [req('FS-ACS', 100)], { consolidate: true, strategy }).packages;
+      expect(p.map((x) => x.contents[0].quantity)).toEqual([50, 50]);
+      expect(p[0].height).toBe(54);
+      expect(p[0].dimCheck).toBe('estimated');
+      const one = generatePackingList([A, B], [req('FS-ACS', 1)], { consolidate: true, strategy }).packages[0];
+      expect(one.length * one.width).toBeLessThan(1000);
+    }
+  });
+});

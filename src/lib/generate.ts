@@ -2,7 +2,7 @@ import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PL
 import { norm } from './detect';
 import { round } from './parseValues';
 import { applyVariant, completeDims, preferredVariant, variantsOf } from './variants';
-import { adaptSapPacking, buildFamilyIndex } from './packIntel';
+import { adaptSapPacking, buildFamilyIndex, withTwinPallets } from './packIntel';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
 /**
@@ -344,7 +344,7 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     basis,
     dimsInferred: item.dimsInferred,
     fromMixed: !!item.mixed,
-    similar: !!item.similarFrom,
+    similar: !!item.similarFrom || !!item.twinFrom,
     // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
     // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
     goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
@@ -615,9 +615,15 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
     const tare = Math.max(floor, Math.max(0, h.grossWeightPerUnit - h.netWeightPerUnit) * h.qtyPerPackage);
     const exactRem = Math.abs(h.qtyPerPackage - rem) < 1e-9;
     if (!exactRem) exactAll = false;
+    // l'article a son propre carton (fiche SAP) : quelques unités partent dans leurs cartons, pas sur une palette presque vide
+    const ub = item.unitBox;
+    const ownBoxes = !exactRem && ub && h.qtyPerPackage > 1 && rem * ub.gross <= SMALL_PKG_KG;
     // petit reliquat d'une palette (ex. 1 flotteur sur 50) : même un fournisseur le réemballe en carton
-    const repacked = !exactRem && h.qtyPerPackage > 1 ? piecesFor(h, rem, lineIdx).filter((x) => x.repacked) : [];
-    if (repacked.length === 1) pieces.push(repacked[0]);
+    const repacked = !ownBoxes && !exactRem && h.qtyPerPackage > 1 ? piecesFor(h, rem, lineIdx).filter((x) => x.repacked) : [];
+    if (ownBoxes) {
+      const v1 = (ub.l * ub.w * ub.h) / 1e6;
+      for (let i = 0; i < rem; i++) pieces.push({ lineIdx, code: item.code || item.pn, qty: 1, type: 'Carton', l: ub.l, w: ub.w, h: ub.h, volume: v1, net: ub.net, gross: ub.gross, basis: 'reference', goodsVolume: v1 });
+    } else if (repacked.length === 1) pieces.push(repacked[0]);
     else pieces.push({
       lineIdx,
       code: item.code || item.pn,
@@ -667,7 +673,7 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem0 = withSimilarPacking(adaptSapPacking(refineMixedShare(sanitizeManual(item), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
+    const packItem0 = withSimilarPacking(adaptSapPacking(withTwinPallets(refineMixedShare(sanitizeManual(item), catalog), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
     // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
     const ub = variantsOf(packItem0).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType));
     const packItem = ub ? { ...packItem0, unitBox: { l: ub.length, w: ub.width, h: ub.height, net: ub.netWeightPerUnit, gross: ub.grossWeightPerUnit } } : packItem0;
@@ -678,6 +684,7 @@ export function generatePackingList(
     if (!chosen.grossWeightPerUnit) warnings.push('Poids manquant');
     if (chosen.mixed) warnings.push('Données estimées (colis mixte)');
     if (packItem.similarFrom) warnings.push(`Emballage repris de l'article similaire ${packItem.similarFrom}`);
+    else if (chosen.twinFrom) warnings.push(`Palette reprise de l'article jumeau ${chosen.twinFrom}`);
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
     lines[lineIdx].confidence = confidence;

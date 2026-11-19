@@ -34,7 +34,7 @@ export function familyKey(desc: string): string {
 
 const hasDims = (v: PackVariant) => v.length > 0 && v.width > 0 && v.height > 0;
 const isSap = (v: PackVariant) => v.source === SAP_SOURCE;
-const realOwn = (v: PackVariant) => !isSap(v) && !v.mixed && hasDims(v) && !v.dimsInferred;
+const realOwn = (v: PackVariant) => !isSap(v) && !v.mixed && hasDims(v) && !v.dimsInferred && !v.twinOf;
 const sorted = (v: PackVariant) => [v.length, v.width, v.height].sort((a, b) => b - a);
 
 export interface FamilyIndex {
@@ -109,4 +109,49 @@ export function adaptSapPacking(item: CatalogItem, fam: FamilyIndex, strategy: '
   const res: CatalogItem = { ...applyVariant({ ...item, variants: out }, pref), variants: out };
   if (note && pref.source === SAP_SOURCE && !res.similarFrom) res.similarFrom = note;
   return res;
+}
+
+const tokens2 = (d: string) => d.toUpperCase().replace(/\bPARK\b/g, ' ').replace(/[,;]/g, ' ').trim().split(/\s+/).slice(0, 2).join(' ');
+
+/**
+ * Article connu seulement par sa fiche SAP (une unité) : s'il a un « jumeau » (même produit, autre variante —
+ * MS1 ACS 10 m ↔ MS1 10 m, même carton unitaire à ±20 %, poids proche) que Grundfos expédie en palettes
+ * complètes, on reprend ces palettes (nombre par palette, dimensions) avec le poids de l'article. Signalé « à vérifier ».
+ */
+export function withTwinPallets(item: CatalogItem, catalog: CatalogItem[]): CatalogItem {
+  const vs = item.variants ?? [];
+  if (item.manual || vs.some((v) => realOwn(v) && v.qtyPerPackage > 1)) return item;
+  const mine = vs.find((v) => isSap(v) && v.qtyPerPackage === 1 && hasDims(v));
+  if (!mine) return item;
+  const key = tokens2(item.description);
+  if (!/\d|[A-Z]{2,}\s+[A-Z]{3,}/.test(key) || key.length < 5) return item;
+  const mv = sorted(mine);
+  let best: { o: CatalogItem; pal: PackVariant; unit: PackVariant; score: number } | null = null;
+  for (const o of catalog) {
+    if (o === item || o.id === item.id || tokens2(o.description) !== key) continue;
+    const ovs = o.variants ?? [];
+    const unit = ovs.find((v) => isSap(v) && v.qtyPerPackage === 1 && hasDims(v));
+    const pal = ovs.filter((v) => realOwn(v) && v.qtyPerPackage > 1).sort((a, b) => b.qtyPerPackage - a.qtyPerPackage)[0];
+    if (!unit || !pal) continue;
+    const ou = sorted(unit);
+    if (!mv.every((x, i) => Math.abs(x - ou[i]) <= Math.max(x, ou[i]) * 0.2)) continue;
+    const wr = mine.grossWeightPerUnit / (unit.grossWeightPerUnit || 1);
+    if (wr < 0.6 || wr > 1.6) continue;
+    const score = Math.abs(Math.log(wr));
+    if (!best || score < best.score) best = { o, pal, unit, score };
+  }
+  if (!best) return item;
+  const { o, pal, unit } = best;
+  const tarePerUnit = Math.max(0, pal.grossWeightPerUnit - unit.grossWeightPerUnit);
+  const twin: PackVariant = {
+    ...pal,
+    netWeightPerUnit: mine.netWeightPerUnit,
+    grossWeightPerUnit: Math.round((mine.grossWeightPerUnit + tarePerUnit) * 1000) / 1000,
+    source: `palette de ${o.code} (article jumeau)`,
+    // pour plusieurs unités, la palette réellement utilisée par Grundfos prime sur le carton unitaire SAP
+    count: Math.max(0, ...vs.map((v) => v.count || 0)) + 1,
+    mixed: false,
+    twinOf: `${o.code} ${o.description} (palette de ${pal.qtyPerPackage})`,
+  };
+  return { ...item, variants: [...vs, twin] };
 }

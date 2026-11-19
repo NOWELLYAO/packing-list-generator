@@ -27,6 +27,8 @@ export interface CatalogItem {
   dimsInferred?: boolean;
   /** emballage repris d'un article similaire (l'article n'a été vu qu'en colis partagé) */
   similarFrom?: string;
+  /** emballage en cours repris d'un article jumeau (calcul interne) */
+  twinFrom?: string;
   /** toutes les configurations d'emballage observées dans les PL importées */
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */
@@ -59,6 +61,8 @@ export interface PackVariant {
   /** nombre de fois où cette configuration a été vue */
   count: number;
   /** L × l × H reconstitués à partir du volume */
+  /** emballage repris d'un article jumeau (même produit, autre variante) : à vérifier */
+  twinOf?: string;
   dimsInferred?: boolean;
 }
 
