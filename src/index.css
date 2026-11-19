@@ -629,3 +629,7 @@ td.delta small { font-weight: 500; }
 .load-anim-bar .hint { font-size: 0.8rem; }
 .load-anim-progress { height: 3px; background: var(--line); border-radius: 2px; margin: 0 0.3rem 0.5rem; overflow: hidden; }
 .load-anim-progress i { display: block; height: 100%; background: var(--accent); }
+
+.load-anim-view { touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+.load-anim-view:active { cursor: grabbing; }
+.load-anim-speed input[type='range'] { vertical-align: middle; width: 7rem; }

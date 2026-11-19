@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { loadingOrder, loadPlan3D, type Bin } from '../lib/loadPlan';
+import { loadingOrder, loadPlan3D, type Bin, type View3D } from '../lib/loadPlan';
 import type { LogoInfo } from '../lib/drawing';
 import { packLabel } from '../lib/i18n';
 import Drawing from './Drawing';
@@ -23,6 +23,18 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
   const [t, setT] = useState<number | null>(null); // temps écoulé (ms), null = vue complète
   const [playing, setPlaying] = useState(false);
   const last = useRef<number>(0);
+  // point de vue : 4 angles autour du véhicule (glisser le doigt ou boutons ⟲ ⟳) et hauteur de l'œil
+  const [angle, setAngle] = useState(0);
+  const [elev, setElev] = useState(0.3);
+  const ANGLES: { v: View3D; label: string }[] = [
+    { v: {}, label: 'côté ouvert, cabine à gauche' },
+    { v: { end: true }, label: 'côté ouvert, cabine à droite' },
+    { v: { side: true, end: true }, label: 'autre côté, cabine à droite' },
+    { v: { side: true }, label: 'autre côté, cabine à gauche' },
+  ];
+  const view: View3D = { ...ANGLES[angle].v, elev };
+  const turn = (d: number) => setAngle((a) => (a + d + 4) % 4);
+  const drag = useRef<number | null>(null);
 
   useEffect(() => {
     if (!playing) return;
@@ -53,8 +65,8 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
 
   // bin réduit aux colis déjà chargés + celui en cours (glissé depuis les portes puis posé)
   const frame = useMemo(() => {
-    if (t === null) return { pic: loadPlan3D(bin, lang, 760, logo), idx: n };
-    if (!n) return { pic: loadPlan3D(bin, lang, 760, logo), idx: 0 };
+    if (t === null) return { pic: loadPlan3D(bin, lang, 760, logo, undefined, view), idx: n };
+    if (!n) return { pic: loadPlan3D(bin, lang, 760, logo, undefined, view), idx: 0 };
     const idx = Math.max(0, Math.min(n - 1, Math.floor(Math.max(0, t) / per)));
     const f = Math.max(0, Math.min(1, (t - idx * per) / per)); // 0 → 1
     const p = order[idx];
@@ -67,13 +79,46 @@ export default function LoadAnimation({ bin, lang, logo }: { bin: Bin; lang: 'fr
     const drop = f < 0.65 ? 0 : ease((f - 0.65) / 0.35);
     const moving = { ...p, x: startX + (p.x - startX) * slide };
     const sub: Bin = { ...bin, placements: [...order.slice(0, idx), moving] };
-    return { pic: loadPlan3D(sub, lang, 760, logo, { no: p.no, dz: lift0 * (1 - drop) }), idx };
-  }, [t, bin, order, n, per, lang, logo]);
+    return { pic: loadPlan3D(sub, lang, 760, logo, { no: p.no, dz: lift0 * (1 - drop) }, view), idx };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, bin, order, n, per, lang, logo, angle, elev]);
 
   const cur = t === null ? null : order[frame.idx];
   return (
     <div className="load-anim">
-      <Drawing pic={frame.pic} className="plan-svg plan-3d" title="Vue 3D du chargement" />
+      <div
+        className="load-anim-view"
+        title="Glissez vers la gauche ou la droite pour tourner autour du véhicule"
+        onPointerDown={(e) => {
+          drag.current = e.clientX;
+        }}
+        onPointerMove={(e) => {
+          if (drag.current === null) return;
+          const dx = e.clientX - drag.current;
+          if (Math.abs(dx) > 50) {
+            turn(dx > 0 ? -1 : 1);
+            drag.current = e.clientX;
+          }
+        }}
+        onPointerUp={() => (drag.current = null)}
+        onPointerCancel={() => (drag.current = null)}
+        onPointerLeave={() => (drag.current = null)}
+      >
+        <Drawing pic={frame.pic} className="plan-svg plan-3d" title="Vue 3D du chargement" />
+      </div>
+      <div className="load-anim-bar">
+        <button className="btn small" onClick={() => turn(-1)} aria-label="Tourner à gauche">
+          ⟲
+        </button>
+        <button className="btn small" onClick={() => turn(1)} aria-label="Tourner à droite">
+          ⟳
+        </button>
+        <span className="hint">Vue {angle + 1}/4 : {ANGLES[angle].label}</span>
+        <label className="hint load-anim-speed">
+          Hauteur{' '}
+          <input type="range" min={0.12} max={0.7} step={0.02} value={elev} onChange={(e) => setElev(Number(e.target.value))} aria-label="Hauteur du point de vue" />
+        </label>
+      </div>
       <div className="load-anim-bar">
         <button
           className="btn small primary"

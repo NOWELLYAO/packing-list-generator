@@ -372,7 +372,6 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
 /** Projection oblique : la longueur du véhicule à l'horizontale, la profondeur en biais */
 const DC = 0.42;
 const DS = 0.3;
-const oblique = (a: number, b: number, z: number): Pt => [a - b * DC, -z + b * DS];
 
 /** Ordre de dessin (peintre) : de gauche à droite, puis du fond vers l'avant */
 function paintOrder(ps: Placement[]): Placement[] {
@@ -397,7 +396,21 @@ export interface LiftAnim {
   dz: number;
 }
 
-export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo, lift?: LiftAnim): Picture {
+/** point de vue de la vue 3D : côté du véhicule regardé, extrémité (cabine à gauche ou à droite), hauteur de l'œil */
+export interface View3D {
+  /** regarder depuis l'autre paroi latérale (les colis du fond deviennent visibles) */
+  side?: boolean;
+  /** cabine à droite (vue depuis l'autre extrémité) */
+  end?: boolean;
+  /** inclinaison de la vue : 0,12 (rasante) → 0,7 (plongeante) ; 0,3 par défaut */
+  elev?: number;
+}
+
+export function loadPlan3D(bin0: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo, lift?: LiftAnim, view?: View3D): Picture {
+  const W0 = bin0.vehicle.width;
+  const bin: Bin = view?.side ? { ...bin0, placements: bin0.placements.map((p) => ({ ...p, y: W0 - p.y - p.w })) } : bin0;
+  const ds = Math.max(0.1, Math.min(0.75, view?.elev ?? DS));
+  const proj = (a: number, b: number, z: number): Pt => [a - b * DC, -z + b * ds];
   const dzOf = (no: number) => (lift && lift.no === no ? lift.dz : 0);
   const v = bin.vehicle;
   const L = v.length;
@@ -421,7 +434,7 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
   const overlay: { at: Pt; cands: Pt[]; hidden: boolean; top: Pt[]; text: string; r: number; check?: boolean }[] = [];
   const P = (s: Shape[]) => raw.push(...s);
 
-  withProjection(oblique, () => {
+  withProjection(proj, () => {
     const wallC = kind === 'container' ? '#3d6d91' : '#eef1f4';
     const wallIn = kind === 'container' ? '#4f7fa3' : '#f3f5f7';
     const floorC = kind === 'container' ? '#9c7149' : '#8b6a48';
@@ -639,6 +652,22 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
     shapes.push({ kind: 'text', at: [c[0], c[1] + 0.3], text: o.text, size: br * 1.25, color: o.check ? '#c2410c' : '#2b3442', anchor: 'middle', bold: true });
   }
   const h = pad + 10 + (Math.max(...ys) - minY) * k + 8;
+  if (view?.end) {
+    // vue depuis l'autre extrémité : image retournée, textes et logos gardés lisibles
+    const X = (pt: Pt): Pt => [width - pt[0], pt[1]];
+    for (let i = 0; i < shapes.length; i++) {
+      const sh = shapes[i];
+      if (sh.kind === 'poly') shapes[i] = { ...sh, pts: sh.pts.map(X) };
+      else if (sh.kind === 'line') shapes[i] = { ...sh, a: X(sh.a), b: X(sh.b) };
+      else if (sh.kind === 'circle') shapes[i] = { ...sh, c: X(sh.c) };
+      else if (sh.kind === 'text') shapes[i] = { ...sh, at: X(sh.at), anchor: sh.anchor === 'start' ? 'end' : sh.anchor === 'end' ? 'start' : sh.anchor, rotate: sh.rotate ? -sh.rotate : sh.rotate };
+      else if (sh.kind === 'image') {
+        const [p0, p1, p3] = [X(sh.p0), X(sh.p1), X(sh.p3)];
+        // le bord gauche devient le droit : on repart du nouveau coin haut-gauche pour ne pas inverser le logo
+        shapes[i] = { ...sh, p0: p1, p1: p0, p3: [p1[0] + (p3[0] - p0[0]), p1[1] + (p3[1] - p0[1])] };
+      }
+    }
+  }
   return { shapes, w: width, h };
 }
 
