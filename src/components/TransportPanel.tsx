@@ -32,6 +32,7 @@ interface Props {
 export default function TransportPanel({ pl, accent, logo, mode, setMode }: Props) {
   const lang = useLang();
   const [vehicle, setVehicle] = useState<string>('auto');
+  const [showVehicle, setShowVehicle] = useState(false);
   const family = mode === 'road' ? 'road' : 'sea';
   const plan = useMemo(() => (mode === 'air' ? null : planLoad(pl.packages, vehicle, family)), [pl.packages, vehicle, family, mode]);
   const f = freightInfo(pl);
@@ -57,6 +58,15 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
         ))}
       </div>
 
+      {plan?.light && mode !== 'air' && (
+        <div className="banner info light-ship">
+          <b>Messagerie / express recommandé</b> — envoi léger ({fmt(pl.totals.grossWeight, 2)} kg, {fmt(pl.totals.volume, 3)} m³) : un véhicule dédié
+          n'a pas de sens.{' '}
+          <button className="btn small ghost" onClick={() => setShowVehicle((v) => !v)}>
+            {showVehicle ? 'Masquer le véhicule' : 'Voir quand même dans un véhicule'}
+          </button>
+        </div>
+      )}
       {/* Indicateurs propres au mode choisi */}
       <div className="plan-facts">
         {mode === 'sea' && (
@@ -127,7 +137,7 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
         )}
       </div>
 
-      {plan && (
+      {plan && (!plan.light || showVehicle) && (
         <>
           <div className="segmented vehicle-select">
             <button className={vehicle === 'auto' ? 'on' : ''} onClick={() => setVehicle('auto')}>
@@ -171,9 +181,9 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
         </>
       )}
 
-      {[...(plan?.warnings ?? []), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].length > 0 && (
+      {[...(plan?.warnings ?? []).filter((w) => !(plan?.light && /^Envoi léger/.test(w))), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].length > 0 && (
         <ul className="alerts">
-          {[...(plan?.warnings ?? []), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].map((w, i) => (
+          {[...(plan?.warnings ?? []).filter((w) => !(plan?.light && /^Envoi léger/.test(w))), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].map((w, i) => (
             <li key={i}>⚠️ {w}</li>
           ))}
         </ul>

@@ -592,7 +592,7 @@ export function packageDrawing(p: PackageLike, _accent: string, labels: DrawLabe
   shapes.push({
     kind: 'text',
     at: [W / 2, Hh - 8],
-    text: `${title ?? `${labels.packageWord} ${p.no}`} · ${p.grossWeight.toLocaleString(labels.locale, { maximumFractionDigits: 1 })} ${labels.kg}`,
+    text: `${title ?? `${labels.packageWord} ${p.no}`} · ${p.grossWeight.toLocaleString(labels.locale, { maximumFractionDigits: 2 })} ${labels.kg}`,
     size: 9.5,
     color: INK,
     anchor: 'middle',

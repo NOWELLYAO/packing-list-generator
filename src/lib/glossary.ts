@@ -105,7 +105,7 @@ export const GLOSSARY = {
   },
   ldm: {
     title: 'Mètres de plancher (LDM)',
-    text: "Unité de facturation du transport routier : la longueur de remorque occupée, sur toute sa largeur (2,40 m environ). Un camion complet fait 13,6 LDM. Une palette 120 × 80 posée en long ≈ 0,4 LDM.",
+    text: "Unité de facturation du transport routier, définition standard : surface au sol des colis ÷ 2,40 m (largeur d'une remorque). Une palette 120 × 80 = 0,4 LDM ; un camion complet = 13,6 LDM. Calculé ainsi quel que soit le véhicule proposé, pour pouvoir comparer avec les devis des transporteurs.",
   },
   floorUsed: {
     title: 'Plancher occupé',

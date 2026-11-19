@@ -35,8 +35,8 @@ export const VEHICLES: Vehicle[] = [
   { id: '20', family: 'sea', kind: 'container', name: "Conteneur 20'", nameEn: "20' container", length: 589, width: 235, height: 239, doorHeight: 228, payload: 28200 },
   { id: '40', family: 'sea', kind: 'container', name: "Conteneur 40'", nameEn: "40' container", length: 1203, width: 235, height: 239, doorHeight: 228, payload: 26700 },
   { id: '40hc', family: 'sea', kind: 'container', name: "Conteneur 40' HC", nameEn: "40' HC container", length: 1203, width: 235, height: 269, doorHeight: 258, payload: 26500 },
-  { id: 'mini', family: 'road', kind: 'van', name: 'Mini-utilitaire 3 m³', nameEn: 'Small van 3 m³', length: 175, width: 125, height: 120, doorHeight: 115, payload: 650 },
-  { id: 'van12', family: 'road', kind: 'van', name: 'Fourgon 12 m³', nameEn: '12 m³ van', length: 330, width: 175, height: 185, doorHeight: 180, payload: 1250 },
+  { id: 'mini', family: 'road', kind: 'van', name: 'Mini-utilitaire 3 m³', nameEn: 'Small van 3 m³', length: 200, width: 123, height: 122, doorHeight: 115, payload: 650 },
+  { id: 'van12', family: 'road', kind: 'van', name: 'Fourgon 12 m³', nameEn: '12 m³ van', length: 373, width: 176, height: 189, doorHeight: 182, payload: 1250 },
   { id: 'box20', family: 'road', kind: 'box', name: 'Camion 20 m³ (3,5 t)', nameEn: '20 m³ box truck (3.5 t)', length: 430, width: 210, height: 220, doorHeight: 215, payload: 1000 },
   { id: 'p12', family: 'road', kind: 'box', name: 'Porteur 12 t (6,2 m)', nameEn: '12 t rigid truck (6.2 m)', length: 620, width: 245, height: 245, doorHeight: 240, payload: 5500 },
   { id: 'porteur', family: 'road', kind: 'box', name: 'Porteur 19 t (7,2 m)', nameEn: '19 t rigid truck (7.2 m)', length: 720, width: 245, height: 260, doorHeight: 250, payload: 9000 },
@@ -76,7 +76,10 @@ export interface LoadPlan {
   summaryEn: string;
   bins: Bin[];
   /** mètres de plancher (camion) : longueur occupée sur toute la largeur */
+  /** mètres de plancher, définition standard : surface au sol des colis ÷ 2,4 m (largeur de référence d'une remorque) */
   ldm: number;
+  /** envoi léger : la messagerie / l'express convient mieux qu'un véhicule */
+  light: boolean;
   unplaced: number[];
   warnings: string[];
   /** mêmes alertes, en anglais (documents EN) */
@@ -279,10 +282,11 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
   // envoi léger : un véhicule dédié n'est pas la solution la plus logique
   const totalKg = items.reduce((t, p) => t + p.grossWeight, 0);
   const totalM3 = items.reduce((t, p) => t + (p.length * p.width * p.height) / 1e6, 0);
-  if (totalKg <= 70 && totalM3 <= 0.3) {
+  const light = totalKg <= 70 && totalM3 <= 0.3;
+  if (light) {
     const kg = Math.round(totalKg * 10) / 10;
     const m3 = Math.round(totalM3 * 1000) / 1000;
-    warnings.push(`Envoi léger (${fr(kg)} kg, ${fr(m3)} m³) : la messagerie ou l'express est plus adaptée qu'un véhicule dédié`);
+    warnings.push(`Envoi léger (${fr(kg)} kg, ${fr(m3)} m³) : messagerie ou express recommandé, pas de véhicule dédié`);
     warningsEn.push(`Light shipment (${kg} kg, ${m3} m³): parcel or express service is better suited than a dedicated vehicle`);
   }
   return {
@@ -290,7 +294,8 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
     summary: describe(chosen.bins, false),
     summaryEn: describe(chosen.bins, true),
     bins: chosen.bins,
-    ldm: round(chosen.bins.reduce((s, b) => s + b.usedLength, 0) / 100, 2),
+    ldm: round(items.reduce((s, p) => s + p.length * p.width, 0) / 240 / 100, 2),
+    light,
     unplaced: chosen.unplaced,
     warnings,
     warningsEn,
@@ -339,7 +344,7 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
       r.forEach((a, i) => shapes.push({ kind: 'line', a, b: r[(i + 1) % 4], stroke: '#c2410c', sw: 1.2, dash: true }));
     }
     shapes.push({ kind: 'text', at: [cx, cy + (big ? -1 : 2.5)], text: String(p.no), size: big ? 9 : 7, color: p.dimCheck ? '#c2410c' : INK, anchor: 'middle', bold: true });
-    if (big) shapes.push({ kind: 'text', at: [cx, cy + 8], text: `${Math.round(p.kg)} kg`, size: 6, color: INK, anchor: 'middle' });
+    if (big) shapes.push({ kind: 'text', at: [cx, cy + 8], text: `${(Math.round(p.kg * 100) / 100).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { maximumFractionDigits: 2 })} kg`, size: 6, color: INK, anchor: 'middle' });
   }
   // longueur utilisée
   if (bin.usedLength > 0) {

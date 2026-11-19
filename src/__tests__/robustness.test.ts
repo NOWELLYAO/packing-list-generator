@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isPieceUnit, readUserNumber, sanitizeCatalog } from '../lib/validate';
-import { planLoad } from '../lib/loadPlan';
+import { planLoad, VEHICLES } from '../lib/loadPlan';
 import { familyOf } from '../lib/drawing';
 import { accuracySummary, blindTest } from '../lib/realCheck';
 import { labelQrText } from '../lib/labels';
@@ -461,5 +461,25 @@ describe('emballage intelligent des fiches SAP (famille, poids, désignation)', 
     expect(p.type).toBe('Caisse');
     expect(p.height).toBeGreaterThan(200);
     expect(p.dimCheck).toBe('estimated');
+  });
+});
+
+describe('cohérence du plan de chargement (remarques du 19/11)', () => {
+  it('le volume indiqué dans le nom du véhicule correspond à ses dimensions (±15 %)', () => {
+    for (const v of VEHICLES) {
+      const m = v.name.match(/(\d+(?:,\d+)?) m³/);
+      if (!m) continue;
+      const named = Number(m[1].replace(',', '.'));
+      const real = (v.length * v.width * v.height) / 1e6;
+      expect(Math.abs(real - named) / named, v.name).toBeLessThanOrEqual(0.15);
+    }
+  });
+  it('LDM standard : surface au sol ÷ 2,4 m ; envoi léger signalé', () => {
+    const pkgs = [{ no: 1, type: 'Carton', length: 32.7, width: 17.8, height: 11.1, volume: 0.006, netWeight: 1.62, grossWeight: 1.95, contents: [] }];
+    const plan = planLoad(pkgs as never, 'auto', 'road')!;
+    expect(plan.ldm).toBeLessThanOrEqual(0.03);
+    expect(plan.light).toBe(true);
+    const pal = [{ no: 1, type: 'Palette', length: 120, width: 80, height: 100, volume: 0.96, netWeight: 300, grossWeight: 320, contents: [] }];
+    expect(planLoad(pal as never, 'auto', 'road')!.ldm).toBeCloseTo(0.4, 2);
   });
 });

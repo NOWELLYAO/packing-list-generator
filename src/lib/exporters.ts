@@ -384,7 +384,30 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     // ---- Plan de chargement ----
     const tmode = settings.transportMode ?? 'sea';
     const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
-    if (plan) {
+    if (plan?.light) {
+      // envoi léger : pas de plan de véhicule (il n'aurait pas de sens), une simple recommandation de transport
+      ensure(24);
+      yy = section(lang === 'fr' ? 'TRANSPORT' : 'TRANSPORT', yy);
+      doc.setFillColor(...light);
+      doc.roundedRect(M, yy, W - 2 * M, 14, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...ink);
+      doc.text(lang === 'fr' ? 'Messagerie / express recommandé' : 'Parcel / express service recommended', M + 3, yy + 6);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+      doc.text(
+        pdfSafe(
+          lang === 'fr'
+            ? `Envoi léger (${nf(pl.totals.grossWeight)} kg, ${nf(pl.totals.volume, 3)} m3) : pas de véhicule dédié.`
+            : `Light shipment (${nf(pl.totals.grossWeight)} kg, ${nf(pl.totals.volume, 3)} m3): no dedicated vehicle needed.`,
+        ),
+        M + 3,
+        yy + 11,
+      );
+      yy += 18;
+    } else if (plan) {
       // par véhicule : vue 3D (≤ 62 mm) puis vue de dessus (≤ 34 mm) ; réduites jusqu'à 70 % si cela évite une page presque vide
       const D3_H = 62;
       const TOP_H = 34;
@@ -798,7 +821,8 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   // ---- Feuille « Plan de chargement » ----
   const tmode = settings.transportMode ?? 'sea';
   const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
-  if (plan) {
+  // envoi léger : pas d'onglet de plan de chargement (messagerie / express)
+  if (plan && !plan.light) {
     const ws3 = wb.addWorksheet(lang === 'fr' ? 'Plan de chargement' : 'Loading plan', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }, views: [{ showGridLines: false }] });
     ws3.columns = [{ width: 30 }, { width: 40 }, ...Array.from({ length: 6 }, () => ({ width: 11 }))];
     ws3.getCell('A1').value = T.loadPlan;
