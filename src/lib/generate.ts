@@ -775,7 +775,9 @@ export function generatePackingList(
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
     // « Pallet » / « EURO PAL » de moins de 80 × 50 cm (et moins de 1,5 m) : c'est un carton, le libellé suit
-    if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.width < 30 || ((p.length < 80 || p.width < 50) && p.length < 150))) p.type = 'Carton';
+    if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.width < 30 || ((p.length < 80 || p.width < 50) && p.length < 150)))
+      // lourd ou très long (pompe immergée sur berceau de 29 cm, pompe de 120 kg) : c'est une caisse / un berceau en bois, pas un carton
+      p.type = p.grossWeight >= 60 || p.length >= 150 ? 'Caisse' : 'Carton';
   }
 
   // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi
