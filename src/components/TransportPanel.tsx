@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { PackingList } from '../types';
-import { loadPlan3D, loadPlanDrawing, planLoad, VEHICLES, type TransportMode } from '../lib/loadPlan';
+import { loadPlanDrawing, planLoad, VEHICLES, type TransportMode } from '../lib/loadPlan';
 import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
+import LoadAnimation from './LoadAnimation';
 import type { LogoInfo } from '../lib/drawing';
 import InfoTip from './InfoTip';
 
@@ -153,7 +154,7 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
                 {plan.bins.length > 1 ? ` n° ${i + 1}` : ''} · {fmt(b.weight, 0)} kg · {b.placements.length} colis · {fmt(b.usedLength / 100, 2)} m
                 utilisés
               </div>
-              <Drawing pic={loadPlan3D(b, lang, 760, logo)} className="plan-svg plan-3d" title="Vue 3D du chargement" />
+              <LoadAnimation bin={b} lang={lang} logo={logo} />
               <div className="plan-sub">Vue de dessus (rangement exact)</div>
               <Drawing pic={loadPlanDrawing(b, accent, lang, 640)} className="plan-svg" title="Plan de chargement" />
             </div>

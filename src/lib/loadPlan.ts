@@ -391,7 +391,14 @@ function paintOrder(ps: Placement[]): Placement[] {
   return out;
 }
 
-export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo): Picture {
+/** animation du chargement : colis en cours de mise en place, soulevé de dz cm (le reste est posé) */
+export interface LiftAnim {
+  no: number;
+  dz: number;
+}
+
+export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo, lift?: LiftAnim): Picture {
+  const dzOf = (no: number) => (lift && lift.no === no ? lift.dz : 0);
   const v = bin.vehicle;
   const L = v.length;
   const W = v.width;
@@ -511,12 +518,13 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
     const hulls = order.map((q) => {
       const hq = Math.max(1, q.h);
       const pts: Pt[] = [];
-      for (const [a, b, z] of [[0, 0, 0], [q.l, 0, 0], [0, q.w, 0], [q.l, q.w, 0], [0, 0, hq], [q.l, 0, hq], [0, q.w, hq], [q.l, q.w, hq]]) pts.push(project(q.x + a, q.y + b, z));
+      for (const [a, b, z] of [[0, 0, 0], [q.l, 0, 0], [0, q.w, 0], [q.l, q.w, 0], [0, 0, hq], [q.l, 0, hq], [0, q.w, hq], [q.l, q.w, hq]]) pts.push(project(q.x + a, q.y + b, z + dzOf(q.no)));
       return convexHull(pts);
     });
     for (const [idx, p] of order.entries()) {
       const fam = familyOf(p.type, { length: p.l, width: p.w, height: p.h });
-      const off = project(p.x, p.y, 0);
+      const dz = dzOf(p.no);
+      const off = project(p.x, p.y, dz);
       const push = (sh: Shape[]) => {
         for (const x of sh) {
           if (x.kind === 'poly') raw.push({ ...x, pts: x.pts.map(([u, w]) => [u + off[0], w + off[1]] as Pt) });
@@ -548,9 +556,9 @@ export function loadPlan3D(bin: Bin, lang: 'fr' | 'en', width = 640, logo?: Logo
       // point d'accroche du numéro : la partie visible du dessus la plus proche du centre
       const samples: { pt: Pt; d: number }[] = [];
       for (const u of [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92, 0.97, 0.03])
-        for (const v of [0.5, 0.25, 0.75, 0.1, 0.9]) samples.push({ pt: project(p.x + p.l * u, p.y + p.w * v, h), d: Math.abs(u - 0.5) + Math.abs(v - 0.5) * 0.6 });
+        for (const v of [0.5, 0.25, 0.75, 0.1, 0.9]) samples.push({ pt: project(p.x + p.l * u, p.y + p.w * v, h + dz), d: Math.abs(u - 0.5) + Math.abs(v - 0.5) * 0.6 });
       const visible = samples.filter((sm) => !hulls.slice(idx + 1).some((hq) => insideHull(sm.pt, hq, 1.5))).sort((a, b) => a.d - b.d);
-      const top = [project(p.x, p.y, h), project(p.x + p.l, p.y, h), project(p.x + p.l, p.y + p.w, h), project(p.x, p.y + p.w, h)];
+      const top = [project(p.x, p.y, h + dz), project(p.x + p.l, p.y, h + dz), project(p.x + p.l, p.y + p.w, h + dz), project(p.x, p.y + p.w, h + dz)];
       overlay.push({ at: samples[0].pt, cands: visible.map((sm) => sm.pt), hidden: visible.length < samples.length * 0.5, top, text: String(p.no), r: Math.min(p.l, p.w), check: !!p.dimCheck });
     }
 
@@ -664,4 +672,9 @@ function insideHull(pt: Pt, hull: Pt[], margin = 0): boolean {
     if (cr < margin) return false;
   }
   return true;
+}
+
+/** ordre réel de chargement : du fond du véhicule vers les portes, puis d'un côté à l'autre */
+export function loadingOrder(bin: Bin): Placement[] {
+  return [...bin.placements].sort((a, b) => a.x - b.x || a.y - b.y);
 }
