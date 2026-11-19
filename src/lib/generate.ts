@@ -1,7 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
-import { applyVariant, completeDims, preferredVariant, variantsOf } from './variants';
+import { applyVariant, completeDims, preferredVariant, SAP_SOURCE, variantsOf } from './variants';
 import { adaptSapPacking, buildFamilyIndex, withTwinPallets } from './packIntel';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
@@ -210,6 +210,8 @@ const PALLETS: { type: string; l: number; w: number; tare: number }[] = [
 ];
 
 interface Piece {
+  /** colis unitaire d'après la fiche SAP (pas un colis réellement observé) */
+  fromSap?: boolean;
   lineIdx: number;
   code: string;
   qty: number;
@@ -345,6 +347,7 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
     dimsInferred: item.dimsInferred,
     fromMixed: !!item.mixed,
     similar: !!item.similarFrom || !!item.twinFrom,
+    fromSap: item.packSource === SAP_SOURCE,
     // volume de marchandise au prorata de la quantité (un carton à moitié plein compte pour moitié),
     // sans le socle des palettes : au regroupement, la marchandise est reposée sur une seule palette
     goodsVolume: perPkg < 1 ? volume : Math.min(volume, goodsUnitVol * q) || volume,
@@ -541,11 +544,40 @@ function confidenceOf(item: CatalogItem, qty: number): Confidence {
  * Les autres envois sur le même type de palette servent à estimer la hauteur d'une palette incomplète.
  * Les estimations en colis mixte ne servent que s'il n'existe aucune autre donnée.
  */
+/**
+ * Mêmes colis mesurés plusieurs fois à quelques cm près (caisse 318 × 23 × 31, 320 × 24 × 32, 321 × 24 × 32…) :
+ * un seul représentant (poids médian), avec le total des observations — un relevé isolé ne l'emporte plus.
+ */
+function clusterVariants<V extends { qtyPerPackage: number; length: number; width: number; height: number; grossWeightPerUnit: number; count: number; mixed: boolean; source?: string }>(vs: V[]): V[] {
+  const out: { rep: V; members: V[] }[] = [];
+  const near = (a: V, b: V) => {
+    if (a.qtyPerPackage !== b.qtyPerPackage || a.mixed !== b.mixed || a.source === SAP_SOURCE || b.source === SAP_SOURCE) return false;
+    const x = [a.length, a.width, a.height].sort((p, q) => q - p);
+    const y = [b.length, b.width, b.height].sort((p, q) => q - p);
+    return x.every((v, i) => v > 0 && Math.abs(v - y[i]) <= Math.max(2, v * 0.05));
+  };
+  for (const v of vs) {
+    const c = out.find((o) => near(o.rep, v));
+    if (c) c.members.push(v);
+    else out.push({ rep: v, members: [v] });
+  }
+  return out.map(({ members }) => {
+    if (members.length === 1) return members[0];
+    const byKg = [...members].sort((a, b) => a.grossWeightPerUnit - b.grossWeightPerUnit);
+    const med = byKg[Math.floor((byKg.length - 1) / 2)];
+    // libellé d'emballage le plus fréquent du groupe (CRATE plutôt qu'un « Box » isolé)
+    const types = new Map<string, number>();
+    for (const m of members) types.set((m as { packageType?: string }).packageType ?? '', (types.get((m as { packageType?: string }).packageType ?? '') ?? 0) + (m.count || 1));
+    const packageType = [...types].sort((a, b) => b[1] - a[1])[0]?.[0];
+    return { ...med, ...(packageType ? { packageType } : {}), count: members.reduce((t, m) => t + (m.count || 1), 0) };
+  });
+}
+
 export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogItem; note?: string; confidence: Confidence } {
   if (item.manual) return { item, confidence: 'manual' };
   const all = variantsOf(item);
   const dedicated = all.filter((v) => !v.mixed && (v.length || v.volumePerPackage));
-  const pool = dedicated.length ? dedicated : all;
+  const pool = clusterVariants(dedicated.length ? dedicated : all);
   const withAnchors = (v: (typeof pool)[number]): CatalogItem => {
     const it = applyVariant(item, v);
     const fk = footprintKey(v);
@@ -567,7 +599,8 @@ export function chooseVariant(item: CatalogItem, qty: number): { item: CatalogIt
     const better =
       !best ||
       pieces.length < best.n ||
-      (pieces.length === best.n && (vol < best.vol - 1e-6 || (Math.abs(vol - best.vol) < 1e-6 && v.count > best.count)));
+      // volumes quasi identiques (même caisse mesurée à 1 cm près) : la configuration la plus souvent vue l'emporte
+      (pieces.length === best.n && (vol < best.vol * 0.97 - 1e-6 || (Math.abs(vol - best.vol) <= best.vol * 0.03 + 1e-6 && v.count > best.count)));
     if (better) best = { item: cand, n: pieces.length, vol, count: v.count };
   }
   return done(best!.item);
@@ -739,6 +772,18 @@ export function generatePackingList(
     if (loose.length >= 2) {
       groups.push({ pieces: loose, source: 'rule' });
       pool = pool.filter((p) => !loose.includes(p));
+    }
+    // plusieurs exemplaires d'un même appareil de taille moyenne connu seulement par sa fiche SAP (20 à 300 kg, pompe CR…) :
+    // palettisés ensemble, comme Grundfos le fait, plutôt qu'une palette ou une caisse chacun
+    const medium = new Map<number, Piece[]>();
+    for (const p of pool) {
+      const d = sorted3(p.l, p.w, p.h);
+      if (p.fromSap && p.basis === 'reference' && p.qty === 1 && p.gross >= 20 && p.gross <= 300 && d[0] <= 250 && !realPallet(p)) medium.set(p.lineIdx, [...(medium.get(p.lineIdx) ?? []), p]);
+    }
+    for (const list of medium.values()) {
+      if (list.length < 2) continue;
+      groups.push({ pieces: list, source: 'rule' });
+      pool = pool.filter((p) => !list.includes(p));
     }
     // 2 ou 3 cartons d'un même appareil partent tels quels ; au-delà, réunis sur une palette
     const byLine = new Map<number, Piece[]>();

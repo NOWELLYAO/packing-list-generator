@@ -135,5 +135,6 @@ export function applyVariant(item: CatalogItem, v: PackVariant): CatalogItem {
     packShare: v.mixed ? v.packShare : undefined,
     dimsInferred: v.dimsInferred,
     twinFrom: v.twinOf,
+    packSource: v.source,
   };
 }

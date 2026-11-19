@@ -29,6 +29,8 @@ export interface CatalogItem {
   similarFrom?: string;
   /** emballage en cours repris d'un article jumeau (calcul interne) */
   twinFrom?: string;
+  /** origine de l'emballage en cours (calcul interne) */
+  packSource?: string;
   /** toutes les configurations d'emballage observées dans les PL importées */
   variants?: PackVariant[];
   /** fiche corrigée à la main : ses valeurs priment sur les variantes */

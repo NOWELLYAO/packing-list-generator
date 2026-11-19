@@ -503,3 +503,14 @@ describe('article jumeau (même produit, autre variante)', () => {
     }
   });
 });
+
+describe('plusieurs pompes moyennes connues seulement par SAP', () => {
+  it('28 pompes de 66 kg → quelques palettes groupées, pas 28 colis', () => {
+    const S = 'Fiche article fabricant (saisie)';
+    const v = { qtyPerPackage: 1, packageType: 'Caisse', length: 135.6, width: 33.4, height: 32.7, volumePerPackage: 0.148, netWeightPerUnit: 61.65, grossWeightPerUnit: 66.32, mixed: false, source: S, count: 10 };
+    const P = { ...v, id: 'p', code: 'CRX-22', pn: 'CRX-22', description: 'CRX5-22 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [v] };
+    const pk = generatePackingList([P], [req('CRX-22', 28)], { consolidate: true }).packages;
+    expect(pk.length).toBeLessThanOrEqual(6);
+    expect(pk.reduce((t, p) => t + p.contents[0].quantity, 0)).toBe(28);
+  });
+});

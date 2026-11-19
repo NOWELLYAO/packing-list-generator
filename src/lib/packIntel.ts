@@ -84,6 +84,8 @@ export function adaptSapPacking(item: CatalogItem, fam: FamilyIndex, strategy: '
         const votes: Record<PackClass, number> = { crate: 0, pallet: 0, carton: 0 };
         for (const p of peers) votes[packClass(p.real.packageType)] += p.real.count || 1;
         const cls = (Object.keys(votes) as PackClass[]).sort((a, b) => votes[b] - votes[a])[0];
+        // un article étroit (pompe de 33 cm de large) ne part pas seul sur une palette : il sera palettisé avec d'autres
+        if (cls === 'pallet' && Math.min(v.length, v.width) < 60) return [v];
         // écart réel fiche SAP → colis expédié, sur un article de la famille qui a les deux
         const pair = peers.find((p) => p.sap && packClass(p.real.packageType) === cls);
         if (pair && cls !== 'carton') {
