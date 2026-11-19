@@ -18,6 +18,8 @@ import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
 import HistoryPanel from './components/HistoryPanel';
 import SettingsPanel from './components/SettingsPanel';
+import LoginScreen from './components/LoginScreen';
+import { AccessContext, useAccess, type Perm } from './lib/access';
 
 type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'settings';
 
@@ -38,6 +40,7 @@ const CLOUD_LABEL: Record<SyncStatus, string> = {
   offline: 'hors ligne',
   not_configured: 'sauvegarde en ligne inactive',
   error: 'erreur de sauvegarde',
+  locked: 'connexion requise',
 };
 
 export default function App() {
@@ -130,15 +133,36 @@ export default function App() {
     setHistory([e, ...(same ? history.slice(1) : history)].slice(0, 200));
   };
 
-  const tabs: { id: Tab; label: string; badge?: number }[] = [
-    { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },
-    { id: 'catalog', label: 'Articles' },
-    { id: 'import', label: 'Importer' },
-    { id: 'history', label: 'Historique' },
-    { id: 'settings', label: 'Réglages' },
-  ];
+  // Contrôle d'accès (si activé sur l'espace de sauvegarde)
+  const access = useAccess(cloud.cloud?.code);
+  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history' };
+  const tabs = (
+    [
+      { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },
+      { id: 'catalog', label: 'Articles' },
+      { id: 'import', label: 'Importer' },
+      { id: 'history', label: 'Historique' },
+      { id: 'settings', label: 'Réglages' },
+    ] as { id: Tab; label: string; badge?: number }[]
+  ).filter((t) => !NEED[t.id] || access.can(NEED[t.id]!));
+  // onglet devenu interdit (connexion avec un autre profil) → premier onglet permis
+  useEffect(() => {
+    if (!tabs.some((t) => t.id === tab)) setTab(tabs[0]?.id ?? 'settings');
+  }, [access.session?.user.id, access.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  // après connexion : synchronisation immédiate
+  useEffect(() => {
+    if (access.session) void cloud.syncNow();
+  }, [access.session?.token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (cloud.cloud && access.enabled && !access.session)
+    return (
+      <AccessContext.Provider value={access}>
+        <LoginScreen space={cloud.cloud.code} logo={settings.logo} onLogged={(s) => access.setSession(s)} />
+      </AccessContext.Provider>
+    );
 
   return (
+    <AccessContext.Provider value={access}>
     <LangContext.Provider value={settings.lang ?? 'fr'}>
     <SafetyContext.Provider value={safety}>
     <div className="app">
@@ -148,6 +172,7 @@ export default function App() {
           <div>
             <h1>Packing List</h1>
             <small>
+              {access.session && <span className="who">{access.session.user.name} · </span>}
               {catalog.length} articles en base
               {cloud.status !== 'off' && (
                 <span className={`cloud-dot ${cloud.status}`} title={CLOUD_LABEL[cloud.status]}>
@@ -304,5 +329,6 @@ export default function App() {
     </div>
     </SafetyContext.Provider>
     </LangContext.Provider>
+    </AccessContext.Provider>
   );
 }

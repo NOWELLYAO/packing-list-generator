@@ -10,6 +10,8 @@ import { dimsText, packLabel, useLang } from '../lib/i18n';
 interface Props {
   item: CatalogItem;
   isNew?: boolean;
+  /** consultation seule (compte sans droit de modification) */
+  readOnly?: boolean;
   onSave: (item: CatalogItem) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -36,7 +38,7 @@ const PACK: Field[] = [
 
 const NUM_FIELDS: Field[] = PACK.filter((f) => f.num);
 
-export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: Props) {
+export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, onClose }: Props) {
   const [draft, setDrafted] = useState<CatalogItem>(item);
   // texte saisi dans les champs numériques (lu seulement à l'enregistrement : "1 234,5" ou "12," restent intacts)
   const rawFrom = (d: CatalogItem) => Object.fromEntries(NUM_FIELDS.map((f) => [f.key, String(d[f.key] ?? '')])) as Record<string, string>;
@@ -124,7 +126,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
           </button>
         </header>
 
-        <div className="modal-body">
+        <fieldset className="modal-body plain" disabled={readOnly}>
           {itemIssues(item).length > 0 && !item.manual && (
             <div className={`quality ${itemIssues(item).some((i) => i.severity === 'error') ? 'error' : ''}`}>
               <b>Contrôle qualité</b>
@@ -232,9 +234,18 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
               </div>
             </>
           )}
-        </div>
+        </fieldset>
 
         {error && <div className="form-error">{error}</div>}
+        {readOnly ? (
+          <footer className="modal-foot">
+            <span className="hint">Consultation seule</span>
+            <span className="spacer" />
+            <button className="btn primary" onClick={onClose}>
+              Fermer
+            </button>
+          </footer>
+        ) : (
         <footer className="modal-foot">
           {!isNew && (
             <button className="btn ghost danger" onClick={onDelete}>
@@ -249,6 +260,7 @@ export default function ItemEditor({ item, isNew, onSave, onDelete, onClose }: P
             Enregistrer
           </button>
         </footer>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@ import type { Settings } from '../types';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { useSafety } from '../lib/safety';
 import type { useCloudSync } from '../lib/useCloudSync';
+import AccessPanel from './AccessPanel';
+import { useCan } from '../lib/access';
 import CloudPanel from './CloudPanel';
 
 interface Props {
@@ -39,6 +41,7 @@ function resizeImage(file: File): Promise<string> {
 export default function SettingsPanel({ settings, setSettings, toast, cloud }: Props) {
   const logoRef = useRef<HTMLInputElement>(null);
   const { notify } = useSafety();
+  const canSettings = useCan()('settings');
   return (
     <div className="page narrow">
       <div className="page-head">
@@ -49,6 +52,9 @@ export default function SettingsPanel({ settings, setSettings, toast, cloud }: P
       </div>
 
       <CloudPanel cloud={cloud} toast={toast} />
+      <AccessPanel space={cloud.cloud?.code} toast={toast} />
+      {canSettings && (
+        <>
 
       <div className="card">
         <h3 className="card-title">Logo</h3>
@@ -151,6 +157,8 @@ export default function SettingsPanel({ settings, setSettings, toast, cloud }: P
         </p>
         <p className="hint">Version de l'application : {__BUILD__}</p>
       </div>
+        </>
+      )}
     </div>
   );
 }

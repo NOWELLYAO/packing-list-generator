@@ -4,6 +4,7 @@ import { norm } from '../lib/detect';
 import { exportCatalogXlsx } from '../lib/exporters';
 import { mergeCatalog, uid } from '../lib/normalize';
 import ItemEditor from './ItemEditor';
+import { useCan } from '../lib/access';
 import InfoTip from './InfoTip';
 import BoxIcon from './BoxIcon';
 import { dimsText, packLabel, useLang } from '../lib/i18n';
@@ -28,6 +29,9 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [limit, setLimit] = useState(PAGE);
   const [editing, setEditing] = useState<{ item: CatalogItem; isNew: boolean } | null>(null);
+  const can = useCan();
+  const canEdit = can('catalogEdit');
+  const canExport = can('export');
   const backupRef = useRef<HTMLInputElement>(null);
   const lang = useLang();
   const { ask, notify } = useSafety();
@@ -144,12 +148,16 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           </p>
         </div>
         <div className="row wrap">
-          <button className="btn primary" onClick={() => setEditing({ item: newItem(), isNew: true })}>
-            + Article
-          </button>
-          <button className="btn" onClick={() => backupRef.current?.click()}>
-            Charger une base JSON
-          </button>
+          {canEdit && (
+            <button className="btn primary" onClick={() => setEditing({ item: newItem(), isNew: true })}>
+              + Article
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn" onClick={() => backupRef.current?.click()}>
+              Charger une base JSON
+            </button>
+          )}
           <input
             ref={backupRef}
             type="file"
@@ -163,23 +171,29 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           <details className="menu">
             <summary className="btn ghost">Plus…</summary>
             <div className="menu-list" onClick={(e) => ((e.currentTarget.closest('details') as HTMLDetailsElement).open = false)}>
-              <button onClick={downloadBackup} disabled={!catalog.length}>
-                Sauvegarder la base (JSON)
-              </button>
-              <button onClick={() => exportCatalogXlsx(catalog)} disabled={!catalog.length}>
-                Exporter en Excel
-              </button>
-              {snapshots.length > 0 && <div className="menu-sep">Sauvegardes automatiques</div>}
-              {snapshots.map((s) => (
+              {canExport && (
+                <button onClick={downloadBackup} disabled={!catalog.length}>
+                  Sauvegarder la base (JSON)
+                </button>
+              )}
+              {canExport && (
+                <button onClick={() => exportCatalogXlsx(catalog)} disabled={!catalog.length}>
+                  Exporter en Excel
+                </button>
+              )}
+              {canEdit && snapshots.length > 0 && <div className="menu-sep">Sauvegardes automatiques</div>}
+              {(canEdit ? snapshots : []).map((s) => (
                 <button key={s.id} onClick={() => restoreSnapshot(s.id)}>
                   Restaurer : {s.catalog.length} articles · {new Date(s.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
                   <small className="hint"> ({s.reason})</small>
                 </button>
               ))}
-              <div className="menu-sep danger">Zone sensible</div>
-              <button className="danger" disabled={!catalog.length} onClick={() => void clearAll()}>
-                Vider la base…
-              </button>
+              {canEdit && <div className="menu-sep danger">Zone sensible</div>}
+              {canEdit && (
+                <button className="danger" disabled={!catalog.length} onClick={() => void clearAll()}>
+                  Vider la base…
+                </button>
+              )}
             </div>
           </details>
         </div>
@@ -321,6 +335,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
 
       {editing && (
         <ItemEditor
+          readOnly={!canEdit}
           item={editing.item}
           isNew={editing.isNew}
           onSave={save}

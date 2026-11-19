@@ -10,6 +10,7 @@ import { parseNumber } from '../lib/parseValues';
 import ArticleSearch from './ArticleSearch';
 import PackingListView from './PackingListView';
 import QuickItemForm from './QuickItemForm';
+import { useCan } from '../lib/access';
 import TransportPanel from './TransportPanel';
 import InfoTip from './InfoTip';
 import LabelsDialog from './LabelsDialog';
@@ -85,6 +86,9 @@ function PackingChip({ pl, code, packing, lang }: { pl: PackingList | null; code
 }
 
 export default function GeneratorPanel({ catalog, setCatalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
+  const can = useCan();
+  const canEdit = can('catalogEdit');
+  const canExport = can('export');
   const [paste, setPaste] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [quick, setQuick] = useState<{ item: CatalogItem | null; code: string; pn: string } | null>(null);
@@ -273,9 +277,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                           <span className="chip chip-danger">introuvable dans la base</span>
                           <InfoTip k="unknown" />
                         </span>
-                        <button className="link-btn" onClick={() => setQuick({ item: null, code: l.code, pn: l.pn })}>
+                        {canEdit && <button className="link-btn" onClick={() => setQuick({ item: null, code: l.code, pn: l.pn })}>
                           Saisir dimensions et poids
-                        </button>
+                        </button>}
                       </>
                     )}
                     {choice && l.quantity > 0 && <ConfidenceChip c={choice.confidence} />}
@@ -284,15 +288,15 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                         <span className="chip chip-danger" title={itemIssues(it).filter((i) => i.severity === 'error').map((i) => i.message).join(' ; ')}>
                           données suspectes
                         </span>
-                        <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
+                        {canEdit && <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
                           Corriger
-                        </button>
+                        </button>}
                       </span>
                     )}
                     {resolved.dupOf.has(l.id) && (
                       <span className="chip chip-warn">doublon : additionné à la ligne {resolved.dupOf.get(l.id)! + 1}</span>
                     )}
-                    {it && choice && ['estimated', 'mixed', 'manual'].includes(choice.confidence) && (
+                    {canEdit && it && choice && ['estimated', 'mixed', 'manual'].includes(choice.confidence) && (
                       <button className="link-btn" onClick={() => setQuick({ item: it, code: it.code, pn: it.pn })}>
                         {choice.confidence === 'manual' ? 'Modifier les dimensions' : 'Saisir les dimensions réelles'}
                       </button>
@@ -416,6 +420,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                   </button>
                 ))}
               </div>
+              {canExport && (<>
               <button className="btn primary" disabled={!!busy} onClick={() => run('pdf', () => exportPackingListPdf(pl, settings))}>
                 {busy === 'pdf' ? '…' : 'PDF'}
               </button>
@@ -428,6 +433,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               <button className="btn" disabled={!!busy} onClick={() => setShowLabels(true)} title="Étiquettes de colis à imprimer">
                 Étiquettes
               </button>
+              </>)}
             </div>
           </div>
 

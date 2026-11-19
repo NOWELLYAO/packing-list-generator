@@ -17,7 +17,7 @@ import {
   type CloudState,
 } from './cloud';
 
-export type SyncStatus = 'off' | 'syncing' | 'synced' | 'offline' | 'not_configured' | 'error';
+export type SyncStatus = 'off' | 'syncing' | 'synced' | 'offline' | 'not_configured' | 'error' | 'locked';
 
 interface Data {
   catalog: CatalogItem[];
@@ -120,7 +120,7 @@ export function useCloudSync(data: Data, set: Setters) {
       setLastAt(Date.now());
     } catch (e) {
       const kind = e instanceof CloudFailure ? e.kind : 'server';
-      setStatus(kind === 'offline' ? 'offline' : kind === 'not_configured' ? 'not_configured' : 'error');
+      setStatus(kind === 'offline' ? 'offline' : kind === 'not_configured' ? 'not_configured' : kind === 'login' ? 'locked' : 'error');
       setDetail(e instanceof Error ? e.message : String(e));
     } finally {
       busy.current = false;

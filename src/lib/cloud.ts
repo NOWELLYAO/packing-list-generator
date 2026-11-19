@@ -1,3 +1,4 @@
+import { LOCK_EVENT, tokenFor } from './access';
 import type { CatalogItem, HistoryEntry, Settings } from '../types';
 import type { AccuracyRecord } from './realCheck';
 import { itemKey } from './normalize';
@@ -61,7 +62,7 @@ export function normalizeCode(input: string): string {
 }
 export const isValidCode = (c: string) => /^PL(-[A-Z0-9]{4}){4}$/.test(c);
 
-export type CloudError = 'not_configured' | 'offline' | 'bad_code' | 'server';
+export type CloudError = 'not_configured' | 'offline' | 'bad_code' | 'server' | 'login';
 export class CloudFailure extends Error {
   kind: CloudError;
   constructor(kind: CloudError, msg?: string) {
@@ -75,7 +76,7 @@ async function call(method: 'GET' | 'PUT', code: string, query = '', body?: unkn
   try {
     r = await fetch(`/api/base${query}`, {
       method,
-      headers: { 'x-plgen-space': code, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { 'x-plgen-space': code, ...(tokenFor(code) ? { 'x-plgen-token': tokenFor(code)! } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       cache: 'no-store',
     });
@@ -89,6 +90,12 @@ async function call(method: 'GET' | 'PUT', code: string, query = '', body?: unkn
     /* réponse vide */
   }
   if (r.status === 503) throw new CloudFailure('not_configured');
+  if (r.status === 401) {
+    // protection par code d'accès : session absente ou expirée
+    window.dispatchEvent(new Event(LOCK_EVENT));
+    throw new CloudFailure('login');
+  }
+  if (r.status === 403) throw new CloudFailure('server', 'droits insuffisants');
   if (r.status === 400) throw new CloudFailure('bad_code');
   if (r.status >= 500 || r.status === 405) throw new CloudFailure('server', String(data.detail ?? data.error ?? r.status));
   return { status: r.status, data };

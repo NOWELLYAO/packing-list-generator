@@ -635,3 +635,18 @@ td.delta small { font-weight: 500; }
 .load-anim-speed input[type='range'] { vertical-align: middle; width: 7rem; }
 .banner.info { background: var(--accent-soft, #eef4fb); border-color: #cfe0f3; }
 .light-ship .btn { margin-left: 0.3rem; }
+fieldset.plain { border: 0; margin: 0; min-width: 0; }
+
+.login-screen { min-height: 100vh; display: grid; place-items: center; padding: 1rem; background: var(--bg, #f3f5f8); }
+.login-card { width: min(360px, 100%); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem; display: flex; flex-direction: column; gap: 0.7rem; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+.login-card h1 { margin: 0; font-size: 1.3rem; }
+.login-card label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+.login-card input, .login-card select { font-size: 1.05rem; padding: 0.6rem; border: 1px solid var(--line); border-radius: 8px; }
+.login-logo { max-height: 42px; max-width: 160px; object-fit: contain; align-self: flex-start; }
+.user-list { list-style: none; padding: 0; margin: 0.4rem 0 0.6rem; }
+.user-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.user-list li.off { opacity: 0.55; }
+.perm-list { display: grid; gap: 0.3rem; margin: 0.5rem 0; }
+.check { display: flex; gap: 0.45rem; align-items: center; font-size: 0.9rem; }
+.access-edit { margin-top: 0.6rem; }
+.access-me { justify-content: space-between; margin-bottom: 0.5rem; }
