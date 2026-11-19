@@ -729,13 +729,24 @@ export function generatePackingList(
   // 2) Petits colis restants réunis sur un carton ou une palette (tendance observée chez Grundfos,
   //    et règle de la proposition optimisée si l'option est activée)
   if (grundfosGrouping || (!grundfosMode && options.consolidate)) {
-    const small = pool.filter(isSmall);
-    // 2 ou 3 articles déjà dans leur propre carton : ils partent tels quels (pas de suremballage)
     const realPallet = (p: Piece) => PALLET_RE.test(p.type) && Math.max(p.l, p.w) >= 80 && Math.min(p.l, p.w) >= 50;
-    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !realPallet(p) && p.gross >= 5);
-    if (small.length >= 2 && !ownCartons) {
-      groups.push({ pieces: small, source: 'rule' });
-      pool = pool.filter((p) => !small.includes(p));
+    // appareil déjà dans son propre carton (≥ 5 kg : pompe doseuse, coffret…) : il n'est jamais mélangé à d'autres articles ;
+    // plusieurs exemplaires du même appareil peuvent être réunis entre eux
+    const ownBox = (p: Piece) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !realPallet(p) && p.gross >= 5;
+    const small = pool.filter(isSmall);
+    const loose = small.filter((p) => !ownBox(p));
+    const boxed = small.filter(ownBox);
+    if (loose.length >= 2) {
+      groups.push({ pieces: loose, source: 'rule' });
+      pool = pool.filter((p) => !loose.includes(p));
+    }
+    // 2 ou 3 cartons d'un même appareil partent tels quels ; au-delà, réunis sur une palette
+    const byLine = new Map<number, Piece[]>();
+    for (const p of boxed) byLine.set(p.lineIdx, [...(byLine.get(p.lineIdx) ?? []), p]);
+    for (const list of byLine.values()) {
+      if (list.length <= 3) continue;
+      groups.push({ pieces: list, source: 'rule' });
+      pool = pool.filter((p) => !list.includes(p));
     }
   }
 
