@@ -139,13 +139,14 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
                   >
                     {PRESETS.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.label} — {p.hint}
+                        {p.label}
                       </option>
                     ))}
                     <option value="custom" disabled>
                       Personnalisé
                     </option>
                   </select>
+                  <small className="hint">{PRESETS.find((p) => p.label === presetOf((edit.role ?? 'user') as Role, (edit.perms ?? []) as Perm[]))?.hint ?? 'Droits choisis un par un ci-dessous'}</small>
                 </label>
                 <label>
                   <span>{edit.id ? 'Nouveau code (laisser vide pour garder)' : 'Code (4 à 8 chiffres)'}</span>
