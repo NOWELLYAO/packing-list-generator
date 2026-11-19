@@ -411,3 +411,25 @@ describe('fichier de corrections chargé dans la base', () => {
     expect(mergeCatalog([old], [reset]).catalog[0].manual).toBe(false);
   });
 });
+
+describe('import d’une extraction de fiches article SAP (Excel)', () => {
+  it('lit Material / poids / L × l × H en mm, ignore les lignes sans dimensions, signale un volume incohérent', async () => {
+    const { parseSapMaster } = await import('../lib/sapMaster');
+    const rows = [
+      ['Material', 'Description', 'Gross Weight', 'Net Weight', 'Unit of Weight', 'Volume', 'Volume Unit', 'Length', 'Width', 'Height', 'Unit'],
+      ['10000001', 'Pompe test', '17.750', '14.750', 'KG', '34.761', 'CDM', '660.000', '260.000', '280.000', 'MM'],
+      ['10000002', 'Pompe longue', '10.000', '8.200', 'KG', '24.156', 'CDM', '1,426.000', '121.000', '140.000', 'MM'],
+      ['10000003', 'Kit sans cotes', '0.840', '0.840', 'KG', '0', '', '0', '0', '0', ''],
+      ['10000004', 'Flotteur', '1.5', '1.38', 'KG', '5.178', 'CDM', '28.2', '17', '10.8', 'CM'],
+    ];
+    const r = parseSapMaster([{ name: 'Sheet1', rows }])!;
+    expect(r.items.map((i) => [i.code, i.length, i.width, i.height])).toEqual([
+      ['10000001', 66, 26, 28],
+      ['10000002', 142.6, 12.1, 14],
+      ['10000004', 28.2, 17, 10.8],
+    ]);
+    expect(r.items[0].grossWeightPerUnit).toBe(17.75);
+    expect(r.skipped[0]).toContain('10000003');
+    expect(r.warnings[0]).toContain('10000001');
+  });
+});

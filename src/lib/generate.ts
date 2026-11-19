@@ -723,7 +723,7 @@ export function generatePackingList(
     const small = pool.filter(isSmall);
     // 2 ou 3 articles déjà dans leur propre carton : ils partent tels quels (pas de suremballage)
     const realPallet = (p: Piece) => PALLET_RE.test(p.type) && Math.max(p.l, p.w) >= 80 && Math.min(p.l, p.w) >= 50;
-    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !realPallet(p));
+    const ownCartons = small.length <= 3 && small.every((p) => p.basis === 'reference' && !p.repacked && !p.fromMixed && !realPallet(p) && p.gross >= 5);
     if (small.length >= 2 && !ownCartons) {
       groups.push({ pieces: small, source: 'rule' });
       pool = pool.filter((p) => !small.includes(p));

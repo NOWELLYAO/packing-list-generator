@@ -3,6 +3,7 @@ import type { CatalogItem, DimUnit, FieldKey, ImportDraft, WeightBasis } from '.
 import { detectHeaderRow, detectMapping, FIELD_LABELS, FIELD_ORDER } from '../lib/detect';
 import { readAnyFile } from '../lib/readFiles';
 import { bestObservations, sapToCatalog } from '../lib/sapPackingList';
+import { parseSapMaster } from '../lib/sapMaster';
 import { blindTest, type AccuracyRecord } from '../lib/realCheck';
 import AccuracyCard from './AccuracyCard';
 import InfoTip from './InfoTip';
@@ -90,6 +91,18 @@ export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props)
       }
       const tables = res.tables.filter((t) => t.rows.length > 0);
       if (!tables.length) throw new Error(res.ocr ? 'scan illisible' : 'aucune donnée lisible');
+      // extraction de fiches article SAP (Material, poids, L × l × H) : import direct, données prioritaires
+      const master = res.sap ? null : parseSapMaster(tables);
+      if (master && master.items.length) {
+        const r = onImport(master.items, file.name);
+        const extra = [
+          master.skipped.length ? `sans dimensions, ignorés : ${master.skipped.join(', ')}` : '',
+          ...master.warnings,
+        ].filter(Boolean);
+        setLog((l) => [{ text: `✅ ${file.name} (fiches article SAP) : ${master.items.length} articles → ${r.added} nouveaux, ${r.updated} complétés${extra.length ? ` ⚠️ ${extra.join(' ; ')}` : ''}` }, ...l]);
+        next();
+        return;
+      }
       setDraft(makeDraft(file.name, tables, bestTable(tables)));
     } catch (e) {
       setLog((l) => [{ text: `❌ ${file.name} : lecture impossible (${(e as Error).message})` }, ...l]);
