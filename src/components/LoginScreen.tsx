@@ -9,15 +9,41 @@ export default function LoginScreen({ space, logo, onLogged }: { space: string; 
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [tries, setTries] = useState(0);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
+    setLoading(true);
     authStatus(space)
       .then((s) => {
+        setErr('');
         setUsers(s.users);
         const last = localStorage.getItem('plgen:lastUser');
         setUserId(s.users.find((u) => u.id === last)?.id ?? s.users[0]?.id ?? '');
       })
-      .catch((e) => setErr(e instanceof AccessError && e.code === 'offline' ? 'Pas de connexion internet : la connexion à l’application est impossible pour le moment.' : 'Service indisponible, réessayez.'));
-  }, [space]);
+      .catch((e) =>
+        setErr(
+          !(e instanceof AccessError && e.code === 'offline')
+            ? 'Service indisponible, réessayez dans un instant.'
+            : !navigator.onLine
+              ? 'Pas de connexion internet sur cet appareil.'
+              : // internet fonctionne mais le serveur ne répond pas : réseau d'entreprise qui filtre le site, ou coupure passagère
+                'Le serveur de l’application ne répond pas depuis ce réseau. Si vous êtes sur le réseau de l’entreprise, il bloque peut-être le site plgen.vercel.app : essayez avec le partage de connexion de votre téléphone, ou demandez au service informatique de l’autoriser.',
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, [space, tries]);
+  // reconnexion automatique dès que le réseau revient
+  useEffect(() => {
+    const on = () => setTries((t) => t + 1);
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  }, []);
+  // serveur injoignable : nouvel essai automatique toutes les 20 secondes
+  useEffect(() => {
+    if (users || !err || loading) return;
+    const t = window.setTimeout(() => setTries((n) => n + 1), 20000);
+    return () => window.clearTimeout(t);
+  }, [users, err, loading]);
 
   const submit = async () => {
     if (!userId || !/^\d{4,8}$/.test(pin)) return setErr('Saisissez votre code (4 à 8 chiffres).');
@@ -60,7 +86,7 @@ export default function LoginScreen({ space, logo, onLogged }: { space: string; 
         {logo ? <img src={logo} alt="" className="login-logo" /> : <img src="/favicon.svg" alt="" className="brand-mark-img" />}
         <h1>Packing List</h1>
         <p className="hint">Accès réservé. Choisissez votre nom et saisissez votre code.</p>
-        {users === null && !err && <p className="hint">Chargement…</p>}
+        {users === null && loading && <p className="hint">Chargement…</p>}
         {users && (
           <>
             <label>
@@ -95,6 +121,11 @@ export default function LoginScreen({ space, logo, onLogged }: { space: string; 
           <div className="form-error" role="alert">
             {err}
           </div>
+        )}
+        {users === null && err && (
+          <button className="btn" type="button" disabled={loading} onClick={() => setTries((t) => t + 1)}>
+            {loading ? 'Nouvel essai…' : 'Réessayer'}
+          </button>
         )}
         <p className="hint small">Code oublié ? Demandez à l’administrateur de le réinitialiser.</p>
       </form>
