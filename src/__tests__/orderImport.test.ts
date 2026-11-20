@@ -26,3 +26,14 @@ describe('bon de commande → lignes', () => {
     expect(r[0].quantity).toBe(3);
   });
 });
+
+describe('bon de commande avec prix', () => {
+  it('« code désignation prix qté total » : la quantité est celle qui donne le total', () => {
+    const cat2 = [mk('92799796', 'CU 202 cpl PARK'), mk('92959992', 'MS4000ZBCJ4 3x380-415/50 7.50kW 2.5P'), mk('99091874', 'Bulk, valve DN8 PVC/V/C, 10 pcs')];
+    const r = extractOrder(
+      [[['P/N', 'Désignation', 'P.U. (€)', 'Qté', 'Total (€)'], ['92799796 CU 202 cpl', '472.55', '10 4,725.50'], ['92959992 MS4000ZBCJ4 3x380-415/50', '5.50kW 2.5P', '1,063.20', '4 4,252.80'], ['99091874 Bulk, valve DN8 PVC/V/C, 10 pcs', '105.95', '10 1,059.50']]],
+      cat2,
+    );
+    expect(r.map((l) => [l.code, l.quantity])).toEqual([['92799796', 10], ['92959992', 4], ['99091874', 10]]);
+  });
+});

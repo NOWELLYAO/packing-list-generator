@@ -41,6 +41,26 @@ function qtyNumber(t: string): number | null {
 /** quantité d'une ligne sans colonne « Quantité » reconnue */
 function guessQuantity(tokens: string[], codeIdx: number): number | null {
   const after = tokens.slice(codeIdx + 1);
+  // 0) prix unitaire × quantité = total sur la ligne : la quantité est le facteur entier (« 472.55  10  4,725.50 » → 10)
+  const nums = after.map(asNumber).filter((n): n is number => n !== null && n > 0);
+  for (let i = 0; i + 2 < nums.length; i++) {
+    const [a, b, c] = [nums[i], nums[i + 1], nums[i + 2]];
+    if (Math.abs(a * b - c) <= Math.max(0.02, c * 0.005)) {
+      const intA = Number.isInteger(a);
+      const intB = Number.isInteger(b);
+      if (intB && !intA) return b;
+      if (intA && !intB) return a;
+      if (intA && intB) return Math.min(a, b);
+    }
+  }
+  // prix et total seuls : total ÷ prix entier
+  for (let i = 0; i + 1 < nums.length; i++) {
+    const q = nums[i + 1] / nums[i];
+    if (nums[i] >= 1 && q >= 2 && Math.abs(q - Math.round(q)) < 0.001 && q < 100000) {
+      // seulement s'il n'y a pas d'autre nombre entier plausible entre les deux (sinon c'est l'étape 2)
+      if (nums.length === 2) return Math.round(q);
+    }
+  }
   // 1) nombre suivi d'une unité (6 PCS, 2 PCE…)
   for (let i = 0; i < after.length - 1; i++) {
     const n = asNumber(after[i]);
@@ -129,7 +149,8 @@ export function extractOrder(tables: string[][][], catalog: CatalogItem[]): Orde
         match = 'inconnu';
       }
       let qty: number | null = null;
-      if (hasQtyCol) {
+      // colonne Quantité fiable seulement si la ligne a autant de cellules que l'en-tête (PDF : cellules parfois fusionnées)
+      if (hasQtyCol && row.length === head.length) {
         const n = qtyNumber(row[m.quantity!] ?? '');
         qty = n !== null && n > 0 ? n : null;
       }
