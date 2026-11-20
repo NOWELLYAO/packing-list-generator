@@ -27,6 +27,8 @@ const PAGE = 60;
 export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  // liste repliée à l'ouverture : elle s'affiche dès qu'on cherche, qu'on choisit un filtre ou qu'on la demande
+  const [open, setOpen] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const [editing, setEditing] = useState<{ item: CatalogItem; isNew: boolean } | null>(null);
   const can = useCan();
@@ -268,6 +270,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               onClick={() => {
                 setFilter(k);
                 setLimit(PAGE);
+                setOpen(true);
               }}
             >
               {label}
@@ -286,7 +289,17 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           </p>
         </div>
       ) : (
+        !(open || q.trim() || filter !== 'all') ? (
+          <button className="btn list-toggle" onClick={() => setOpen(true)}>
+            Afficher les {catalog.length.toLocaleString('fr-FR')} articles ▾
+          </button>
+        ) : (
         <div className="item-list">
+          {!q.trim() && filter === 'all' && (
+            <button className="link-btn list-toggle-up" onClick={() => setOpen(false)}>
+              Replier la liste ▴
+            </button>
+          )}
           {filtered.slice(0, limit).map((c) => (
             <button key={c.id} className="item-row" onClick={() => setEditing({ item: c, isNew: false })}>
               <BoxIcon l={c.length} w={c.width} h={c.height} size={38} />
@@ -331,6 +344,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           )}
           {filtered.length === 0 && <p className="hint center">Aucun article ne correspond.</p>}
         </div>
+        )
       )}
 
       {editing && (
