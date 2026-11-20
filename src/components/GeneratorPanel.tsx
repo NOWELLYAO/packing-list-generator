@@ -273,6 +273,10 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
           onPick={(it) => addItem(it.code, it.pn)}
           onPickUnknown={(code) => addItem(code, '')}
         />
+      </div>
+
+      {/* hors de la barre collante : sinon le bouton reste affiché par-dessus la page au défilement */}
+      <div className="order-import-row">
         {can('orderImport') && <button className="btn ghost order-btn" disabled={!!orderBusy} onClick={() => orderRef.current?.click()} title="PDF, Excel ou photo du bon de commande">
           {orderBusy || '📄 Importer une commande client'}
         </button>}
