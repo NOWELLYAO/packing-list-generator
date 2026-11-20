@@ -32,8 +32,10 @@ export const ALL_PERMS: Perm[] = [
 ];
 /** droits regroupés par thème (écran de l'administrateur) */
 export const PERM_GROUPS: { title: string; perms: Perm[] }[] = [
-  { title: 'Packing lists', perms: ['generate', 'orderImport', 'freight', 'freightRates'] },
-  { title: 'Documents', perms: ['export', 'labels', 'exportDocs', 'shareLink'] },
+  { title: 'Packing lists', perms: ['generate', 'orderImport'] },
+  { title: 'Transport et fret', perms: ['freight', 'freightRates'] },
+  { title: 'Documents', perms: ['export', 'labels', 'shareLink'] },
+  { title: 'Dossier export', perms: ['exportDocs'] },
   { title: 'Suivi', perms: ['history', 'dashboard'] },
   { title: 'Base d’articles', perms: ['catalogView', 'catalogExport', 'catalogEdit', 'import'] },
   { title: 'Application', perms: ['settings'] },
@@ -70,7 +72,7 @@ export const PERM_LABEL: Record<Perm, string> = {
   freightRates: 'Modifier les tarifs de fret',
   export: 'Exporter la PL en PDF et Excel, la partager',
   labels: 'Imprimer les étiquettes de colis',
-  exportDocs: 'Dossier export (proforma, douane, origine, prix)',
+  exportDocs: 'Créer le dossier export : facture proforma avec prix, récapitulatif douanier, déclaration d’origine',
   shareLink: 'Créer des liens de suivi pour les clients',
   dashboard: 'Voir le tableau de bord',
   catalogExport: 'Télécharger la base d’articles (Excel, sauvegarde)',
