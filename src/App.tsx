@@ -175,12 +175,12 @@ export default function App() {
   const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', dashboard: 'dashboard', review: 'users' };
   const tabs = (
     [
-      { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },
+      { id: 'generate', short: 'PL', label: 'Nouvelle PL', badge: lines.length || undefined },
       { id: 'catalog', label: 'Articles' },
-      { id: 'import', label: 'Importer' },
-      { id: 'history', label: 'Historique' },
+      { id: 'import', label: 'Importer', short: 'Import' },
+      { id: 'history', label: 'Historique', short: 'Histo.' },
       { id: 'dashboard', label: 'Tableau de bord', short: 'Stats' },
-      { id: 'review', label: 'Validation', badge: pending.length || undefined },
+      { id: 'review', short: 'Valider', label: 'Validation', badge: pending.length || undefined },
       { id: 'settings', label: 'Réglages' },
     ] as { id: Tab; label: string; short?: string; badge?: number }[]
   ).filter((t) => (!NEED[t.id] || access.can(NEED[t.id]!)) && (t.id !== 'review' || access.enabled));

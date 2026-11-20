@@ -169,6 +169,8 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
                 </label>
               </div>
               {edit.role !== 'admin' && (
+                <>
+                <p className="hint small perm-note">Les fonctions des rubriques Packing lists, Transport, Documents et Dossier export cochent automatiquement « Créer des packing lists ».</p>
                 <div className="perm-groups">
                   {PERM_GROUPS.map((g) => (
                     <fieldset key={g.title} className="perm-group">
@@ -202,7 +204,7 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
                             />
                             <span>
                               {PERM_LABEL[p]}
-                              {need && <small className="hint"> · avec « {PERM_LABEL[need].toLowerCase()} »</small>}
+                              {need && need !== 'generate' && <small className="hint"> · avec « {PERM_LABEL[need].toLowerCase()} »</small>}
                             </span>
                           </label>
                         );
@@ -210,6 +212,7 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
                     </fieldset>
                   ))}
                 </div>
+                </>
               )}
               {edit.id && (
                 <label className="check">
