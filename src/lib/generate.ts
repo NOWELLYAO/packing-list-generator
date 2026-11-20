@@ -784,7 +784,9 @@ export function generatePackingList(
       const d = sorted3(p.l, p.w, p.h);
       // pompe immergée de 50 kg et plus : Grundfos l'expédie toujours seule dans sa caisse (vos PL : SP 4" lourdes et SP 6")
       const longHeavy = d[0] >= 150 && d[1] <= 45 && p.gross >= 50;
-      if (p.fromSap && p.basis === 'reference' && p.qty === 1 && p.gross >= 20 && p.gross <= 300 && d[0] <= 250 && !realPallet(p) && !longHeavy) medium.set(p.lineIdx, [...(medium.get(p.lineIdx) ?? []), p]);
+      // pompe de 100 kg et plus déjà sur sa palette / dans sa caisse (CR 15, CR 32, CRN 45…) : Grundfos l'expédie seule, jamais 4 empilées
+      const heavyOwn = p.gross >= 100 || (p.gross >= 80 && d[2] >= 35);
+      if (p.fromSap && p.basis === 'reference' && p.qty === 1 && p.gross >= 20 && p.gross <= 300 && d[0] <= 250 && !realPallet(p) && !longHeavy && !heavyOwn) medium.set(p.lineIdx, [...(medium.get(p.lineIdx) ?? []), p]);
     }
     for (const list of medium.values()) {
       if (list.length < 2) continue;
@@ -841,6 +843,14 @@ export function generatePackingList(
       [p.length, p.width, p.height] = [p.height, Math.max(p.length, p.width), Math.min(p.length, p.width)];
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+    // libellé SAP tronqué (« Generi… ») : palette si elle en a la largeur, sinon caisse
+    if (/^generi/i.test(p.type.trim())) p.type = p.width >= 60 ? 'Palette' : 'Caisse';
+    // pompe verticale (CR 15 à CR 64…) vissée seule sur une palette étroite de 40 à 50 cm : c'est ainsi que Grundfos l'expédie
+    const vertical = p.contents.length === 1 && /^\s*CR[A-Z]?\s?\d/i.test(lines.find((l) => l.code === p.contents[0].code)?.description ?? '');
+    const skid = ((PALLET_RE.test(p.type) && !/plywood|plate/i.test(p.type)) || (vertical && /caisse/i.test(p.type))) && p.width >= 35 && p.width < 60 && p.height >= 45 && p.length >= 90 && p.length < 200 && p.grossWeight >= 80;
+    if (skid) { p.type = 'Palette étroite'; continue; }
+    // petite CR (CR 3 à CR 15-5) seule : Grundfos l'envoie en « Pre-Pack », un carton de 30 à 34 cm de côté
+    if (vertical && /caisse/i.test(p.type) && p.width < 35 && p.length < 150) { p.type = 'Carton'; continue; }
     // « Box » de Grundfos pour un colis lourd ou très long (pompe immergée de 3,5 m, 114 kg) : caisse en bois, pas un carton
     if (/^box$/i.test(p.type.trim()) && p.grossWeight >= 50) p.type = 'Caisse';
     // « carton » de plus de 1,50 m et 60 kg (pompe immergée) : c'est une caisse

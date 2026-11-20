@@ -545,3 +545,20 @@ describe('jamais deux fois le même colis', () => {
     expect(pk.every((p) => p.type === 'Caisse')).toBe(true);
   });
 });
+
+describe('pompes CR comme chez Grundfos', () => {
+  const S = 'Fiche article fabricant (saisie)';
+  const mk = (code: string, desc: string, l: number, w: number, h: number, g: number) => {
+    const v = { qtyPerPackage: 1, packageType: 'Caisse', length: l, width: w, height: h, volumePerPackage: (l * w * h) / 1e6, netWeightPerUnit: g - 10, grossWeightPerUnit: g, mixed: false, source: S, count: 10 };
+    return { ...v, id: code, code, pn: code, description: desc, unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [v] };
+  };
+  it('grosse CR : une palette étroite chacune, jamais empilées', () => {
+    const pk = generatePackingList([mk('C45', 'CR45-4 A-F-A-E-HQQE', 162, 49, 63, 212)], [req('C45', 3)], { consolidate: true }).packages;
+    expect(pk).toHaveLength(3);
+    expect(pk.every((p) => p.type === 'Palette étroite')).toBe(true);
+  });
+  it('petite CR seule : carton (Pre-Pack)', () => {
+    const pk = generatePackingList([mk('C5', 'CR5-22 A-A-A-E-HQQE', 136, 33, 33, 71)], [req('C5', 1)], { consolidate: true }).packages;
+    expect(pk[0].type).toBe('Carton');
+  });
+});
