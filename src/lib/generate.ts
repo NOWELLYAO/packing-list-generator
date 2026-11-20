@@ -515,7 +515,13 @@ function consolidate(pieces: Piece[]): Omit<PLPackage, 'no'>[] {
     const base = v <= 0.3 && gLongest <= 80 && gSecond <= 60 ? PALLETS[0] : euro;
     // la palette doit être au moins aussi longue que le plus long colis (ex. pompe de 160 cm)
     const pal = { ...base, l: Math.max(base.l, Math.ceil(gLongest)), w: Math.max(base.w, Math.ceil(gSecond)) };
-    const loadH = Math.max(maxPieceH, Math.ceil(((v / FILL) * 1e6) / (pal.l * pal.w)));
+    let loadH = Math.max(maxPieceH, Math.ceil(((v / FILL) * 1e6) / (pal.l * pal.w)));
+    // cartons tous identiques (5 pompes doseuses dans leur carton) : hauteur exacte, couche par couche
+    const g0 = g[0];
+    if (g.length > 1 && g0.l > 0 && g0.w > 0 && g0.h > 0 && g.every((p) => p.l === g0.l && p.w === g0.w && p.h === g0.h && p.qty === g0.qty)) {
+      const perLayer = Math.max(Math.floor(pal.l / g0.l) * Math.floor(pal.w / g0.w), Math.floor(pal.l / g0.w) * Math.floor(pal.w / g0.l));
+      if (perLayer >= 1) loadH = Math.ceil(Math.ceil(g.length / perLayer) * g0.h);
+    }
     const h = Math.min(MAX_PALLET_HEIGHT, PALLET_BASE_CM + loadH);
     const net = g.reduce((s, p) => s + p.net, 0);
     const gross = g.reduce((s, p) => s + p.gross, 0) + pal.tare;
