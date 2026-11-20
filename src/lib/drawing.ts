@@ -50,8 +50,11 @@ type Family = 'pallet' | 'crate' | 'carton' | 'other';
 export function familyOf(type: string, dims?: { length: number; width: number; height: number }): Family {
   const t = type.toLowerCase();
   let fam: Family = 'other';
-  if (/carton group|^carton|^box|^\d{2,4}\s*x|pre-?pack|emballage d/.test(t)) fam = 'carton';
-  else if (/crate|caisse|plywood|wood|contreplaq/.test(t)) fam = 'crate';
+  if (/carton group|^carton(?! sur)|^box|^\d{2,4}\s*x|pre-?pack|emballage d/.test(t)) fam = 'carton';
+  // carton posé sur palette (surpresseur, ballon) : dessiné sur sa palette
+  else if (/^carton sur/.test(t)) fam = 'pallet';
+  // palette étroite (pompe verticale vissée sur un berceau bois) : dessinée en bois, comme une caisse
+  else if (/crate|caisse|plywood|wood|contreplaq|[ée]troite/.test(t)) fam = 'crate';
   else if (/pal|euro|half|plate/.test(t)) fam = 'pallet';
   if (!dims || !(dims.length > 0 && dims.width > 0)) return fam;
   const big = Math.max(dims.length, dims.width);

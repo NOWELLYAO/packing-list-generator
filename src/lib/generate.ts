@@ -843,6 +843,10 @@ export function generatePackingList(
       [p.length, p.width, p.height] = [p.height, Math.max(p.length, p.width), Math.min(p.length, p.width)];
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+    // codes d'emballage SAP sans sens pour le client (GIN, EGO…) : petit colis = carton
+    if (/^(gin|ego)$/i.test(p.type.trim())) p.type = p.grossWeight >= 50 ? 'Caisse' : 'Carton';
+    // « carton » de plus de 80 kg sur une base d'au moins 60 × 60 (surpresseur, ballon) : il est forcément posé sur une palette
+    if (/^carton$/i.test(p.type.trim()) && p.grossWeight > 80 && Math.min(p.length, p.width) >= 60) p.type = 'Carton sur palette';
     // libellé SAP tronqué (« Generi… ») : palette si elle en a la largeur, sinon caisse
     if (/^generi/i.test(p.type.trim())) p.type = p.width >= 60 ? 'Palette' : 'Caisse';
     // pompe verticale (CR 15 à CR 64…) vissée seule sur une palette étroite de 40 à 50 cm : c'est ainsi que Grundfos l'expédie

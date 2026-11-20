@@ -562,3 +562,12 @@ describe('pompes CR comme chez Grundfos', () => {
     expect(pk[0].type).toBe('Carton');
   });
 });
+
+describe('libellés affichés', () => {
+  it('aucun type de colis ne tombe sur « Colis »', async () => {
+    const { packLabel } = await import('../lib/i18n');
+    for (const t of ['Demi-palette', 'Palette étroite', 'Carton sur palette', 'Cartonpa', 'PALPLATE', 'CRATE', '340x225x', 'Pre-Pack'])
+      expect(packLabel(t, 'fr')).not.toBe('Colis');
+    expect(packLabel('Palette étroite', 'en')).toMatch(/narrow/i);
+  });
+});
