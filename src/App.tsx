@@ -187,8 +187,12 @@ export default function App() {
   }, [access.session?.user.id, access.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
   // application réservée à l'espace de l'entreprise (invitation obligatoire)
   const [orgLocked, setOrgLocked] = useState(orgKnownLocked);
+  // tant que le serveur n'a pas dit si l'appli est réservée, on n'affiche rien (pas d'aperçu de l'appli avant l'identification)
+  const [orgChecked, setOrgChecked] = useState(orgKnownLocked);
   useEffect(() => {
-    orgStatus().then(setOrgLocked).catch(() => undefined);
+    const done = () => setOrgChecked(true);
+    const t = window.setTimeout(done, 6000); // hors ligne / serveur lent : on n'attend pas indéfiniment
+    orgStatus().then(setOrgLocked).catch(() => undefined).finally(() => { window.clearTimeout(t); done(); });
     const on = () => setOrgLocked(true);
     window.addEventListener(ORG_EVENT, on);
     return () => window.removeEventListener(ORG_EVENT, on);
@@ -199,6 +203,7 @@ export default function App() {
     toast('Espace de l’entreprise rejoint : connectez-vous');
   };
   // lien d'invitation : …/#invite=ABCDEF
+  const [inviting, setInviting] = useState(() => !!asInvite(location.hash.match(/invite=([A-Za-z0-9-]+)/)?.[1] ?? ''));
   useEffect(() => {
     const m = location.hash.match(/invite=([A-Za-z0-9-]+)/);
     const inv = m && asInvite(m[1]);
@@ -206,7 +211,8 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname);
     redeemInvite(inv)
       .then((space) => joinSpace(space))
-      .catch(() => toast('Invitation inconnue ou expirée : demandez-en une nouvelle'));
+      .catch(() => toast('Invitation inconnue ou expirée : demandez-en une nouvelle'))
+      .finally(() => setInviting(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // après connexion : synchronisation immédiate
@@ -214,6 +220,17 @@ export default function App() {
     if (access.session) void cloud.syncNow();
   }, [access.session?.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // écran d'attente neutre : invitation en cours, réservation inconnue, ou espace rejoint dont la protection n'est pas encore connue
+  if (inviting || !orgChecked || (cloud.cloud && access.checking && !access.enabled && !access.session))
+    return (
+      <div className="login-screen">
+        <div className="login-card" aria-busy="true">
+          {settings.logo ? <img src={settings.logo} alt="" className="login-logo" /> : <img src="/favicon.svg" alt="" className="brand-mark-img" />}
+          <h1>Packing List</h1>
+          <p className="hint">{inviting ? 'Ouverture de l’invitation…' : 'Vérification de l’accès…'}</p>
+        </div>
+      </div>
+    );
   if (orgLocked && (!cloud.cloud || cloud.status === 'org_locked'))
     return <JoinScreen logo={settings.logo} wrongSpace={!!cloud.cloud} onJoin={joinSpace} />;
   if (cloud.cloud && access.enabled && !access.session)

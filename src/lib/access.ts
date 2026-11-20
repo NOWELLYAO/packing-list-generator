@@ -160,6 +160,8 @@ export function useAccess(space: string | undefined): Access {
   useEffect(() => {
     setSessionState(loadSession(space));
     setEnabled(!!space && authKnownOn(space));
+    // nouvel espace (code d'invitation saisi) : protection inconnue tant que le serveur n'a pas répondu
+    setChecking(!!space);
     void refresh();
   }, [space, refresh]);
   // jeton refusé par le serveur (expiré, compte désactivé) → retour à l'écran de connexion
