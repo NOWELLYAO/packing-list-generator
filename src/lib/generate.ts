@@ -838,6 +838,10 @@ export function generatePackingList(
       [p.length, p.width, p.height] = [p.height, Math.max(p.length, p.width), Math.min(p.length, p.width)];
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
+    // « Box » de Grundfos pour un colis lourd ou très long (pompe immergée de 3,5 m, 114 kg) : caisse en bois, pas un carton
+    if (/^box$/i.test(p.type.trim()) && (p.grossWeight >= 60 || p.length >= 150)) p.type = 'Caisse';
+    // « palette » de 30 cm de large sous une pompe de 3,5 m : c'est un berceau en bois, présenté comme une caisse
+    if (PALLET_RE.test(p.type) && p.length >= 150 && p.width < 50) p.type = 'Caisse';
     // « Pallet » / « EURO PAL » de moins de 80 × 50 cm (et moins de 1,5 m) : c'est un carton, le libellé suit
     if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.width < 30 || ((p.length < 80 || p.width < 50) && p.length < 150)))
       // lourd ou très long (pompe immergée sur berceau de 29 cm, pompe de 120 kg) : c'est une caisse / un berceau en bois, pas un carton
