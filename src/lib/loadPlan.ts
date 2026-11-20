@@ -189,7 +189,7 @@ const WOODEN = /crate|caisse|plywood|wood|contreplaq|pal|euro|half|plate|skid|[�
 /**
  * Colonnes de colis : un colis va sur un autre si son emprise tient dans celle du dessous,
  * s'il est moins lourd, si le colis du dessous est en bois (caisse, palette) et si la hauteur
- * totale passe la porte. 3 niveaux au plus. Le colis du dessous porte au plus son propre poids.
+ * totale passe la porte. 3 niveaux au plus. Le colis du dessous porte au plus deux fois son poids.
  */
 function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
   const limit = Math.min(v.doorHeight - 5, 230);
@@ -202,8 +202,8 @@ function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
       const top = st.members[st.members.length - 1];
       if (st.members.length >= 3 || !WOODEN.test(top.type)) continue;
       if (it.grossWeight > top.grossWeight || st.height + it.height > limit) continue;
-      // le colis du dessous ne porte pas plus que son propre poids
-      if (st.members.slice(1).reduce((s, m) => s + m.grossWeight, 0) + it.grossWeight > st.members[0].grossWeight) continue;
+      // le colis du dessous porte au plus deux fois son propre poids (3 caisses identiques gerbées : oui)
+      if (st.members.slice(1).reduce((s, m) => s + m.grossWeight, 0) + it.grossWeight > 2 * st.members[0].grossWeight) continue;
       const fits = (it.length <= top.length + 0.5 && it.width <= top.width + 0.5) || (it.width <= top.length + 0.5 && it.length <= top.width + 0.5);
       if (!fits) continue;
       // pas de petit colis isolé sur une grande palette (instable, mal utilisé) : au moins 35 % de l'emprise
