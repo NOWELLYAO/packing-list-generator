@@ -14,6 +14,9 @@ import { useCan } from '../lib/access';
 import TransportPanel from './TransportPanel';
 import InfoTip from './InfoTip';
 import LabelsDialog from './LabelsDialog';
+import OrderImportDialog from './OrderImportDialog';
+import ExportDocsDialog from './ExportDocsDialog';
+import type { OrderLine } from '../lib/orderImport';
 import { useLogoInfo } from '../lib/useLogoInfo';
 import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
@@ -95,6 +98,29 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   const lang = settings.lang ?? 'fr';
   const { ask, notify } = useSafety();
   const fileRef = useRef<HTMLInputElement>(null);
+  // bon de commande client (PDF, Excel, photo) → lignes de la PL
+  const orderRef = useRef<HTMLInputElement>(null);
+  const [order, setOrder] = useState<{ fileName: string; lines: OrderLine[] } | null>(null);
+  const [orderBusy, setOrderBusy] = useState('');
+  const readOrder = async (f: File | undefined) => {
+    if (!f) return;
+    setOrderBusy('Lecture de la commande…');
+    try {
+      const { readOrderFile, extractOrder } = await import('../lib/orderImport');
+      const tables = await readOrderFile(f, setOrderBusy);
+      setOrder({ fileName: f.name, lines: extractOrder(tables, catalog) });
+    } catch (e) {
+      if (isChunkLoadError(e)) return reloadForUpdate();
+      toast('Ce document n’a pas pu être lu (format non pris en charge ou fichier protégé)');
+    } finally {
+      setOrderBusy('');
+    }
+  };
+  const addOrder = (ol: OrderLine[]) => {
+    setLines([...lines, ...ol.map((o) => ({ id: uid(), code: o.code, pn: o.pn, quantity: cleanQty(o.code, o.pn, o.quantity) }))]);
+    setOrder(null);
+    toast(`${ol.length} ligne${ol.length > 1 ? 's' : ''} de la commande ajoutée${ol.length > 1 ? 's' : ''}`);
+  };
   const active = lines.filter((l) => (l.code || l.pn) && l.quantity > 0);
 
   // Calcul en direct à chaque modification
@@ -184,6 +210,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   };
 
   const [showLabels, setShowLabels] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const logoInfo = useLogoInfo(settings.logo);
   const run = async (label: string, fn: () => Promise<unknown>) => {
     if (!pl) return;
@@ -241,6 +268,19 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
           catalog={catalog}
           onPick={(it) => addItem(it.code, it.pn)}
           onPickUnknown={(code) => addItem(code, '')}
+        />
+        <button className="btn ghost order-btn" disabled={!!orderBusy} onClick={() => orderRef.current?.click()} title="PDF, Excel ou photo du bon de commande">
+          {orderBusy || '📄 Importer une commande client'}
+        </button>
+        <input
+          ref={orderRef}
+          type="file"
+          hidden
+          accept=".pdf,.xlsx,.xls,.csv,image/*"
+          onChange={(e) => {
+            void readOrder(e.target.files?.[0]);
+            e.target.value = '';
+          }}
         />
       </div>
 
@@ -433,6 +473,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               <button className="btn" disabled={!!busy} onClick={() => setShowLabels(true)} title="Étiquettes de colis à imprimer">
                 Étiquettes
               </button>
+              <button className="btn" disabled={!!busy} onClick={() => setShowExport(true)} title="Facture proforma, récapitulatif douanier, déclaration d’origine">
+                Dossier export
+              </button>
               </>)}
             </div>
           </div>
@@ -479,10 +522,24 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             logo={logoInfo}
             mode={settings.transportMode ?? 'sea'}
             setMode={(m) => setSettings({ ...settings, transportMode: m })}
+            rates={settings.freightRates}
+            setRates={(r) => setSettings({ ...settings, freightRates: r })}
           />
         </>
       )}
 
+      {showExport && pl && (
+        <ExportDocsDialog
+          pl={pl}
+          catalog={catalog}
+          settings={settings}
+          setSettings={setSettings}
+          saveToCatalog={canEdit ? setCatalog : undefined}
+          toast={toast}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+      {order && <OrderImportDialog fileName={order.fileName} lines={order.lines} onAdd={addOrder} onClose={() => setOrder(null)} />}
       {showLabels && pl && <LabelsDialog pl={pl} settings={settings} setSettings={setSettings} onClose={() => setShowLabels(false)} />}
       {quick && (
         <QuickItemForm

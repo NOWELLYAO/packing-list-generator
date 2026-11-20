@@ -1,4 +1,5 @@
-import type { PackingList } from '../types';
+import type { FreightRates, PackingList } from '../types';
+import { planLoad } from './loadPlan';
 import { round } from './parseValues';
 
 /**
@@ -56,4 +57,74 @@ export function freightInfo(pl: PackingList): FreightInfo {
     tallest,
     alerts,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Estimation du coût du transport                                     */
+/* ------------------------------------------------------------------ */
+
+/** Tarifs indicatifs (à remplacer par ceux de votre transitaire) */
+export const DEFAULT_RATES: FreightRates = {
+  currency: 'EUR',
+  airPerKg: 4.5,
+  airMin: 150,
+  lclPerUp: 85,
+  lclMin: 150,
+  container: { '10': 1800, '20': 2200, '40': 3500, '40hc': 3700 },
+  courierPerKg: 0.9,
+  courierMin: 45,
+  truck: { mini: 250, van12: 350, box20: 450, p12: 700, porteur: 850, semi: 1300 },
+};
+
+export interface FreightOption {
+  id: string;
+  mode: 'sea' | 'road' | 'air';
+  label: string;
+  detail: string;
+  cost: number;
+  /** solution impossible (colis trop long, trop lourd…) */
+  impossible?: string;
+}
+
+export function freightOptions(pl: PackingList, rates: FreightRates = DEFAULT_RATES): FreightOption[] {
+  const f = freightInfo(pl);
+  const out: FreightOption[] = [];
+  const n0 = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 0 });
+  const n2 = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  out.push({
+    id: 'air',
+    mode: 'air',
+    label: 'Aérien',
+    detail: `${n0(f.airChargeableKg)} kg taxables × ${n2(rates.airPerKg)}`,
+    cost: Math.max(rates.airMin, f.airChargeableKg * rates.airPerKg),
+    impossible: f.tallest > 300 ? `colis de ${f.tallest} cm de haut` : undefined,
+  });
+  out.push({
+    id: 'lcl',
+    mode: 'sea',
+    label: 'Maritime groupage (LCL)',
+    detail: `${n2(f.seaRevenueTon)} UP × ${n2(rates.lclPerUp)}`,
+    cost: Math.max(rates.lclMin, f.seaRevenueTon * rates.lclPerUp),
+  });
+  const sea = planLoad(pl.packages, 'auto', 'sea');
+  if (sea && sea.bins.length && !sea.unplaced.length) {
+    const cost = sea.bins.reduce((s, b) => s + (rates.container[b.vehicle.id] ?? 0), 0);
+    if (cost > 0) out.push({ id: 'fcl', mode: 'sea', label: 'Maritime conteneur complet (FCL)', detail: sea.summary, cost });
+  }
+  // messagerie : jusqu'à 3 t environ
+  if (pl.totals.grossWeight <= 3000)
+    out.push({
+      id: 'courier',
+      mode: 'road',
+      label: 'Messagerie (routier groupé)',
+      detail: `${n0(f.roadChargeableKg)} kg taxables × ${n2(rates.courierPerKg)}`,
+      cost: Math.max(rates.courierMin, f.roadChargeableKg * rates.courierPerKg),
+      impossible: f.heaviest > 1000 ? `colis de ${n0(f.heaviest)} kg` : undefined,
+    });
+  const road = planLoad(pl.packages, 'auto', 'road');
+  if (road && road.bins.length && !road.unplaced.length) {
+    const cost = road.bins.reduce((s, b) => s + (rates.truck[b.vehicle.id] ?? 0), 0);
+    if (cost > 0) out.push({ id: 'truck', mode: 'road', label: 'Camion dédié', detail: road.summary, cost });
+  }
+  return out.map((o) => ({ ...o, cost: Math.round(o.cost) })).sort((a, b) => Number(!!a.impossible) - Number(!!b.impossible) || a.cost - b.cost);
 }

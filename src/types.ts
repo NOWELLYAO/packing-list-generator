@@ -203,6 +203,10 @@ export interface Settings {
   lang?: 'fr' | 'en';
   /** mode de transport retenu pour le plan de chargement et les indicateurs */
   transportMode?: 'sea' | 'road' | 'air';
+  /** tarifs de fret (estimation du coût par mode de transport) */
+  freightRates?: FreightRates;
+  /** dossier export : vendeur, conditions, devise, prix unitaires */
+  exportDoc?: ExportDocSettings;
   /** étiquettes de colis : derniers réglages utilisés */
   labels?: { format: 'a6' | '100x150'; marking: string; reference: string; fragile: boolean; noStack: boolean; twoForLarge?: boolean };
 }
@@ -231,4 +235,31 @@ export interface PendingChange {
   upserts: CatalogItem[];
   /** fiches supprimées (clé code|PN) avec leur désignation */
   removals: { key: string; code: string; description: string }[];
+}
+
+/** Tarifs de fret saisis par l'utilisateur (montants dans la devise choisie) */
+export interface FreightRates {
+  currency: string;
+  airPerKg: number;
+  airMin: number;
+  lclPerUp: number;
+  lclMin: number;
+  /** prix par conteneur, par id de véhicule (20, 40, 40hc…) */
+  container: Record<string, number>;
+  courierPerKg: number;
+  courierMin: number;
+  /** prix par camion dédié, par id de véhicule */
+  truck: Record<string, number>;
+  /** l'utilisateur a saisi ses propres tarifs */
+  custom?: boolean;
+}
+
+export interface ExportDocSettings {
+  seller: string;
+  buyer: string;
+  incoterm: string;
+  currency: string;
+  payment: string;
+  /** prix unitaires connus, par code article */
+  prices: Record<string, number>;
 }

@@ -8,6 +8,8 @@ import LoadAnimation from './LoadAnimation';
 import SafeBoundary from './SafeBoundary';
 import type { LogoInfo } from '../lib/drawing';
 import InfoTip from './InfoTip';
+import FreightCost from './FreightCost';
+import type { FreightRates } from '../types';
 
 const fmt = (n: number, d = 1) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -23,13 +25,15 @@ interface Props {
   logo?: LogoInfo;
   mode: TransportMode;
   setMode: (m: TransportMode) => void;
+  rates?: FreightRates;
+  setRates: (r: FreightRates) => void;
 }
 
 /**
  * Transport : un seul mode choisi, et tous les indicateurs en découlent
  * (plan de chargement, nombre de conteneurs ou de camions, poids taxable).
  */
-export default function TransportPanel({ pl, accent, logo, mode, setMode }: Props) {
+export default function TransportPanel({ pl, accent, logo, mode, setMode, rates, setRates }: Props) {
   const lang = useLang();
   const [vehicle, setVehicle] = useState<string>('auto');
   const [showVehicle, setShowVehicle] = useState(false);
@@ -180,6 +184,16 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode }: Prop
           </p>
         </>
       )}
+
+      <FreightCost
+        pl={pl}
+        rates={rates}
+        setRates={setRates}
+        onPickMode={(m) => {
+          setMode(m);
+          setVehicle('auto');
+        }}
+      />
 
       {[...(plan?.warnings ?? []).filter((w) => !(plan?.light && /^Envoi léger/.test(w))), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].length > 0 && (
         <ul className="alerts">

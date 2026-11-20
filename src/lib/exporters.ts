@@ -32,15 +32,15 @@ const contentsOf = (p: PLPackage, pl: PackingList, max = 0) => {
 const basisLabel = (p: PLPackage, lang: Lang) => (p.basis === 'grouped' ? '' : p.basis === 'partial' ? ` (${DOC[lang].partial})` : '');
 const typeOf = (p: PLPackage, lang: Lang) => packLabel(p.type, lang) + basisLabel(p, lang);
 
-function hexToRgb(hex: string): [number, number, number] {
+export function hexToRgb(hex: string): [number, number, number] {
   const h = (hex || DEFAULT_ACCENT).replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-const tint = (rgb: [number, number, number], k: number): [number, number, number] =>
+export const tint = (rgb: [number, number, number], k: number): [number, number, number] =>
   rgb.map((c) => Math.round(c + (255 - c) * k)) as [number, number, number];
 
-function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
+export function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
@@ -49,7 +49,7 @@ function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
   });
 }
 
-function download(blob: Blob, name: string) {
+export function download(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
