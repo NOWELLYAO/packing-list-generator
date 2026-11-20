@@ -13,7 +13,7 @@ export interface OrderLine {
   quantity: number;
   description: string;
   /** comment l'article a été reconnu */
-  match: 'code' | 'designation' | 'inconnu';
+  match: 'code' | 'approx' | 'designation' | 'inconnu';
   /** texte de la ligne d'origine, pour vérifier */
   raw: string;
 }
@@ -96,6 +96,7 @@ export function extractOrder(tables: string[][][], catalog: CatalogItem[]): Orde
       if (n.length >= 5 && !byKey.has(n)) byKey.set(n, it);
     }
   }
+  const nearCodes = [...byKey.keys()].filter((k) => k.length >= 7);
   // désignations : modèle (2 premiers mots) unique dans la base, ex. « CR10-6 A-FJ-A-E-HQQE »
   const byModel = new Map<string, CatalogItem | null>();
   for (const it of catalog) {
@@ -128,6 +129,19 @@ export function extractOrder(tables: string[][][], catalog: CatalogItem[]): Orde
       let codeIdx = tokens.findIndex((t) => byKey.has(norm(t)));
       let item = codeIdx >= 0 ? byKey.get(norm(tokens[codeIdx]))! : undefined;
       let match: OrderLine['match'] = 'code';
+      // 1 bis) code lu avec un chiffre faux (photo : 92059941 pour 92959941) : un seul code de la base à un caractère près
+      if (!item) {
+        for (let i = 0; i < tokens.length && !item; i++) {
+          const t = norm(tokens[i]);
+          if (t.length < 7 || !/\d{5}/.test(t)) continue;
+          const near = nearCodes.filter((k) => k.length === t.length && [...k].filter((ch, j) => ch !== t[j]).length === 1);
+          if (near.length === 1) {
+            item = byKey.get(near[0]);
+            codeIdx = i;
+            match = 'approx';
+          }
+        }
+      }
       // 2) désignation connue
       if (!item) {
         for (let i = 0; i < tokens.length - 1 && !item; i++) {
@@ -193,16 +207,46 @@ export async function ocrImage(file: File, progress?: (m: string) => void): Prom
   });
   try {
     progress?.('Lecture de la photo…');
-    await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.AUTO, preserve_interword_spaces: '1' });
-    const { data } = await worker.recognize(file);
-    return data.text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => l.split(/\s{2,}/));
+    // texte épars + position de chaque mot : un tableau photographié est lu colonne par colonne,
+    // on reconstitue donc les lignes d'après la hauteur des mots
+    await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT });
+    const { data } = await worker.recognize(file, {}, { text: true, blocks: true });
+    type W = { t: string; x0: number; x1: number; y0: number; y1: number };
+    const words: W[] = [];
+    for (const b of data.blocks ?? []) for (const p of b.paragraphs) for (const l of p.lines) for (const w of l.words) if (w.text.trim()) words.push({ t: w.text.trim(), ...w.bbox });
+    if (!words.length) return data.text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => l.split(/\s{2,}/));
+    return wordsToRows(words);
   } finally {
     await worker.terminate();
   }
+}
+
+/** Mots positionnés (OCR) → lignes de tableau : même hauteur = même ligne, grand écart = nouvelle cellule */
+export function wordsToRows(words: { t: string; x0: number; x1: number; y0: number; y1: number }[]): string[][] {
+  const hs = words.map((w) => w.y1 - w.y0).sort((a, b) => a - b);
+  const mh = hs[Math.floor(hs.length / 2)] || 10;
+  const rows: { cy: number; w: typeof words }[] = [];
+  for (const w of [...words].sort((a, b) => a.y0 + a.y1 - (b.y0 + b.y1))) {
+    const cy = (w.y0 + w.y1) / 2;
+    const r = rows.find((x) => Math.abs(x.cy - cy) < mh * 0.6);
+    if (r) {
+      r.w.push(w);
+      r.cy = (r.cy * (r.w.length - 1) + cy) / r.w.length;
+    } else rows.push({ cy, w: [w] });
+  }
+  return rows
+    .sort((a, b) => a.cy - b.cy)
+    .map((r) => {
+      const cells: { t: string; x1: number }[] = [];
+      for (const w of r.w.sort((a, b) => a.x0 - b.x0)) {
+        const cur = cells[cells.length - 1];
+        if (cur && w.x0 - cur.x1 < mh * 1.2) {
+          cur.t += ` ${w.t}`;
+          cur.x1 = w.x1;
+        } else cells.push({ t: w.t, x1: w.x1 });
+      }
+      return cells.map((c) => c.t);
+    });
 }
 
 /** Lit un bon de commande, quel que soit son format */

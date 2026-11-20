@@ -10,6 +10,7 @@ interface Props {
 
 const MATCH: Record<OrderLine['match'], [string, string]> = {
   code: ['code reconnu', 'chip-ok'],
+  approx: ['code lu à 1 chiffre près : vérifiez', 'chip-warn'],
   designation: ['reconnu par la désignation', 'chip-warn'],
   inconnu: ['absent de la base', 'chip-danger'],
 };

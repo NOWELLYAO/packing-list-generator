@@ -37,3 +37,16 @@ describe('bon de commande avec prix', () => {
     expect(r.map((l) => [l.code, l.quantity])).toEqual([['92799796', 10], ['92959992', 4], ['99091874', 10]]);
   });
 });
+
+describe('photo d’un bon de commande', () => {
+  it('mots lus colonne par colonne → lignes reconstituées ; quantité absente (chiffre isolé non lu) retrouvée par total ÷ prix ; code lu à un chiffre près', async () => {
+    const { wordsToRows } = await import('../lib/orderImport');
+    const W = (t: string, x: number, y: number) => ({ t, x0: x, x1: x + t.length * 10, y0: y, y1: y + 20 });
+    const words = [W('92059941', 0, 100), W('MS4000ZBCJ4', 120, 102), W('691.20', 600, 101), W('1,382.40', 800, 99), W('92799796', 0, 140), W('CU', 120, 141), W('202', 150, 141), W('472.55', 600, 139), W('10', 700, 140), W('4,725.50', 800, 140)];
+    const rows = wordsToRows(words);
+    expect(rows).toHaveLength(2);
+    const cat2 = [mk('92959941', 'MS4000ZBCJ4 3x380-415/50 5.50kW'), mk('92799796', 'CU 202 cpl PARK')];
+    const r = extractOrder([rows], cat2);
+    expect(r.map((l) => [l.code, l.quantity, l.match])).toEqual([['92959941', 2, 'approx'], ['92799796', 10, 'code']]);
+  });
+});
