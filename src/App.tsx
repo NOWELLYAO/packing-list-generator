@@ -230,7 +230,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          {settings.logo ? <img src={settings.logo} alt="" className="brand-logo" /> : <span className="brand-mark">PL</span>}
+          {settings.logo ? <img src={settings.logo} alt="" className="brand-logo" /> : <img src="/favicon.svg" alt="" className="brand-mark-img" />}
           <div>
             <h1>Packing List</h1>
             <small>

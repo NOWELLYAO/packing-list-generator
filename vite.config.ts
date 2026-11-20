@@ -13,7 +13,7 @@ export default defineConfig({
     // Application installable et utilisable hors ligne (entrepôt sans réseau)
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['apple-touch-icon.png', 'exemple_packing_list.xlsx'],
+      includeAssets: ['apple-touch-icon.png', 'favicon.svg', 'exemple_packing_list.xlsx'],
       manifest: {
         name: 'Packing List',
         short_name: 'Packing List',

@@ -34,7 +34,7 @@ export default function JoinScreen({ logo, onJoin, wrongSpace }: { logo?: string
           void go();
         }}
       >
-        {logo ? <img src={logo} alt="" className="login-logo" /> : <span className="brand-mark">PL</span>}
+        {logo ? <img src={logo} alt="" className="login-logo" /> : <img src="/favicon.svg" alt="" className="brand-mark-img" />}
         <h1>Packing List</h1>
         <p className="hint">
           {wrongSpace

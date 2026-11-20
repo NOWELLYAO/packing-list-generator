@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0E5FA8"/>
+      <stop offset="1" stop-color="#0A3D6E"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF2FB"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- palette -->
+  <g transform="translate(256 300)">
+    <path d="M-150 40 L0 115 L150 40 L150 62 L0 137 L-150 62 Z" fill="#7FB3E6" opacity="0.55"/>
+  </g>
+  <!-- carton isométrique -->
+  <g transform="translate(256 246)">
+    <path d="M0 -150 L150 -75 L0 0 L-150 -75 Z" fill="url(#top)"/>
+    <path d="M-150 -75 L0 0 L0 165 L-150 90 Z" fill="#DCE9F7"/>
+    <path d="M150 -75 L0 0 L0 165 L150 90 Z" fill="#B9D3EF"/>
+    <!-- ruban adhésif -->
+    <path d="M-75 -112.5 L75 -37.5 L75 -15 L-75 -90 Z" fill="#0E5FA8" opacity="0.18"/>
+    <!-- lignes de liste sur la face avant -->
+    <g stroke="#0E5FA8" stroke-width="13" stroke-linecap="round" opacity="0.85">
+      <path d="M-118 -12 L-62 16"/>
+      <path d="M-118 26 L-48 61"/>
+      <path d="M-118 64 L-76 85"/>
+    </g>
+  </g>
+  <!-- coche de validation -->
+  <g transform="translate(352 344)">
+    <circle r="62" fill="#22C55E" stroke="#0A3D6E" stroke-width="10"/>
+    <path d="M-28 2 L-8 22 L30 -20" fill="none" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
