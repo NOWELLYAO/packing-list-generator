@@ -214,4 +214,18 @@ describe('invitation courte et application réservée à l’entreprise', () => 
     expect((await handle({ method: 'POST', headers: {}, body: { action: 'shared', id: 'A'.repeat(20) } }, env, fetcher)).status).toBe(404);
     expect((await handle({ method: 'POST', headers: {}, body: { action: 'shared', id: '../x' } }, env, fetcher)).status).toBe(400);
   });
+  it('droits détaillés : un compte ancien garde ses fonctions, un compte revu n’a que ce qui est coché', async () => {
+    const { effectivePerms } = await import('../../api/base');
+    expect(effectivePerms({ role: 'user', perms: ['generate', 'export', 'history'] })).toEqual(expect.arrayContaining(['labels', 'exportDocs', 'shareLink', 'orderImport', 'freight', 'dashboard']));
+    expect(effectivePerms({ role: 'user', perms: ['generate', 'export'], pv: 2 })).toEqual(['generate', 'export']);
+    const { fetcher } = fakeRedis();
+    const f = fetcher as never;
+    const adminTok = ((await post(f, { action: 'setup', name: 'Admin', pin: '1234' })).body as { token: string }).token;
+    const su = await post(f, { action: 'saveUser', user: { name: 'Prep', role: 'user', perms: ['generate', 'export', 'labels'], pin: '5678' } }, adminTok);
+    const prep = (su.body as { users: { id: string; name: string; perms: string[] }[] }).users.find((u) => u.name === 'Prep')!;
+    expect(prep.perms).toEqual(['generate', 'export', 'labels']);
+    const tok = ((await post(f, { action: 'login', userId: prep.id, pin: '5678' })).body as { token: string }).token;
+    expect((await post(f, { action: 'share', snapshot: { pl: 1 } }, tok)).status).toBe(403);
+    expect((await post(f, { action: 'share', snapshot: { pl: 1 } }, adminTok)).status).toBe(200);
+  });
 });

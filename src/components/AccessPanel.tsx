@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import {
   AccessContext,
   AccessError,
-  ALL_PERMS,
   deleteUser,
   disableAccess,
   listUsers,
   login,
+  PERM_GROUPS,
   PERM_LABEL,
+  PERM_NEEDS,
   PRESETS,
   presetOf,
   saveUser,
@@ -168,19 +169,45 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
                 </label>
               </div>
               {edit.role !== 'admin' && (
-                <div className="perm-list">
-                  {ALL_PERMS.filter((p) => p !== 'users').map((p) => (
-                    <label key={p} className="check">
-                      <input
-                        type="checkbox"
-                        checked={!!edit.perms?.includes(p)}
-                        onChange={(e) => {
-                          const perms = e.target.checked ? [...(edit.perms ?? []), p] : (edit.perms ?? []).filter((x) => x !== p);
-                          setEdit({ ...edit, perms, role: perms.length <= 2 && !perms.includes('generate') ? 'viewer' : 'user' });
-                        }}
-                      />
-                      {PERM_LABEL[p]}
-                    </label>
+                <div className="perm-groups">
+                  {PERM_GROUPS.map((g) => (
+                    <fieldset key={g.title} className="perm-group">
+                      <legend>{g.title}</legend>
+                      {g.perms.map((p) => {
+                        const need = PERM_NEEDS[p];
+                        return (
+                          <label key={p} className="check">
+                            <input
+                              type="checkbox"
+                              checked={!!edit.perms?.includes(p)}
+                              onChange={(e) => {
+                                const cur = (edit.perms ?? []) as Perm[];
+                                let perms: Perm[];
+                                if (e.target.checked) {
+                                  // cocher un droit coche aussi celui dont il dépend (ex. tarifs → coût du transport → créer des PL)
+                                  perms = [...cur, p];
+                                  for (let n = PERM_NEEDS[p]; n && !perms.includes(n); n = PERM_NEEDS[n]) perms.push(n);
+                                } else {
+                                  // décocher un droit retire ceux qui en dépendent
+                                  const drop = new Set<Perm>([p]);
+                                  let grew = true;
+                                  while (grew) {
+                                    grew = false;
+                                    for (const [k, v] of Object.entries(PERM_NEEDS) as [Perm, Perm][]) if (drop.has(v) && !drop.has(k)) (drop.add(k), (grew = true));
+                                  }
+                                  perms = cur.filter((x) => !drop.has(x));
+                                }
+                                setEdit({ ...edit, perms, role: !perms.includes('generate') && !perms.includes('catalogEdit') && !perms.includes('import') ? 'viewer' : 'user' });
+                              }}
+                            />
+                            <span>
+                              {PERM_LABEL[p]}
+                              {need && <small className="hint"> · avec « {PERM_LABEL[need].toLowerCase()} »</small>}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </fieldset>
                   ))}
                 </div>
               )}

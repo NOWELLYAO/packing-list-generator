@@ -5,13 +5,75 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
  * Les droits sont vérifiés par le serveur (jeton signé) ; l'interface masque ce qui n'est pas permis.
  */
 
-export type Perm = 'generate' | 'export' | 'history' | 'catalogView' | 'catalogEdit' | 'import' | 'settings' | 'users';
+export type Perm =
+  | 'generate'
+  | 'orderImport'
+  | 'freight'
+  | 'freightRates'
+  | 'export'
+  | 'labels'
+  | 'exportDocs'
+  | 'shareLink'
+  | 'history'
+  | 'dashboard'
+  | 'catalogView'
+  | 'catalogExport'
+  | 'catalogEdit'
+  | 'import'
+  | 'settings'
+  | 'users';
 export type Role = 'admin' | 'user' | 'viewer';
-export const ALL_PERMS: Perm[] = ['generate', 'export', 'history', 'catalogView', 'catalogEdit', 'import', 'settings', 'users'];
+export const ALL_PERMS: Perm[] = [
+  'generate', 'orderImport', 'freight', 'freightRates',
+  'export', 'labels', 'exportDocs', 'shareLink',
+  'history', 'dashboard',
+  'catalogView', 'catalogExport', 'catalogEdit', 'import',
+  'settings', 'users',
+];
+/** droits regroupés par thème (écran de l'administrateur) */
+export const PERM_GROUPS: { title: string; perms: Perm[] }[] = [
+  { title: 'Packing lists', perms: ['generate', 'orderImport', 'freight', 'freightRates'] },
+  { title: 'Documents', perms: ['export', 'labels', 'exportDocs', 'shareLink'] },
+  { title: 'Suivi', perms: ['history', 'dashboard'] },
+  { title: 'Base d’articles', perms: ['catalogView', 'catalogExport', 'catalogEdit', 'import'] },
+  { title: 'Application', perms: ['settings'] },
+];
+/** droit qui n'a de sens qu'avec un autre (ex. modifier les tarifs → voir le coût) */
+export const PERM_NEEDS: Partial<Record<Perm, Perm>> = {
+  orderImport: 'generate',
+  freight: 'generate',
+  freightRates: 'freight',
+  labels: 'generate',
+  exportDocs: 'generate',
+  shareLink: 'generate',
+  export: 'generate',
+  catalogExport: 'catalogView',
+  catalogEdit: 'catalogView',
+};
+const LEGACY_GRANTS: Partial<Record<Perm, Perm[]>> = {
+  generate: ['orderImport', 'freight'],
+  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport'],
+  history: ['dashboard'],
+  settings: ['freightRates'],
+};
+/** session ouverte avant l'arrivée des droits détaillés : mêmes déductions que le serveur */
+export function effectivePerms(u: { role: Role; perms: Perm[]; pv?: number }): Perm[] {
+  if (u.role === 'admin') return ALL_PERMS;
+  if (u.pv === 2) return u.perms;
+  return [...new Set([...u.perms, ...u.perms.flatMap((p) => LEGACY_GRANTS[p] ?? [])])];
+}
 
 export const PERM_LABEL: Record<Perm, string> = {
   generate: 'Créer des packing lists',
-  export: 'Exporter PDF, Excel et étiquettes',
+  orderImport: 'Importer une commande client (PDF, Excel, photo)',
+  freight: 'Voir le coût estimé du transport',
+  freightRates: 'Modifier les tarifs de fret',
+  export: 'Exporter la PL en PDF et Excel, la partager',
+  labels: 'Imprimer les étiquettes de colis',
+  exportDocs: 'Dossier export (proforma, douane, origine, prix)',
+  shareLink: 'Créer des liens de suivi pour les clients',
+  dashboard: 'Voir le tableau de bord',
+  catalogExport: 'Télécharger la base d’articles (Excel, sauvegarde)',
   history: "Voir l'historique",
   catalogView: 'Consulter la base d’articles',
   catalogEdit: 'Modifier la base (ajout, correction, suppression)',
@@ -23,9 +85,29 @@ export const PERM_LABEL: Record<Perm, string> = {
 /** profils pré-configurés */
 export const PRESETS: { id: string; label: string; role: Role; perms: Perm[]; hint: string }[] = [
   { id: 'admin', label: 'Administrateur', role: 'admin', perms: ALL_PERMS, hint: 'Tout, y compris les accès' },
-  { id: 'manager', label: 'Responsable base', role: 'user', perms: ['generate', 'export', 'history', 'catalogView', 'catalogEdit', 'import'], hint: 'PL + tenue de la base et imports' },
-  { id: 'prep', label: 'Préparateur', role: 'user', perms: ['generate', 'export', 'history', 'catalogView'], hint: 'Crée et exporte des PL, consulte la base' },
-  { id: 'viewer', label: 'Consultation', role: 'viewer', perms: ['history', 'catalogView'], hint: 'Lecture seule' },
+  {
+    id: 'manager',
+    label: 'Responsable base',
+    role: 'user',
+    perms: ['generate', 'orderImport', 'freight', 'freightRates', 'export', 'labels', 'exportDocs', 'shareLink', 'history', 'dashboard', 'catalogView', 'catalogExport', 'catalogEdit', 'import'],
+    hint: 'Tout sauf les réglages et les accès',
+  },
+  {
+    id: 'sales',
+    label: 'Commercial',
+    role: 'user',
+    perms: ['generate', 'orderImport', 'freight', 'export', 'exportDocs', 'shareLink', 'history', 'dashboard', 'catalogView'],
+    hint: 'PL depuis les commandes, coût du transport, dossier export, liens clients',
+  },
+  {
+    id: 'prep',
+    label: 'Préparateur',
+    role: 'user',
+    perms: ['generate', 'orderImport', 'export', 'labels', 'history', 'catalogView'],
+    hint: 'Crée les PL, les exporte et imprime les étiquettes',
+  },
+  { id: 'store', label: 'Magasinier', role: 'user', perms: ['generate', 'labels', 'history', 'catalogView'], hint: 'Consulte les PL et imprime les étiquettes' },
+  { id: 'viewer', label: 'Consultation', role: 'viewer', perms: ['history', 'dashboard', 'catalogView'], hint: 'Lecture seule' },
 ];
 export const presetOf = (role: Role, perms: Perm[]) =>
   PRESETS.find((p) => p.role === role && p.perms.length === perms.length && p.perms.every((x) => perms.includes(x)))?.label ?? 'Personnalisé';
@@ -35,6 +117,7 @@ export interface AccessUser {
   name: string;
   role: Role;
   perms: Perm[];
+  pv?: number;
   disabled?: boolean;
 }
 export interface SessionInfo {
@@ -180,7 +263,7 @@ export function useAccess(space: string | undefined): Access {
     const t = window.setTimeout(() => setSessionState(null), Math.max(0, session.exp - Date.now()));
     return () => window.clearTimeout(t);
   }, [session]);
-  const can = useCallback((p: Perm) => !enabled || !!session?.user.perms.includes(p), [enabled, session]);
+  const can = useCallback((p: Perm) => !enabled || (!!session && effectivePerms(session.user).includes(p)), [enabled, session]);
   return {
     enabled,
     checking,

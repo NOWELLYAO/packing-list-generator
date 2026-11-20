@@ -273,9 +273,9 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
           onPick={(it) => addItem(it.code, it.pn)}
           onPickUnknown={(code) => addItem(code, '')}
         />
-        <button className="btn ghost order-btn" disabled={!!orderBusy} onClick={() => orderRef.current?.click()} title="PDF, Excel ou photo du bon de commande">
+        {can('orderImport') && <button className="btn ghost order-btn" disabled={!!orderBusy} onClick={() => orderRef.current?.click()} title="PDF, Excel ou photo du bon de commande">
           {orderBusy || '📄 Importer une commande client'}
-        </button>
+        </button>}
         <input
           ref={orderRef}
           type="file"
@@ -474,12 +474,18 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               <button className="btn" disabled={!!busy} onClick={() => run('share', () => sharePackingListPdf(pl, settings))}>
                 {busy === 'share' ? '…' : 'Partager'}
               </button>
+              </>)}
+              {can('labels') && (
               <button className="btn" disabled={!!busy} onClick={() => setShowLabels(true)} title="Étiquettes de colis à imprimer">
                 Étiquettes
               </button>
+              )}
+              {can('exportDocs') && (
               <button className="btn" disabled={!!busy} onClick={() => setShowExport(true)} title="Facture proforma, récapitulatif douanier, déclaration d’origine">
                 Dossier export
               </button>
+              )}
+              {can('shareLink') && (
               <button
                 className="btn"
                 disabled={!!busy || !shareSpace}
@@ -488,7 +494,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               >
                 Lien client
               </button>
-              </>)}
+              )}
             </div>
           </div>
 
@@ -536,6 +542,8 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             setMode={(m) => setSettings({ ...settings, transportMode: m })}
             rates={settings.freightRates}
             setRates={(r) => setSettings({ ...settings, freightRates: r })}
+            showCost={can('freight')}
+            canEditRates={can('freightRates')}
           />
         </>
       )}

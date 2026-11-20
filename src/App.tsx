@@ -172,7 +172,7 @@ export default function App() {
     lastProposal.current = Date.now();
   };
   const myPending = reviewMode ? pending.filter((p) => p.by.id === access.session!.user.id) : [];
-  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', dashboard: 'history', review: 'users' };
+  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', dashboard: 'dashboard', review: 'users' };
   const tabs = (
     [
       { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },

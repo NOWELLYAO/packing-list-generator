@@ -88,7 +88,13 @@ const summary = (d: CloudDoc) => ({ updatedAt: d.updatedAt, articles: Array.isAr
 /* Contrôle d'accès                                                    */
 /* ------------------------------------------------------------------ */
 
-export const PERMS = ['generate', 'export', 'history', 'catalogView', 'catalogEdit', 'import', 'settings', 'users'] as const;
+export const PERMS = [
+  'generate', 'orderImport', 'freight', 'freightRates',
+  'export', 'labels', 'exportDocs', 'shareLink',
+  'history', 'dashboard',
+  'catalogView', 'catalogExport', 'catalogEdit', 'import',
+  'settings', 'users',
+] as const;
 export type Perm = (typeof PERMS)[number];
 export interface AuthUser {
   id: string;
@@ -98,6 +104,8 @@ export interface AuthUser {
   salt: string;
   hash: string;
   disabled?: boolean;
+  /** 2 : droits détaillés choisis par l'administrateur (sinon compte créé avant leur arrivée) */
+  pv?: number;
 }
 interface AuthRec {
   users: AuthUser[];
@@ -140,7 +148,19 @@ export function readSession(token: string | undefined, secret: string, now = Dat
   }
 }
 
-const publicUser = (u: AuthUser) => ({ id: u.id, name: u.name, role: u.role, perms: u.perms, disabled: !!u.disabled });
+/** droits ajoutés après la création des premiers comptes : déduits des droits d'origine tant que l'administrateur n'a pas revu le compte */
+const LEGACY_GRANTS: Record<string, Perm[]> = {
+  generate: ['orderImport', 'freight'],
+  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport'],
+  history: ['dashboard'],
+  settings: ['freightRates'],
+};
+export function effectivePerms(u: { role: string; perms: Perm[]; pv?: number }): Perm[] {
+  if (u.role === 'admin') return [...PERMS];
+  if (u.pv === 2) return u.perms;
+  return [...new Set([...u.perms, ...u.perms.flatMap((p) => LEGACY_GRANTS[p] ?? [])])];
+}
+const publicUser = (u: AuthUser) => ({ id: u.id, name: u.name, role: u.role, perms: effectivePerms(u), pv: 2, disabled: !!u.disabled });
 const ADMIN_PERMS: Perm[] = [...PERMS];
 const cleanPerms = (p: unknown): Perm[] => (Array.isArray(p) ? p.filter((x): x is Perm => (PERMS as readonly string[]).includes(String(x))) : []);
 /** empreinte d'une base d'articles : (code, PN, date de modification) — indépendante de l'ordre */
@@ -209,7 +229,7 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
     const tokRaw = req.headers['x-plgen-token'];
     const session = readSession(Array.isArray(tokRaw) ? tokRaw[0] : tokRaw, secret);
     const live = session && auth?.users.find((u) => u.id === session.u && !u.disabled);
-    const me: Session | null = live ? { ...session!, r: live.role, p: live.perms, n: live.name } : null;
+    const me: Session | null = live ? { ...session!, r: live.role, p: effectivePerms(live), n: live.name } : null;
 
     if (req.method === 'POST') {
       const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as Record<string, unknown>;
@@ -219,7 +239,7 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
       if (action === 'status') return { status: 200, body: { enabled: !!auth, users: (auth?.users ?? []).filter((u) => !u.disabled).map((u) => ({ id: u.id, name: u.name })) } };
       if (action === 'share') {
         // protection active : il faut être connecté avec le droit d'exporter
-        if (auth && !(me && me.p.includes('export'))) return { status: me ? 403 : 401, body: { error: me ? 'forbidden' : 'login' } };
+        if (auth && !(me && me.p.includes('shareLink'))) return { status: me ? 403 : 401, body: { error: me ? 'forbidden' : 'login' } };
         const snap = JSON.stringify(body.snapshot ?? null);
         if (snap === 'null' || snap.length > SHARE_MAX) return { status: 413, body: { error: 'too_large' } };
         const id = Array.from(randomBytes(SHARE_LEN), (b) => INVITE_ALPHABET[b % INVITE_ALPHABET.length]).join('');
@@ -269,7 +289,7 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
         if (!prev && !PIN_RE.test(String(u?.pin ?? ''))) return { status: 400, body: { error: 'bad_pin' } };
         if (u?.pin && !PIN_RE.test(String(u.pin))) return { status: 400, body: { error: 'bad_pin' } };
         const salt = u?.pin ? randomBytes(16).toString('hex') : prev!.salt;
-        const next: AuthUser = { id: prev?.id ?? randomBytes(6).toString('hex'), name, role, perms, salt, hash: u?.pin ? hashPin(String(u.pin), salt) : prev!.hash, disabled: !!u?.disabled };
+        const next: AuthUser = { id: prev?.id ?? randomBytes(6).toString('hex'), name, role, perms, pv: 2, salt, hash: u?.pin ? hashPin(String(u.pin), salt) : prev!.hash, disabled: !!u?.disabled };
         const users = prev ? auth.users.map((x) => (x.id === prev.id ? next : x)) : [...auth.users, next];
         if (!users.some((x) => x.role === 'admin' && !x.disabled)) return { status: 400, body: { error: 'last_admin' } };
         await saveAuth({ users });
@@ -343,6 +363,11 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
         if (!me.p.includes('settings')) {
           const keep = (cur.settings ?? {}) as Record<string, unknown>;
           doc.settings = { ...((doc.settings ?? {}) as Record<string, unknown>), logo: keep.logo, companyName: keep.companyName, accent: keep.accent, labels: keep.labels };
+        }
+        // tarifs de fret : réservés à qui a le droit de les modifier
+        if (!me.p.includes('freightRates') && !me.p.includes('settings')) {
+          const keep = (cur.settings ?? {}) as Record<string, unknown>;
+          doc.settings = { ...((doc.settings ?? {}) as Record<string, unknown>), freightRates: keep.freightRates };
         }
         if (body.force && !me.p.includes('users')) return { status: 403, body: { error: 'forbidden' } };
       }

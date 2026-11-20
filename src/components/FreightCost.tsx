@@ -8,6 +8,7 @@ interface Props {
   rates?: FreightRates;
   setRates: (r: FreightRates) => void;
   onPickMode: (m: 'sea' | 'road' | 'air') => void;
+  canEdit?: boolean;
 }
 
 const money = (n: number, cur: string) => {
@@ -19,7 +20,7 @@ const money = (n: number, cur: string) => {
 };
 
 /** Coût estimé de l'envoi selon le mode de transport, à partir des tarifs de l'utilisateur */
-export default function FreightCost({ pl, rates, setRates, onPickMode }: Props) {
+export default function FreightCost({ pl, rates, setRates, onPickMode, canEdit = true }: Props) {
   const r = rates ?? DEFAULT_RATES;
   const opts = useMemo(() => freightOptions(pl, r), [pl, r]);
   const [edit, setEdit] = useState(false);
@@ -35,7 +36,7 @@ export default function FreightCost({ pl, rates, setRates, onPickMode }: Props) 
   return (
     <div className="freight-cost">
       <h4 className="sub-title">Coût estimé du transport</h4>
-      {!r.custom && <p className="hint small">Tarifs indicatifs : saisissez ceux de votre transitaire pour un chiffrage fiable.</p>}
+      {!r.custom && canEdit && <p className="hint small">Tarifs indicatifs : saisissez ceux de votre transitaire pour un chiffrage fiable.</p>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Coûts par mode de transport">
         <table className="pl-table compact">
           <tbody>
@@ -56,10 +57,12 @@ export default function FreightCost({ pl, rates, setRates, onPickMode }: Props) 
           </tbody>
         </table>
       </div>
-      <button className="btn small ghost" onClick={() => setEdit((e) => !e)}>
-        {edit ? 'Fermer les tarifs' : 'Modifier les tarifs'}
-      </button>
-      {edit && (
+      {canEdit && (
+        <button className="btn small ghost" onClick={() => setEdit((e) => !e)}>
+          {edit ? 'Fermer les tarifs' : 'Modifier les tarifs'}
+        </button>
+      )}
+      {canEdit && edit && (
         <div className="rates-form">
           <label className="rate-field">
             <span>Devise</span>

@@ -27,13 +27,15 @@ interface Props {
   setMode: (m: TransportMode) => void;
   rates?: FreightRates;
   setRates: (r: FreightRates) => void;
+  showCost?: boolean;
+  canEditRates?: boolean;
 }
 
 /**
  * Transport : un seul mode choisi, et tous les indicateurs en découlent
  * (plan de chargement, nombre de conteneurs ou de camions, poids taxable).
  */
-export default function TransportPanel({ pl, accent, logo, mode, setMode, rates, setRates }: Props) {
+export default function TransportPanel({ pl, accent, logo, mode, setMode, rates, setRates, showCost = true, canEditRates = true }: Props) {
   const lang = useLang();
   const [vehicle, setVehicle] = useState<string>('auto');
   const [showVehicle, setShowVehicle] = useState(false);
@@ -185,7 +187,7 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
         </>
       )}
 
-      <FreightCost
+      {showCost && <FreightCost
         pl={pl}
         rates={rates}
         setRates={setRates}
@@ -193,7 +195,8 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
           setMode(m);
           setVehicle('auto');
         }}
-      />
+        canEdit={canEditRates}
+      />}
 
       {[...(plan?.warnings ?? []).filter((w) => !(plan?.light && /^Envoi léger/.test(w))), ...f.alerts.filter((a) => mode === 'air' || !/avion/.test(a))].length > 0 && (
         <ul className="alerts">

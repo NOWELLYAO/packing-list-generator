@@ -31,7 +31,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const [editing, setEditing] = useState<{ item: CatalogItem; isNew: boolean } | null>(null);
   const can = useCan();
   const canEdit = can('catalogEdit');
-  const canExport = can('export');
+  const canExport = can('catalogExport');
   const backupRef = useRef<HTMLInputElement>(null);
   const lang = useLang();
   const { ask, notify } = useSafety();
