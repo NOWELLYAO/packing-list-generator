@@ -22,7 +22,8 @@ import GeneratorPanel from './components/GeneratorPanel';
 import HistoryPanel from './components/HistoryPanel';
 import SettingsPanel from './components/SettingsPanel';
 import LoginScreen from './components/LoginScreen';
-import { AccessContext, useAccess, type Perm } from './lib/access';
+import { AccessContext, asInvite, ORG_EVENT, orgKnownLocked, orgStatus, redeemInvite, useAccess, type Perm } from './lib/access';
+import JoinScreen from './components/JoinScreen';
 
 type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'review' | 'settings';
 
@@ -45,6 +46,7 @@ const CLOUD_LABEL: Record<SyncStatus, string> = {
   not_configured: 'sauvegarde en ligne inactive',
   error: 'erreur de sauvegarde',
   locked: 'connexion requise',
+  org_locked: 'espace non autorisé',
 };
 
 export default function App() {
@@ -183,11 +185,37 @@ export default function App() {
   useEffect(() => {
     if (!tabs.some((t) => t.id === tab)) setTab(tabs[0]?.id ?? 'settings');
   }, [access.session?.user.id, access.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  // application réservée à l'espace de l'entreprise (invitation obligatoire)
+  const [orgLocked, setOrgLocked] = useState(orgKnownLocked);
+  useEffect(() => {
+    orgStatus().then(setOrgLocked).catch(() => undefined);
+    const on = () => setOrgLocked(true);
+    window.addEventListener(ORG_EVENT, on);
+    return () => window.removeEventListener(ORG_EVENT, on);
+  }, []);
+  const joinSpace = async (space: string) => {
+    if (cloud.cloud && cloud.cloud.code !== space) cloud.disconnect();
+    await cloud.join(space);
+    toast('Espace de l’entreprise rejoint : connectez-vous');
+  };
+  // lien d'invitation : …/#invite=ABCDEF
+  useEffect(() => {
+    const m = location.hash.match(/invite=([A-Za-z0-9-]+)/);
+    const inv = m && asInvite(m[1]);
+    if (!inv) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    redeemInvite(inv)
+      .then((space) => joinSpace(space))
+      .catch(() => toast('Invitation inconnue ou expirée : demandez-en une nouvelle'));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // après connexion : synchronisation immédiate
   useEffect(() => {
     if (access.session) void cloud.syncNow();
   }, [access.session?.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (orgLocked && (!cloud.cloud || cloud.status === 'org_locked'))
+    return <JoinScreen logo={settings.logo} wrongSpace={!!cloud.cloud} onJoin={joinSpace} />;
   if (cloud.cloud && access.enabled && !access.session)
     return (
       <AccessContext.Provider value={access}>

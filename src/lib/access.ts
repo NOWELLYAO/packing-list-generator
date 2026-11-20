@@ -207,3 +207,32 @@ export const AccessContext = createContext<Access>({
   logout: () => {},
 });
 export const useCan = () => useContext(AccessContext).can;
+
+/* ---------- invitation courte et application réservée à l'entreprise ---------- */
+
+export const ORG_EVENT = 'plgen:org-locked';
+const ORG_KEY = 'plgen:orgLocked';
+export const orgKnownLocked = () => ls.get(ORG_KEY) === '1';
+export const setOrgKnown = (b: boolean) => ls.set(ORG_KEY, b ? '1' : null);
+
+async function postNoSpace<T>(body: Record<string, unknown>): Promise<T> {
+  let r: Response;
+  try {
+    r = await fetch('/api/base', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' });
+  } catch {
+    throw new AccessError('offline');
+  }
+  const data = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!r.ok) throw new AccessError(String(data.error ?? r.status));
+  return data as T;
+}
+export const orgStatus = () => postNoSpace<{ locked: boolean }>({ action: 'orgStatus' }).then((r) => (setOrgKnown(r.locked), r.locked));
+/** code d'invitation (6 caractères, valable 24 h) → code complet de l'espace */
+export const redeemInvite = (invite: string) => postNoSpace<{ space: string }>({ action: 'redeem', invite }).then((r) => r.space);
+export const createInvite = (space: string) => post<{ invite: string }>(space, { action: 'invite' }).then((r) => r.invite);
+export const setOrgLock = (space: string, lock: boolean) => post<{ locked: boolean }>(space, { action: lock ? 'orgLock' : 'orgUnlock' }).then((r) => (setOrgKnown(r.locked), r.locked));
+/** « ABC-DEF » → « ABCDEF » si c'est bien un code d'invitation */
+export const asInvite = (s: string) => {
+  const c = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length === 6 ? c : null;
+};

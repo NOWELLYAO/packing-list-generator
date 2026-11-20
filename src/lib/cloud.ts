@@ -1,4 +1,4 @@
-import { LOCK_EVENT, tokenFor } from './access';
+import { LOCK_EVENT, ORG_EVENT, tokenFor } from './access';
 import type { CatalogItem, HistoryEntry, PendingChange, Settings } from '../types';
 import { mergePending } from './review';
 import type { AccuracyRecord } from './realCheck';
@@ -67,7 +67,7 @@ export function normalizeCode(input: string): string {
 }
 export const isValidCode = (c: string) => /^PL(-[A-Z0-9]{4}){4}$/.test(c);
 
-export type CloudError = 'not_configured' | 'offline' | 'bad_code' | 'server' | 'login';
+export type CloudError = 'not_configured' | 'offline' | 'bad_code' | 'server' | 'login' | 'org_locked';
 export class CloudFailure extends Error {
   kind: CloudError;
   constructor(kind: CloudError, msg?: string) {
@@ -99,6 +99,11 @@ async function call(method: 'GET' | 'PUT', code: string, query = '', body?: unkn
     // protection par code d'accès : session absente ou expirée
     window.dispatchEvent(new Event(LOCK_EVENT));
     throw new CloudFailure('login');
+  }
+  if (r.status === 403 && data.error === 'org_locked') {
+    // l'application est réservée à l'espace de l'entreprise : cet appareil doit le rejoindre (invitation)
+    window.dispatchEvent(new Event(ORG_EVENT));
+    throw new CloudFailure('org_locked');
   }
   if (r.status === 403) throw new CloudFailure('server', 'droits insuffisants');
   if (r.status === 400) throw new CloudFailure('bad_code');

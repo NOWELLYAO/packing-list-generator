@@ -38,6 +38,9 @@ export interface CloudDoc {
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
 const VERSIONS = 10;
+/** espace unique autorisé quand l'application est réservée à une entreprise */
+const ORG_KEY = 'plgen:org';
+const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z0-9-]{12,64}$/;
 
 export function storeConfig(env: Record<string, string | undefined>) {
@@ -161,6 +164,24 @@ export interface Result {
 export async function handle(req: Req, env: Record<string, string | undefined>, fetcher: Fetch): Promise<Result> {
   const cfg = storeConfig(env);
   if (!cfg) return { status: 503, body: { error: 'not_configured' } };
+  // actions sans espace : application réservée à une entreprise ? invitation courte → code d'espace
+  if (req.method === 'POST') {
+    const b0 = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as Record<string, unknown>;
+    try {
+      if (b0.action === 'orgStatus') {
+        const [org] = await redis(cfg, fetcher, [['GET', ORG_KEY]]);
+        return { status: 200, body: { locked: !!org } };
+      }
+      if (b0.action === 'redeem') {
+        const inv = String(b0.invite ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!/^[A-Z0-9]{6}$/.test(inv)) return { status: 400, body: { error: 'bad_invite' } };
+        const [space] = await redis(cfg, fetcher, [['GET', `plgen:invite:${inv}`]]);
+        return space ? { status: 200, body: { space } } : { status: 404, body: { error: 'invite_expired' } };
+      }
+    } catch (e) {
+      return { status: 502, body: { error: 'store', detail: String((e as Error).message ?? e) } };
+    }
+  }
   const raw = req.headers['x-plgen-space'];
   const code = (Array.isArray(raw) ? raw[0] : raw ?? '').trim().toUpperCase();
   if (!CODE_RE.test(code)) return { status: 400, body: { error: 'bad_code' } };
@@ -170,7 +191,9 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
   const secret = secretOf(env, cfg);
 
   try {
-    const [authRaw] = await redis(cfg, fetcher, [['GET', `${key}:auth`]]);
+    const [authRaw, orgKey] = await redis(cfg, fetcher, [['GET', `${key}:auth`], ['GET', ORG_KEY]]);
+    // application réservée à l'espace de l'entreprise : aucun autre espace ne peut être créé ni utilisé
+    if (orgKey && orgKey !== key) return { status: 403, body: { error: 'org_locked' } };
     const auth = authRaw ? (JSON.parse(authRaw as string) as AuthRec) : null;
     const tokRaw = req.headers['x-plgen-token'];
     const session = readSession(Array.isArray(tokRaw) ? tokRaw[0] : tokRaw, secret);
@@ -237,7 +260,21 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
         await saveAuth({ users });
         return { status: 200, body: { users: users.map(publicUser) } };
       }
+      if (action === 'invite') {
+        const inv = Array.from(randomBytes(6), (b) => INVITE_ALPHABET[b % INVITE_ALPHABET.length]).join('');
+        await redis(cfg, fetcher, [['SET', `plgen:invite:${inv}`, code, 'EX', 86400]]);
+        return { status: 200, body: { invite: inv, expiresIn: 86400 } };
+      }
+      if (action === 'orgLock') {
+        await redis(cfg, fetcher, [['SET', ORG_KEY, key]]);
+        return { status: 200, body: { locked: true } };
+      }
+      if (action === 'orgUnlock') {
+        await redis(cfg, fetcher, [['DEL', ORG_KEY]]);
+        return { status: 200, body: { locked: false } };
+      }
       if (action === 'disable') {
+        if (orgKey) return { status: 400, body: { error: 'org_locked_disable' } };
         await redis(cfg, fetcher, [['DEL', `${key}:auth`]]);
         return { status: 200, body: { enabled: false } };
       }

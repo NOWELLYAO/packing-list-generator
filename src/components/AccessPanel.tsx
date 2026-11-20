@@ -17,6 +17,8 @@ import {
 } from '../lib/access';
 import { useContext } from 'react';
 import { useSafety } from '../lib/safety';
+import { createInvite, orgKnownLocked, setOrgLock } from '../lib/access';
+import QRCode from 'qrcode';
 
 const errText = (e: unknown) => {
   const c = e instanceof AccessError ? e.code : '';
@@ -32,6 +34,18 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
   const [setup, setSetup] = useState({ name: '', pin: '', pin2: '' });
   const [err, setErr] = useState('');
   const isAdmin = !!access.session?.user.perms.includes('users');
+  const [invite, setInvite] = useState<{ code: string; link: string; qr: string } | null>(null);
+  const [orgLocked, setOrgLockedState] = useState(orgKnownLocked);
+  const makeInvite = async () => {
+    try {
+      const code = await createInvite(space!);
+      const link = `${window.location.origin}/#invite=${code}`;
+      const qr = await QRCode.toDataURL(link, { margin: 1, width: 220 });
+      setInvite({ code: `${code.slice(0, 3)}-${code.slice(3)}`, link, qr });
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
 
   useEffect(() => {
     if (space && access.enabled && isAdmin) listUsers(space).then(setUsers).catch((e) => setErr(errText(e)));
@@ -215,10 +229,67 @@ export default function AccessPanel({ space, toast }: { space?: string; toast: (
               </div>
             </div>
           )}
-          <p className="hint">
-            Pour un nouvel appareil : Réglages → Sauvegarde en ligne → « J'ai déjà un code » (code de l'espace), puis chacun se connecte avec son
-            nom et son code personnel.
-          </p>
+          <div className="invite-box">
+            <h4>Ajouter un appareil</h4>
+            <p className="hint">Un code court, valable 24 h, au lieu du long code de l'espace. Sur le nouvel appareil : ouvrir le lien, scanner le QR code, ou saisir le code.</p>
+            {!invite ? (
+              <button className="btn" onClick={() => void makeInvite()}>
+                Créer une invitation
+              </button>
+            ) : (
+              <div className="invite">
+                <img src={invite.qr} alt="QR code d'invitation" width={150} height={150} />
+                <div>
+                  <div className="invite-code mono">{invite.code}</div>
+                  <small className="hint">valable 24 h</small>
+                  <div className="row wrap">
+                    <button
+                      className="btn small primary"
+                      onClick={async () => {
+                        const text = `Packing List : ouvrez ce lien pour rejoindre l'espace de l'entreprise ${invite.link} (ou saisissez le code ${invite.code})`;
+                        try {
+                          if (navigator.share) await navigator.share({ title: 'Invitation Packing List', text });
+                          else {
+                            await navigator.clipboard.writeText(text);
+                            toast('Invitation copiée');
+                          }
+                        } catch {
+                          /* partage annulé */
+                        }
+                      }}
+                    >
+                      Partager le lien
+                    </button>
+                    <button className="btn small ghost" onClick={() => void makeInvite()}>
+                      Nouveau code
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <label className="check org-lock">
+            <input
+              type="checkbox"
+              checked={orgLocked}
+              onChange={async (e) => {
+                const want = e.target.checked;
+                if (want && !(await ask({ title: 'Réserver l’application à cet espace ?', message: "Plus personne ne pourra créer un autre espace ni utiliser l'application en dehors de celui-ci : chaque nouvel appareil devra être invité.", confirmLabel: 'Réserver' })))
+                  return;
+                try {
+                  setOrgLockedState(await setOrgLock(space, want));
+                  toast(want ? 'Application réservée à cet espace' : 'Réservation levée');
+                } catch (er) {
+                  setErr(errText(er));
+                }
+              }}
+            />
+            <span>
+              <b>Réserver l'application à cet espace</b>
+              <br />
+              <small className="hint">Personne ne peut créer son propre espace (et s'y déclarer administrateur) : tout nouvel appareil doit être invité.</small>
+            </span>
+          </label>
           <button
             className="btn ghost danger small"
             onClick={async () => {

@@ -179,3 +179,26 @@ describe('propositions de modification (validation par l’administrateur)', () 
     expect(cur.pending?.length).toBe(0);
   });
 });
+
+describe('invitation courte et application réservée à l’entreprise', () => {
+  const post = (fetcher: never, body: unknown, token?: string, code = CODE) => handle({ method: 'POST', headers: { 'x-plgen-space': code, ...(token ? { 'x-plgen-token': token } : {}) }, body }, env, fetcher);
+  it('invitation → code d’espace ; une fois réservée, un autre espace est refusé', async () => {
+    const { fetcher } = fakeRedis();
+    const f = fetcher as never;
+    const tok = ((await post(f, { action: 'setup', name: 'Admin', pin: '1234' })).body as { token: string }).token;
+    const inv = ((await post(f, { action: 'invite' }, tok)).body as { invite: string }).invite;
+    expect(inv).toMatch(/^[A-Z0-9]{6}$/);
+    const red = await handle({ method: 'POST', headers: {}, body: { action: 'redeem', invite: inv.slice(0, 3) + '-' + inv.slice(3) } }, env, fetcher);
+    expect((red.body as { space: string }).space).toBe(CODE);
+    expect((await handle({ method: 'POST', headers: {}, body: { action: 'redeem', invite: 'ZZZZZZ' } }, env, fetcher)).status).toBe(404);
+    expect(((await handle({ method: 'POST', headers: {}, body: { action: 'orgStatus' } }, env, fetcher)).body as { locked: boolean }).locked).toBe(false);
+    expect((await post(f, { action: 'orgLock' }, tok)).status).toBe(200);
+    expect(((await handle({ method: 'POST', headers: {}, body: { action: 'orgStatus' } }, env, fetcher)).body as { locked: boolean }).locked).toBe(true);
+    // un autre espace (ex. créé par un utilisateur pour s'y déclarer administrateur) ne fonctionne plus
+    const OTHER = 'PL-ZZZZ-YYYY-XXXX-WWWW';
+    expect((await post(f, { action: 'setup', name: 'Pirate', pin: '1111' }, undefined, OTHER)).status).toBe(403);
+    expect((await handle({ method: 'PUT', headers: { 'x-plgen-space': OTHER }, body: { doc: doc(1, 1), base: 0 } }, env, fetcher)).status).toBe(403);
+    // l'espace de l'entreprise fonctionne toujours
+    expect((await handle({ method: 'GET', headers: { ...h, 'x-plgen-token': tok } }, env, fetcher)).status).toBe(404);
+  });
+});

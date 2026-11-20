@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { useCloudSync } from '../lib/useCloudSync';
 import { isValidCode, normalizeCode } from '../lib/cloud';
+import { asInvite, AccessError, orgKnownLocked, redeemInvite } from '../lib/access';
 import { useSafety } from '../lib/safety';
 import InfoTip from './InfoTip';
 
@@ -13,6 +14,8 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   offline: { label: 'Hors ligne : envoi au retour du réseau', tone: 'mid' },
   not_configured: { label: 'Stockage en ligne pas encore activé sur le serveur', tone: 'low' },
   error: { label: 'Erreur', tone: 'low' },
+  locked: { label: 'Connexion requise', tone: 'mid' },
+  org_locked: { label: "Cet espace n'est pas celui de l'entreprise : rejoignez-le avec une invitation", tone: 'low' },
 };
 
 /** Réglages → Sauvegarde en ligne */
@@ -60,10 +63,10 @@ export default function CloudPanel({ cloud, toast }: { cloud: Cloud; toast: (m: 
         joining ? (
           <div className="cloud-join">
             <label>
-              <span>Code de l'espace</span>
+              <span>Code d'invitation (6 caractères) ou code de l'espace</span>
               <input
                 value={code}
-                placeholder="PL-XXXX-XXXX-XXXX-XXXX"
+                placeholder="ABC-DEF ou PL-XXXX-XXXX-XXXX-XXXX"
                 autoCapitalize="characters"
                 autoComplete="off"
                 spellCheck={false}
@@ -73,11 +76,20 @@ export default function CloudPanel({ cloud, toast }: { cloud: Cloud; toast: (m: 
             <div className="row wrap">
               <button
                 className="btn primary"
-                disabled={!isValidCode(normalizeCode(code))}
+                disabled={!isValidCode(normalizeCode(code)) && !asInvite(code)}
                 onClick={async () => {
-                  await cloud.join(normalizeCode(code));
+                  let space = normalizeCode(code);
+                  if (!isValidCode(space)) {
+                    try {
+                      space = await redeemInvite(asInvite(code)!);
+                    } catch (e) {
+                      toast(e instanceof AccessError && e.code === 'offline' ? 'Pas de connexion internet' : 'Invitation inconnue ou expirée (24 h) : demandez-en une nouvelle');
+                      return;
+                    }
+                  }
+                  await cloud.join(space);
                   setJoining(false);
-                  toast('Espace rejoint : les deux bases sont réunies');
+                  toast('Espace rejoint');
                 }}
               >
                 Rejoindre
@@ -89,6 +101,7 @@ export default function CloudPanel({ cloud, toast }: { cloud: Cloud; toast: (m: 
           </div>
         ) : (
           <div className="row wrap">
+            {!orgKnownLocked() && (
             <button
               className="btn primary"
               onClick={async () => {
@@ -98,6 +111,7 @@ export default function CloudPanel({ cloud, toast }: { cloud: Cloud; toast: (m: 
             >
               Activer la sauvegarde en ligne
             </button>
+            )}
             <button className="btn" onClick={() => setJoining(true)}>
               J'ai déjà un code
             </button>
