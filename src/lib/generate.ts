@@ -666,20 +666,30 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
       const v1 = (ub.l * ub.w * ub.h) / 1e6;
       for (let i = 0; i < rem; i++) pieces.push({ lineIdx, code: item.code || item.pn, qty: 1, type: 'Carton', l: ub.l, w: ub.w, h: ub.h, volume: v1, net: ub.net, gross: ub.gross, basis: 'reference', goodsVolume: v1 });
     } else if (repacked.length === 1) pieces.push(repacked[0]);
-    else pieces.push({
+    else {
+      // palette incomplète d'un article qui a son propre carton : hauteur selon le nombre de couches réellement posées
+      // (ex. 5 pompes JP sur une palette prévue pour 12 : 2 couches, pas les 2,10 m de la palette pleine)
+      let hh = h.height;
+      if (!exactRem && ub && isPalletLike(h) && h.length > 0 && h.width > 0 && ub.h > 0) {
+        const perLayer = Math.max(1, Math.floor(h.length / ub.l) * Math.floor(h.width / ub.w), Math.floor(h.length / ub.w) * Math.floor(h.width / ub.l));
+        hh = Math.min(h.height, Math.ceil(PALLET_BASE_CM + Math.ceil(rem / perLayer) * ub.h));
+      }
+      const hvol = hh !== h.height ? (h.length * h.width * hh) / 1e6 : hv;
+      pieces.push({
       lineIdx,
       code: item.code || item.pn,
       qty: rem,
       type: h.packageType || 'Colis',
       l: h.length,
       w: h.width,
-      h: h.height,
-      volume: hv,
+      h: hh,
+      volume: hvol,
       net: rem * h.netWeightPerUnit,
       gross: rem * h.netWeightPerUnit + tare,
       basis: exactRem ? 'reference' : 'partial',
-      goodsVolume: hv,
+      goodsVolume: hvol,
     });
+    }
   }
   return { pieces, confidence: conf(exactAll), note: `${per} / ${ref.packageType}` };
 }
@@ -717,7 +727,9 @@ export function generatePackingList(
     const grundfos = options.strategy === 'grundfos';
     const packItem0 = withSimilarPacking(adaptSapPacking(withTwinPallets(refineMixedShare(sanitizeManual(item), catalog), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
     // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
-    const ub = variantsOf(packItem0).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType));
+    const isUnitBox = (v: PackVariant) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType);
+    // (la fiche SAP peut avoir été écartée des emballages proposés : elle reste la référence du carton individuel)
+    const ub = variantsOf(packItem0).find(isUnitBox) ?? variantsOf(item).find(isUnitBox);
     const packItem = ub ? { ...packItem0, unitBox: { l: ub.length, w: ub.width, h: ub.height, net: ub.netWeightPerUnit, gross: ub.grossWeightPerUnit } } : packItem0;
     const gf = grundfos ? grundfosPieces(packItem, qty, lineIdx) : null;
     const { item: chosen, note, confidence } = gf ? { item: packItem, note: gf.note, confidence: gf.confidence } : chooseVariant(packItem, qty);
@@ -730,7 +742,26 @@ export function generatePackingList(
     lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
     lines[lineIdx].confidence = confidence;
-    allPieces.push(...(gf ? gf.pieces : piecesFor(chosen, qty, lineIdx)));
+    const linePieces = gf ? gf.pieces : piecesFor(chosen, qty, lineIdx);
+    // palette plus courte que l'article lui-même (pompe de 1,60 m relevée sur une palette de 1,20 m) :
+    // l'article dépasserait, la palette prend sa longueur (cote signalée à vérifier)
+    // longueur d'une unité prouvée par un envoi réel d'une seule unité (la fiche SAP seule ne suffit pas :
+    // Grundfos expédie bien des SP5A-21 sur demi-palette 80 × 60 malgré les 120 cm de la fiche)
+    const unitDims = variantsOf(item).find((v) => !v.mixed && v.qtyPerPackage === 1 && v.source !== SAP_SOURCE && v.length > 0 && Math.min(v.length, v.width) < 60);
+    if (unitDims) {
+      const longU = Math.max(unitDims.length, unitDims.width);
+      for (const pc of linePieces) {
+        if (!PALLET_RE.test(pc.type) || longU > 300) continue;
+        const longP = Math.max(pc.l, pc.w);
+        if (longP > 0 && longU > longP + 10) {
+          if (pc.l >= pc.w) pc.l = longU;
+          else pc.w = longU;
+          pc.volume = (pc.l * pc.w * pc.h) / 1e6;
+          pc.dimsInferred = true;
+        }
+      }
+    }
+    allPieces.push(...linePieces);
   }
 
   // ---------- Regroupements ----------

@@ -581,3 +581,25 @@ describe('fiche SAP corrigée', () => {
     expect(out[0].grossWeightPerUnit).toBe(86.18);
   });
 });
+
+describe('palettes incomplètes et longueur des articles', () => {
+  const S = 'Fiche article fabricant (saisie)';
+  const base = { mixed: false, count: 2 };
+  it('5 unités sur une palette prévue pour 12 : hauteur de 2 couches, pas celle de la palette pleine', () => {
+    const pal = { ...base, qtyPerPackage: 12, packageType: 'PALPLATE', length: 120, width: 80, height: 211, volumePerPackage: 2.03, netWeightPerUnit: 22, grossWeightPerUnit: 24, source: 'PL 1' };
+    const box = { ...base, qtyPerPackage: 1, packageType: 'Carton', length: 57.7, width: 34.9, height: 60.7, volumePerPackage: 0.122, netWeightPerUnit: 19, grossWeightPerUnit: 23, source: S, count: 10 };
+    const JP = { ...pal, id: 'jp', code: 'JP', pn: 'JP', description: 'JP 5-48 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [pal, box] };
+    for (const strategy of ['grundfos', 'smart'] as const) {
+      const pk = generatePackingList([JP], [req('JP', 5)], { consolidate: true, strategy }).packages;
+      expect(pk).toHaveLength(1);
+      expect(pk[0].height).toBeLessThan(150);
+    }
+  });
+  it('palette plus courte que la pompe (envoi réel d’une pompe seule de 160 cm) : la palette prend la longueur de la pompe', () => {
+    const pal = { ...base, qtyPerPackage: 10, packageType: 'PALPLATE', length: 120, width: 80, height: 50, volumePerPackage: 0.48, netWeightPerUnit: 21.6, grossWeightPerUnit: 24.1, source: 'PL 1' };
+    const one = { ...base, qtyPerPackage: 1, packageType: 'Pallet', length: 160, width: 12, height: 12, volumePerPackage: 0.023, netWeightPerUnit: 21, grossWeightPerUnit: 22, source: 'PL 2' };
+    const SP = { ...pal, id: 'sp', code: 'SP', pn: 'SP', description: 'SP5A-25 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [pal, one] };
+    const pk = generatePackingList([SP], [req('SP', 10)], { consolidate: true, strategy: 'grundfos' }).packages;
+    expect(Math.max(pk[0].length, pk[0].width)).toBe(160);
+  });
+});
