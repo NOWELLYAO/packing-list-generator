@@ -149,8 +149,8 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
         <>
           {setStacking && (
             <label className="check stack-toggle">
-              <input type="checkbox" checked={stackingEnabled()} onChange={(e) => setStacking(e.target.checked)} /> Gerber les colis (sur caisses bois et
-              palettes à plateau seulement, colis plus petit et plus léger dessus, 3 niveaux au plus)
+              <input type="checkbox" checked={stackingEnabled()} onChange={(e) => setStacking(e.target.checked)} /> Gerber les colis (sur les caisses bois,
+              et sur les colis que vous cochez « gerbable » ; colis plus petit et plus léger dessus, 3 niveaux au plus)
             </label>
           )}
           <div className="segmented vehicle-select">

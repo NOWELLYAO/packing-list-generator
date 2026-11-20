@@ -185,11 +185,11 @@ export const stackingEnabled = () => stackingOn;
 
 type Stack = PLPackage & { members: PLPackage[] };
 /**
- * Dessus rigide : caisse bois ou contreplaqué, palette à plateau (PALPLATE : le plateau est là pour gerber).
- * Pas une palette de cartons (ils s'écrasent), ni une palette de pompes couchées, ni une pompe verticale
- * sur palette étroite, ni un carton sur palette.
+ * Dessus rigide par défaut : caisse bois ou contreplaqué seulement.
+ * Toute palette (y compris « PALPLATE », dont le dessus n'est pas garanti porteur) reste non gerbable
+ * tant que l'utilisateur ne la coche pas : on ne pose rien sur des cartons ou des pompes.
  */
-const RIGID_TOP = /crate|caisse|plywood|wood|contreplaq|plate|plateau/i;
+const RIGID_TOP = /crate|caisse|plywood|wood|contreplaq/i;
 const NOT_RIGID = /group|[ée]troite|carton/i;
 const rigidTop = (t: string) => RIGID_TOP.test(t) && !NOT_RIGID.test(t);
 /** gerbable : choix de l'utilisateur s'il existe, sinon la règle (dessus rigide) */
