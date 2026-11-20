@@ -571,3 +571,13 @@ describe('libellés affichés', () => {
     expect(packLabel('Palette étroite', 'en')).toMatch(/narrow/i);
   });
 });
+
+describe('fiche SAP corrigée', () => {
+  it('réimporter une fiche SAP remplace l’ancien poids (190 lb → 86,18 kg)', async () => {
+    const { mergeVariants, SAP_SOURCE } = await import('../lib/variants');
+    const v = { qtyPerPackage: 1, packageType: 'Palette', length: 100, width: 70, height: 40, volumePerPackage: 0.28, netWeightPerUnit: 190, grossWeightPerUnit: 190, mixed: false, source: SAP_SOURCE, count: 10 };
+    const out = mergeVariants([v], [{ ...v, netWeightPerUnit: 86.18, grossWeightPerUnit: 86.18 }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].grossWeightPerUnit).toBe(86.18);
+  });
+});

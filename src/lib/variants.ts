@@ -107,6 +107,11 @@ export function mergeVariants(a: PackVariant[], b: PackVariant[]): PackVariant[]
     if (!prev) map.set(k, { ...v });
     else {
       // un colis dédié est plus fiable qu'une estimation en colis mixte
+      // fiche SAP réimportée (poids ou cotes corrigés) : la plus récente remplace l'ancienne
+      if (prev.source === SAP_SOURCE && v.source === SAP_SOURCE) {
+        map.set(k, { ...v, count: Math.max(prev.count, v.count) });
+        continue;
+      }
       const keep = prev.mixed && !v.mixed ? v : prev;
       map.set(k, { ...keep, mixed: prev.mixed && v.mixed, count: prev.count + v.count });
     }
