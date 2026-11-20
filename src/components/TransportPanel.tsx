@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { PackingList } from '../types';
-import { loadPlanDrawing, planLoad, VEHICLES, type TransportMode } from '../lib/loadPlan';
+import { loadPlanDrawing, planLoad, stackingEnabled, VEHICLES, type TransportMode } from '../lib/loadPlan';
 import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
@@ -29,18 +29,20 @@ interface Props {
   setRates: (r: FreightRates) => void;
   showCost?: boolean;
   canEditRates?: boolean;
+  stacking?: boolean;
+  setStacking?: (b: boolean) => void;
 }
 
 /**
  * Transport : un seul mode choisi, et tous les indicateurs en découlent
  * (plan de chargement, nombre de conteneurs ou de camions, poids taxable).
  */
-export default function TransportPanel({ pl, accent, logo, mode, setMode, rates, setRates, showCost = true, canEditRates = true }: Props) {
+export default function TransportPanel({ pl, accent, logo, mode, setMode, rates, setRates, showCost = true, canEditRates = true, stacking, setStacking }: Props) {
   const lang = useLang();
   const [vehicle, setVehicle] = useState<string>('auto');
   const [showVehicle, setShowVehicle] = useState(false);
   const family = mode === 'road' ? 'road' : 'sea';
-  const plan = useMemo(() => (mode === 'air' ? null : planLoad(pl.packages, vehicle, family)), [pl.packages, vehicle, family, mode]);
+  const plan = useMemo(() => (mode === 'air' ? null : planLoad(pl.packages, vehicle, family)), [pl.packages, vehicle, family, mode, stacking]); // eslint-disable-line react-hooks/exhaustive-deps
   const f = freightInfo(pl);
   const fleet = VEHICLES.filter((v) => v.family === family);
 
@@ -145,6 +147,12 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
 
       {plan && (!plan.light || showVehicle) && (
         <>
+          {setStacking && (
+            <label className="check stack-toggle">
+              <input type="checkbox" checked={stackingEnabled()} onChange={(e) => setStacking(e.target.checked)} /> Gerber les colis (caisses et cartons
+              posés sur un colis en bois plus grand et plus lourd, 3 niveaux au plus)
+            </label>
+          )}
           <div className="segmented vehicle-select">
             <button className={vehicle === 'auto' ? 'on' : ''} onClick={() => setVehicle('auto')}>
               Automatique
@@ -180,7 +188,7 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
           ))}
           {plan.unplaced.length > 0 && <div className="banner warn">Colis {plan.unplaced.join(', ')} : trop grand(s) pour ce véhicule.</div>}
           <p className="hint">
-            Vue 3D : véhicule ouvert (paroi avant et toit retirés), chaque colis numéroté comme sur la PL. Vue de dessus : colis posés au sol sans gerbage (hypothèse prudente), les plus lourds vers le fond. Dimensions des véhicules indicatives. Point rouge :
+            Vue 3D : véhicule ouvert (paroi avant et toit retirés), chaque colis numéroté comme sur la PL. Vue de dessus : les plus lourds vers le fond ; « 17 + 18 » = colis 18 gerbé sur le 17. Dimensions des véhicules indicatives. Point rouge :
             centre de gravité <InfoTip k="cog" />.
             {mode === 'sea' && ' En dessous d’environ 15 m³, le groupage (LCL) est souvent plus économique qu’un conteneur complet.'}
           </p>

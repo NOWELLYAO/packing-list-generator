@@ -55,6 +55,8 @@ export interface Placement {
   rotated: boolean;
   load?: LoadHint;
   dimCheck?: 'inferred' | 'estimated';
+  /** hauteur de pose (colis gerbé sur un autre), 0 au sol */
+  z?: number;
 }
 
 export interface Bin {
@@ -156,7 +158,7 @@ function fillOne(v: Vehicle, items: PLPackage[], lambda: number): { placed: Plac
 
 function binStats(v: Vehicle, placed: Placement[]): Bin {
   const usedLength = Math.max(0, ...placed.map((p) => p.x + p.l));
-  const area = placed.reduce((s, p) => s + p.l * p.w, 0);
+  const area = placed.filter((p) => !p.z).reduce((s, p) => s + p.l * p.w, 0);
   const weight = placed.reduce((s, p) => s + p.kg, 0);
   const cx = weight ? placed.reduce((s, p) => s + (p.x + p.l / 2) * p.kg, 0) / weight : 0;
   const cy = weight ? placed.reduce((s, p) => s + (p.y + p.w / 2) * p.kg, 0) / weight : 0;
@@ -171,7 +173,80 @@ function binStats(v: Vehicle, placed: Placement[]): Bin {
   };
 }
 
-function packWith(v: Vehicle, pkgs: PLPackage[], lambda: number): { bins: Bin[]; unplaced: number[] } {
+/* ------------------------------------------------------------------ */
+/* Gerbage : colis posés sur un autre colis plus grand et plus lourd   */
+/* ------------------------------------------------------------------ */
+let stackingOn = true;
+/** réglage de l'utilisateur : gerber les colis (par défaut) ou tout poser au sol */
+export function setStacking(on: boolean) {
+  stackingOn = on;
+}
+export const stackingEnabled = () => stackingOn;
+
+type Stack = PLPackage & { members: PLPackage[] };
+const WOODEN = /crate|caisse|plywood|wood|contreplaq|pal|euro|half|plate|skid|[ée]troite|carton sur/i;
+
+/**
+ * Colonnes de colis : un colis va sur un autre si son emprise tient dans celle du dessous,
+ * s'il est moins lourd, si le colis du dessous est en bois (caisse, palette) et si la hauteur
+ * totale passe la porte. 3 niveaux au plus. Le colis du dessous porte au plus son propre poids.
+ */
+function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
+  const limit = Math.min(v.doorHeight - 5, 230);
+  const stacks: Stack[] = [];
+  const sorted = [...pkgs].sort((a, b) => b.length * b.width - a.length * a.width || b.grossWeight - a.grossWeight);
+  for (const it of sorted) {
+    let best: Stack | null = null;
+    let bestWaste = Infinity;
+    for (const st of stacks) {
+      const top = st.members[st.members.length - 1];
+      if (st.members.length >= 3 || !WOODEN.test(top.type)) continue;
+      if (it.grossWeight > top.grossWeight || st.height + it.height > limit) continue;
+      // le colis du dessous ne porte pas plus que son propre poids
+      if (st.members.slice(1).reduce((s, m) => s + m.grossWeight, 0) + it.grossWeight > st.members[0].grossWeight) continue;
+      const fits = (it.length <= top.length + 0.5 && it.width <= top.width + 0.5) || (it.width <= top.length + 0.5 && it.length <= top.width + 0.5);
+      if (!fits) continue;
+      // pas de petit colis isolé sur une grande palette (instable, mal utilisé) : au moins 35 % de l'emprise
+      const waste = top.length * top.width - it.length * it.width;
+      if (it.length * it.width < top.length * top.width * 0.35) continue;
+      if (waste < bestWaste) {
+        best = st;
+        bestWaste = waste;
+      }
+    }
+    if (best) {
+      best.members.push(it);
+      best.height += it.height;
+      best.grossWeight += it.grossWeight;
+    } else stacks.push({ ...it, members: [it] });
+  }
+  return stacks;
+}
+
+/** une colonne placée → un emplacement par colis, chacun à sa hauteur */
+function expandStacks(placed: Placement[], stacks: Stack[]): Placement[] {
+  const out: Placement[] = [];
+  for (const p of placed) {
+    const st = stacks.find((s) => s.no === p.no);
+    if (!st || st.members.length === 1) {
+      out.push(st ? { ...p, h: st.members[0].height, kg: st.members[0].grossWeight } : p);
+      continue;
+    }
+    let z = 0;
+    for (const m of st.members) {
+      // même orientation que la base si possible
+      const along = p.rotated ? [m.width, m.length] : [m.length, m.width];
+      const [l, w] = along[0] <= p.l + 0.5 && along[1] <= p.w + 0.5 ? along : [along[1], along[0]];
+      out.push({ no: m.no, x: p.x, y: p.y, l, w, h: m.height, kg: m.grossWeight, type: m.type, rotated: l !== m.length, load: m.load, dimCheck: m.dimCheck, z });
+      z += m.height;
+    }
+  }
+  return out;
+}
+
+function packWith(v: Vehicle, pkgs0: PLPackage[], lambda: number): { bins: Bin[]; unplaced: number[] } {
+  const stacks = stackingOn ? buildStacks(v, pkgs0) : null;
+  const pkgs: PLPackage[] = stacks ?? pkgs0;
   // les plus grandes emprises d'abord (puis les plus lourdes) : rangement plus dense et charge vers le fond
   let queue = [...pkgs].sort((a, b) => b.length * b.width - a.length * a.width || b.grossWeight - a.grossWeight);
   const bins: Bin[] = [];
@@ -182,10 +257,12 @@ function packWith(v: Vehicle, pkgs: PLPackage[], lambda: number): { bins: Bin[];
       unplaced.push(...rest.map((r) => r.no));
       break;
     }
-    bins.push(binStats(v, placed));
+    bins.push(binStats(v, stacks ? expandStacks(placed, stacks) : placed));
     queue = rest;
   }
-  return { bins, unplaced };
+  // colonnes non placées : tous leurs colis sont à signaler
+  const all = unplaced.flatMap((no) => stacks?.find((s) => s.no === no)?.members.map((m) => m.no) ?? [no]);
+  return { bins, unplaced: all };
 }
 
 /**
@@ -300,7 +377,8 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
     summary: describe(chosen.bins, false),
     summaryEn: describe(chosen.bins, true),
     bins: chosen.bins,
-    ldm: round(items.reduce((s, p) => s + p.length * p.width, 0) / 240 / 100, 2),
+    // mètres de plancher : emprise au sol réelle (colis gerbés comptés une fois)
+    ldm: round(chosen.bins.reduce((s, b) => s + b.placements.filter((p) => !p.z).reduce((t, p) => t + p.l * p.w, 0), 0) / 240 / 100, 2),
     light,
     unplaced: chosen.unplaced,
     warnings,
@@ -335,7 +413,9 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
   shapes.push({ kind: 'text', at: [X(0) - 10, Y(v.width / 2)], text: lang === 'fr' ? 'FOND' : 'FRONT', size: 7, color: '#7a8596', anchor: 'middle', rotate: -90 });
   // colis : couleur par famille, intensité selon le poids
   const maxKg = Math.max(...bin.placements.map((p) => p.kg), 1);
-  for (const p of bin.placements) {
+  for (const p of bin.placements.filter((q) => !q.z)) {
+    // colis gerbés sur celui-ci : numéros ajoutés (« 17 + 18 »)
+    const above = bin.placements.filter((q) => q.z && q.x === p.x && q.y === p.y).sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
     const fam = familyOf(p.type, { length: p.l, width: p.w, height: p.h });
     // mêmes matières que la vue 3D ; plus le colis est lourd, plus la teinte est soutenue
     const baseC = fam === 'crate' ? CRATE : fam === 'carton' ? KRAFT : fam === 'pallet' ? '#cdb08a' : '#c9d1db';
@@ -349,8 +429,8 @@ export function loadPlanDrawing(bin: Bin, accent: string, lang: 'fr' | 'en', wid
       const r: [number, number][] = [[X(p.x), Y(p.y)], [X(p.x + p.l), Y(p.y)], [X(p.x + p.l), Y(p.y + p.w)], [X(p.x), Y(p.y + p.w)]];
       r.forEach((a, i) => shapes.push({ kind: 'line', a, b: r[(i + 1) % 4], stroke: '#c2410c', sw: 1.2, dash: true }));
     }
-    shapes.push({ kind: 'text', at: [cx, cy + (big ? -1 : 2.5)], text: String(p.no), size: big ? 9 : 7, color: p.dimCheck ? '#c2410c' : INK, anchor: 'middle', bold: true });
-    if (big) shapes.push({ kind: 'text', at: [cx, cy + 8], text: `${(Math.round(p.kg * 100) / 100).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { maximumFractionDigits: 2 })} kg`, size: 6, color: INK, anchor: 'middle' });
+    shapes.push({ kind: 'text', at: [cx, cy + (big ? -1 : 2.5)], text: [p.no, ...above.map((q) => q.no)].join(' + '), size: big ? 9 : 7, color: p.dimCheck ? '#c2410c' : INK, anchor: 'middle', bold: true });
+    if (big) shapes.push({ kind: 'text', at: [cx, cy + 8], text: `${(Math.round((p.kg + above.reduce((t, q) => t + q.kg, 0)) * 100) / 100).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { maximumFractionDigits: 2 })} kg`, size: 6, color: INK, anchor: 'middle' });
   }
   // longueur utilisée
   if (bin.usedLength > 0) {
@@ -387,6 +467,9 @@ const DS = 0.3;
 /** Ordre de dessin (peintre) : de gauche à droite, puis du fond vers l'avant */
 function paintOrder(ps: Placement[]): Placement[] {
   const before = (A: Placement, B: Placement) => {
+    // colonnes : le colis du dessous est dessiné avant celui du dessus
+    const overlap = A.x < B.x + B.l - 0.01 && B.x < A.x + A.l - 0.01 && A.y < B.y + B.w - 0.01 && B.y < A.y + A.w - 0.01;
+    if (overlap) return (A.z ?? 0) < (B.z ?? 0);
     if (A.x + A.l <= B.x + 0.01) return true;
     if (B.x + B.l <= A.x + 0.01) return false;
     return A.y + A.w <= B.y + 0.01;
@@ -420,9 +503,11 @@ export interface View3D {
 export function loadPlan3D(bin0: Bin, lang: 'fr' | 'en', width = 640, logo?: LogoInfo, lift?: LiftAnim, view?: View3D): Picture {
   const W0 = bin0.vehicle.width;
   const bin: Bin = view?.side ? { ...bin0, placements: bin0.placements.map((p) => ({ ...p, y: W0 - p.y - p.w })) } : bin0;
+  // hauteur de pose des colis gerbés
+  const zMap = new Map(bin0.placements.map((p) => [p.no, p.z ?? 0] as const));
   const ds = Math.max(0.1, Math.min(0.75, view?.elev ?? DS));
   const proj = (a: number, b: number, z: number): Pt => [a - b * DC, -z + b * ds];
-  const dzOf = (no: number) => (lift && lift.no === no ? lift.dz : 0);
+  const dzOf = (no: number) => (lift && lift.no === no ? lift.dz : 0) + (zMap.get(no) ?? 0);
   const v = bin.vehicle;
   const L = v.length;
   const W = v.width;
@@ -716,5 +801,5 @@ function insideHull(pt: Pt, hull: Pt[], margin = 0): boolean {
 
 /** ordre réel de chargement : du fond du véhicule vers les portes, puis d'un côté à l'autre */
 export function loadingOrder(bin: Bin): Placement[] {
-  return [...bin.placements].sort((a, b) => a.x - b.x || a.y - b.y);
+  return [...bin.placements].sort((a, b) => a.x - b.x || a.y - b.y || (a.z ?? 0) - (b.z ?? 0));
 }

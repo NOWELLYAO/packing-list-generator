@@ -205,6 +205,8 @@ export interface Settings {
   transportMode?: 'sea' | 'road' | 'air';
   /** tarifs de fret (estimation du coût par mode de transport) */
   freightRates?: FreightRates;
+  /** plan de chargement : gerber les colis (oui par défaut) */
+  stacking?: boolean;
   /** dossier export : vendeur, conditions, devise, prix unitaires */
   exportDoc?: ExportDocSettings;
   /** étiquettes de colis : derniers réglages utilisés */

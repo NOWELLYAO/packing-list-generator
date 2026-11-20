@@ -749,3 +749,4 @@ label.check input[type='checkbox'] { flex: 0 0 auto; width: 1.25rem !important; 
 .perm-group .hint { font-size: 0.75rem; }
 .list-toggle { width: 100%; margin-top: 0.6rem; }
 .list-toggle-up { justify-self: end; margin-left: auto; display: block; margin-bottom: 0.3rem; }
+.stack-toggle { margin: 0.4rem 0 0.6rem; font-size: 0.85rem; }

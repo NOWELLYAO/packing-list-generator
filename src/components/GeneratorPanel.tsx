@@ -547,6 +547,8 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             rates={settings.freightRates}
             setRates={(r) => setSettings({ ...settings, freightRates: r })}
             showCost={can('freight')}
+            stacking={settings.stacking !== false}
+            setStacking={(b) => setSettings({ ...settings, stacking: b })}
             canEditRates={can('freightRates')}
           />
         </>

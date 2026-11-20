@@ -21,6 +21,7 @@ import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
 import HistoryPanel from './components/HistoryPanel';
 import DashboardPanel from './components/DashboardPanel';
+import { setStacking } from './lib/loadPlan';
 import SettingsPanel from './components/SettingsPanel';
 import LoginScreen from './components/LoginScreen';
 import { AccessContext, asInvite, ORG_EVENT, orgKnownLocked, orgStatus, redeemInvite, useAccess, type Perm } from './lib/access';
@@ -151,6 +152,8 @@ export default function App() {
     setHistory([e, ...(same ? history.slice(1) : history)].slice(0, 200));
   };
 
+  // plan de chargement : gerbage selon le réglage (lu par tous les calculs, PDF compris)
+  setStacking(settings.stacking !== false);
   // Contrôle d'accès (si activé sur l'espace de sauvegarde)
   const access = useAccess(cloud.cloud?.code);
   // protection active et utilisateur non administrateur : ses changements de base deviennent des propositions à valider

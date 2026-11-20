@@ -603,3 +603,18 @@ describe('palettes incomplètes et longueur des articles', () => {
     expect(Math.max(pk[0].length, pk[0].width)).toBe(160);
   });
 });
+
+describe('gerbage', () => {
+  it('5 caisses de pompes immergées identiques : gerbées (3 + 2), moins de plancher ; sans gerbage, toutes au sol', async () => {
+    const { planLoad, setStacking } = await import('../lib/loadPlan');
+    const crates = Array.from({ length: 5 }, (_, i) => ({ no: i + 1, type: 'Caisse', length: 280, width: 30, height: 30, volume: 0.25, netWeight: 92, grossWeight: 132, contents: [{ code: 'SP', quantity: 1 }] }));
+    setStacking(true);
+    const st = planLoad(crates as never, 'auto', 'road')!;
+    expect(st.bins[0].placements.filter((p) => p.z).length).toBe(3);
+    setStacking(false);
+    const fl = planLoad(crates as never, 'auto', 'road')!;
+    expect(fl.bins[0].placements.every((p) => !p.z)).toBe(true);
+    expect(st.ldm).toBeLessThan(fl.ldm);
+    setStacking(true);
+  });
+});
