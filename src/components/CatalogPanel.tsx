@@ -295,8 +295,16 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
           </button>
         ) : (
         <div className="item-list">
-          {!q.trim() && filter === 'all' && (
-            <button className="link-btn list-toggle-up" onClick={() => setOpen(false)}>
+          {!q.trim() && (
+            <button
+              className="link-btn list-toggle-up"
+              onClick={() => {
+                // replier depuis n'importe quel filtre : retour à la vue de départ
+                setOpen(false);
+                setFilter('all');
+                setLimit(PAGE);
+              }}
+            >
               Replier la liste ▴
             </button>
           )}
