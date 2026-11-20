@@ -92,7 +92,7 @@ export const PERMS = [
   'generate', 'orderImport', 'freight', 'freightRates',
   'export', 'labels', 'exportDocs', 'shareLink',
   'history', 'dashboard',
-  'catalogView', 'catalogExport', 'catalogEdit', 'import',
+  'catalogView', 'catalogExport', 'catalogBackup', 'catalogEdit', 'catalogLoad', 'catalogRestore', 'catalogClear', 'import',
   'settings', 'users',
 ] as const;
 export type Perm = (typeof PERMS)[number];
@@ -151,7 +151,8 @@ export function readSession(token: string | undefined, secret: string, now = Dat
 /** droits ajoutés après la création des premiers comptes : déduits des droits d'origine tant que l'administrateur n'a pas revu le compte */
 const LEGACY_GRANTS: Record<string, Perm[]> = {
   generate: ['orderImport', 'freight'],
-  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport'],
+  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport', 'catalogBackup'],
+  catalogEdit: ['catalogLoad', 'catalogRestore', 'catalogClear'],
   history: ['dashboard'],
   settings: ['freightRates'],
 };

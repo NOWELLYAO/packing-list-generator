@@ -34,11 +34,16 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
   const can = useCan();
   const canEdit = can('catalogEdit');
   const canExport = can('catalogExport');
+  const canBackup = can('catalogBackup');
+  const canLoad = can('catalogLoad');
+  const canRestore = can('catalogRestore');
+  const canClear = can('catalogClear');
   const backupRef = useRef<HTMLInputElement>(null);
   const lang = useLang();
   const { ask, notify } = useSafety();
   const [snapKey, setSnapKey] = useState(0);
   const snapshots = useMemo(() => listSnapshots(), [snapKey, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasMenu = canExport || canBackup || (canRestore && snapshots.length > 0) || canClear;
 
   const health = useMemo(() => catalogHealth(catalog), [catalog]);
   const filtered = useMemo(() => {
@@ -155,7 +160,7 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               + Article
             </button>
           )}
-          {canEdit && (
+          {canLoad && (
             <button className="btn" onClick={() => backupRef.current?.click()}>
               Charger une base JSON
             </button>
@@ -170,10 +175,10 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
               e.target.value = '';
             }}
           />
-          <details className="menu">
+          {hasMenu && <details className="menu">
             <summary className="btn ghost">Plus…</summary>
             <div className="menu-list" onClick={(e) => ((e.currentTarget.closest('details') as HTMLDetailsElement).open = false)}>
-              {canExport && (
+              {canBackup && (
                 <button onClick={downloadBackup} disabled={!catalog.length}>
                   Sauvegarder la base (JSON)
                 </button>
@@ -183,21 +188,21 @@ export default function CatalogPanel({ catalog, setCatalog, toast }: Props) {
                   Exporter en Excel
                 </button>
               )}
-              {canEdit && snapshots.length > 0 && <div className="menu-sep">Sauvegardes automatiques</div>}
-              {(canEdit ? snapshots : []).map((s) => (
+              {canRestore && snapshots.length > 0 && <div className="menu-sep">Sauvegardes automatiques</div>}
+              {(canRestore ? snapshots : []).map((s) => (
                 <button key={s.id} onClick={() => restoreSnapshot(s.id)}>
                   Restaurer : {s.catalog.length} articles · {new Date(s.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
                   <small className="hint"> ({s.reason})</small>
                 </button>
               ))}
-              {canEdit && <div className="menu-sep danger">Zone sensible</div>}
-              {canEdit && (
+              {canClear && <div className="menu-sep danger">Zone sensible</div>}
+              {canClear && (
                 <button className="danger" disabled={!catalog.length} onClick={() => void clearAll()}>
                   Vider la base…
                 </button>
               )}
             </div>
-          </details>
+          </details>}
         </div>
       </div>
 

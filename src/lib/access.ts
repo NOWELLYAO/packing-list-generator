@@ -18,6 +18,10 @@ export type Perm =
   | 'dashboard'
   | 'catalogView'
   | 'catalogExport'
+  | 'catalogBackup'
+  | 'catalogLoad'
+  | 'catalogRestore'
+  | 'catalogClear'
   | 'catalogEdit'
   | 'import'
   | 'settings'
@@ -27,7 +31,7 @@ export const ALL_PERMS: Perm[] = [
   'generate', 'orderImport', 'freight', 'freightRates',
   'export', 'labels', 'exportDocs', 'shareLink',
   'history', 'dashboard',
-  'catalogView', 'catalogExport', 'catalogEdit', 'import',
+  'catalogView', 'catalogExport', 'catalogBackup', 'catalogEdit', 'catalogLoad', 'catalogRestore', 'catalogClear', 'import',
   'settings', 'users',
 ];
 /** droits regroupés par thème (écran de l'administrateur) */
@@ -37,7 +41,8 @@ export const PERM_GROUPS: { title: string; perms: Perm[] }[] = [
   { title: 'Documents', perms: ['export', 'labels', 'shareLink'] },
   { title: 'Dossier export', perms: ['exportDocs'] },
   { title: 'Suivi', perms: ['history', 'dashboard'] },
-  { title: 'Base d’articles', perms: ['catalogView', 'catalogExport', 'catalogEdit', 'import'] },
+  { title: 'Base d’articles', perms: ['catalogView', 'catalogEdit', 'import'] },
+  { title: 'Sauvegardes de la base', perms: ['catalogExport', 'catalogBackup', 'catalogLoad', 'catalogRestore', 'catalogClear'] },
   { title: 'Application', perms: ['settings'] },
 ];
 /** droit qui n'a de sens qu'avec un autre (ex. modifier les tarifs → voir le coût) */
@@ -50,11 +55,16 @@ export const PERM_NEEDS: Partial<Record<Perm, Perm>> = {
   shareLink: 'generate',
   export: 'generate',
   catalogExport: 'catalogView',
+  catalogBackup: 'catalogView',
+  catalogLoad: 'catalogView',
+  catalogRestore: 'catalogView',
+  catalogClear: 'catalogView',
   catalogEdit: 'catalogView',
 };
 const LEGACY_GRANTS: Partial<Record<Perm, Perm[]>> = {
   generate: ['orderImport', 'freight'],
-  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport'],
+  export: ['labels', 'exportDocs', 'shareLink', 'catalogExport', 'catalogBackup'],
+  catalogEdit: ['catalogLoad', 'catalogRestore', 'catalogClear'],
   history: ['dashboard'],
   settings: ['freightRates'],
 };
@@ -75,7 +85,11 @@ export const PERM_LABEL: Record<Perm, string> = {
   exportDocs: 'Créer le dossier export : facture proforma avec prix, récapitulatif douanier, déclaration d’origine',
   shareLink: 'Créer des liens de suivi pour les clients',
   dashboard: 'Voir le tableau de bord',
-  catalogExport: 'Télécharger la base d’articles (Excel, sauvegarde)',
+  catalogExport: 'Exporter la base en Excel',
+  catalogBackup: 'Sauvegarder la base (fichier JSON)',
+  catalogLoad: 'Charger une base JSON',
+  catalogRestore: 'Restaurer une sauvegarde automatique',
+  catalogClear: 'Vider la base',
   history: "Voir l'historique",
   catalogView: 'Consulter la base d’articles',
   catalogEdit: 'Modifier la base (ajout, correction, suppression)',
@@ -91,7 +105,7 @@ export const PRESETS: { id: string; label: string; role: Role; perms: Perm[]; hi
     id: 'manager',
     label: 'Responsable base',
     role: 'user',
-    perms: ['generate', 'orderImport', 'freight', 'freightRates', 'export', 'labels', 'exportDocs', 'shareLink', 'history', 'dashboard', 'catalogView', 'catalogExport', 'catalogEdit', 'import'],
+    perms: ['generate', 'orderImport', 'freight', 'freightRates', 'export', 'labels', 'exportDocs', 'shareLink', 'history', 'dashboard', 'catalogView', 'catalogExport', 'catalogBackup', 'catalogEdit', 'catalogLoad', 'catalogRestore', 'import'],
     hint: 'Tout sauf les réglages et les accès',
   },
   {
