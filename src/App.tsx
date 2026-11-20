@@ -20,15 +20,17 @@ import ImportPanel from './components/ImportPanel';
 import CatalogPanel from './components/CatalogPanel';
 import GeneratorPanel from './components/GeneratorPanel';
 import HistoryPanel from './components/HistoryPanel';
+import DashboardPanel from './components/DashboardPanel';
 import SettingsPanel from './components/SettingsPanel';
 import LoginScreen from './components/LoginScreen';
 import { AccessContext, asInvite, ORG_EVENT, orgKnownLocked, orgStatus, redeemInvite, useAccess, type Perm } from './lib/access';
 import JoinScreen from './components/JoinScreen';
 
-type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'review' | 'settings';
+type Tab = 'generate' | 'catalog' | 'import' | 'history' | 'dashboard' | 'review' | 'settings';
 
 const ICONS: Record<Tab, string> = {
   generate: 'M9 5h10M9 12h10M9 19h10M4.5 5h.01M4.5 12h.01M4.5 19h.01',
+  dashboard: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   catalog: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   import: 'M12 4v11m0 0l-4-4m4 4l4-4M5 20h14',
   history: 'M12 7v5l3 2M3 12a9 9 0 103-6.7M3 4v4h4',
@@ -170,16 +172,17 @@ export default function App() {
     lastProposal.current = Date.now();
   };
   const myPending = reviewMode ? pending.filter((p) => p.by.id === access.session!.user.id) : [];
-  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', review: 'users' };
+  const NEED: Partial<Record<Tab, Perm>> = { generate: 'generate', catalog: 'catalogView', import: 'import', history: 'history', dashboard: 'history', review: 'users' };
   const tabs = (
     [
       { id: 'generate', label: 'Nouvelle PL', badge: lines.length || undefined },
       { id: 'catalog', label: 'Articles' },
       { id: 'import', label: 'Importer' },
       { id: 'history', label: 'Historique' },
+      { id: 'dashboard', label: 'Tableau de bord', short: 'Stats' },
       { id: 'review', label: 'Validation', badge: pending.length || undefined },
       { id: 'settings', label: 'Réglages' },
-    ] as { id: Tab; label: string; badge?: number }[]
+    ] as { id: Tab; label: string; short?: string; badge?: number }[]
   ).filter((t) => (!NEED[t.id] || access.can(NEED[t.id]!)) && (t.id !== 'review' || access.enabled));
   // onglet devenu interdit (connexion avec un autre profil) → premier onglet permis
   useEffect(() => {
@@ -267,7 +270,8 @@ export default function App() {
               <svg viewBox="0 0 24 24" aria-hidden>
                 <path d={ICONS[t.id]} />
               </svg>
-              <span>{t.label}</span>
+              <span className={t.short ? 'nav-long' : undefined}>{t.label}</span>
+              {t.short && <span className="nav-short">{t.short}</span>}
               {t.badge ? <em className="badge">{t.badge}</em> : null}
             </button>
           ))}
@@ -361,6 +365,7 @@ export default function App() {
             setConsolidate={setConsolidate}
             onSaved={onSaved}
             toast={toast}
+            shareSpace={cloud.cloud?.code}
           />
         )}
         {tab === 'catalog' && myPending.length > 0 && (
@@ -387,6 +392,11 @@ export default function App() {
         )}
         {tab === 'import' && (
           <ImportPanel onImport={onImport} getCatalog={() => latest.current} onAccuracy={(r) => setAccuracy((a) => [r, ...a].slice(0, 300))} />
+        )}
+        {tab === 'dashboard' && (
+          <SafeBoundary label="Le tableau de bord">
+            <DashboardPanel history={history} catalog={catalog} accuracy={accuracy} accent={settings.accent || DEFAULT_ACCENT} />
+          </SafeBoundary>
         )}
         {tab === 'history' && (
           <HistoryPanel

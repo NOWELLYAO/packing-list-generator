@@ -16,6 +16,7 @@ import InfoTip from './InfoTip';
 import LabelsDialog from './LabelsDialog';
 import OrderImportDialog from './OrderImportDialog';
 import ExportDocsDialog from './ExportDocsDialog';
+import ShareLinkDialog from './ShareLinkDialog';
 import type { OrderLine } from '../lib/orderImport';
 import { useLogoInfo } from '../lib/useLogoInfo';
 import type { GlossaryKey } from '../lib/glossary';
@@ -38,6 +39,8 @@ interface Props {
   setConsolidate: (b: boolean) => void;
   onSaved: (e: HistoryEntry) => void;
   toast: (msg: string) => void;
+  /** espace de sauvegarde en ligne (nécessaire au lien client) */
+  shareSpace?: string;
 }
 
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -88,7 +91,7 @@ function PackingChip({ pl, code, packing, lang }: { pl: PackingList | null; code
   );
 }
 
-export default function GeneratorPanel({ catalog, setCatalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast }: Props) {
+export default function GeneratorPanel({ catalog, setCatalog, settings, setSettings, lines, setLines, consolidate, setConsolidate, onSaved, toast, shareSpace }: Props) {
   const can = useCan();
   const canEdit = can('catalogEdit');
   const canExport = can('export');
@@ -211,6 +214,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
 
   const [showLabels, setShowLabels] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const logoInfo = useLogoInfo(settings.logo);
   const run = async (label: string, fn: () => Promise<unknown>) => {
     if (!pl) return;
@@ -476,6 +480,14 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               <button className="btn" disabled={!!busy} onClick={() => setShowExport(true)} title="Facture proforma, récapitulatif douanier, déclaration d’origine">
                 Dossier export
               </button>
+              <button
+                className="btn"
+                disabled={!!busy || !shareSpace}
+                onClick={() => setShowShare(true)}
+                title={shareSpace ? 'Lien en lecture seule pour votre client (PL, plan 3D, PDF)' : 'Activez la sauvegarde en ligne (Réglages) pour créer un lien client'}
+              >
+                Lien client
+              </button>
               </>)}
             </div>
           </div>
@@ -528,6 +540,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         </>
       )}
 
+      {showShare && pl && shareSpace && <ShareLinkDialog pl={pl} settings={settings} space={shareSpace} onClose={() => setShowShare(false)} />}
       {showExport && pl && (
         <ExportDocsDialog
           pl={pl}

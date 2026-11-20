@@ -42,6 +42,10 @@ const VERSIONS = 10;
 const ORG_KEY = 'plgen:org';
 const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-Z0-9-]{12,64}$/;
+const SHARE_LEN = 20;
+const SHARE_RE = /^[A-Z0-9]{20}$/;
+/** taille maximale d'un instantané partagé (PL + logo) */
+const SHARE_MAX = 600_000;
 
 export function storeConfig(env: Record<string, string | undefined>) {
   let url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
@@ -172,6 +176,13 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
         const [org] = await redis(cfg, fetcher, [['GET', ORG_KEY]]);
         return { status: 200, body: { locked: !!org } };
       }
+      // lien de suivi client : lecture publique d'un instantané de PL (identifiant aléatoire de 20 caractères)
+      if (b0.action === 'shared') {
+        const id = String(b0.id ?? '');
+        if (!SHARE_RE.test(id)) return { status: 400, body: { error: 'bad_share' } };
+        const [snap] = await redis(cfg, fetcher, [['GET', `plgen:share:${id}`]]);
+        return snap ? { status: 200, body: { snapshot: JSON.parse(snap as string) } } : { status: 404, body: { error: 'share_expired' } };
+      }
       if (b0.action === 'redeem') {
         const inv = String(b0.invite ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (!/^[A-Z0-9]{6}$/.test(inv)) return { status: 400, body: { error: 'bad_invite' } };
@@ -206,6 +217,16 @@ export async function handle(req: Req, env: Record<string, string | undefined>, 
       const saveAuth = (a: AuthRec) => redis(cfg, fetcher, [['SET', `${key}:auth`, JSON.stringify(a)]]);
       const issue = (u: AuthUser) => ({ token: signSession({ u: u.id, n: u.name, r: u.role, p: u.perms, exp: Date.now() + SESSION_MS }, secret), user: publicUser(u) });
       if (action === 'status') return { status: 200, body: { enabled: !!auth, users: (auth?.users ?? []).filter((u) => !u.disabled).map((u) => ({ id: u.id, name: u.name })) } };
+      if (action === 'share') {
+        // protection active : il faut être connecté avec le droit d'exporter
+        if (auth && !(me && me.p.includes('export'))) return { status: me ? 403 : 401, body: { error: me ? 'forbidden' : 'login' } };
+        const snap = JSON.stringify(body.snapshot ?? null);
+        if (snap === 'null' || snap.length > SHARE_MAX) return { status: 413, body: { error: 'too_large' } };
+        const id = Array.from(randomBytes(SHARE_LEN), (b) => INVITE_ALPHABET[b % INVITE_ALPHABET.length]).join('');
+        const days = Math.min(365, Math.max(1, Number(body.days) || 90));
+        await redis(cfg, fetcher, [['SET', `plgen:share:${id}`, snap, 'EX', days * 86400]]);
+        return { status: 200, body: { id, expiresIn: days * 86400 } };
+      }
       if (action === 'setup') {
         if (auth) return { status: 409, body: { error: 'exists' } };
         const name = String(body.name ?? '').trim().slice(0, 40);

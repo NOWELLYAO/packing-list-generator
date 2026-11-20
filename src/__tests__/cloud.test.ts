@@ -201,4 +201,17 @@ describe('invitation courte et application réservée à l’entreprise', () => 
     // l'espace de l'entreprise fonctionne toujours
     expect((await handle({ method: 'GET', headers: { ...h, 'x-plgen-token': tok } }, env, fetcher)).status).toBe(404);
   });
+  it('lien de suivi : créé avec le droit d’exporter, lu sans compte, refusé sans connexion', async () => {
+    const { fetcher } = fakeRedis();
+    const f = fetcher as never;
+    const tok = ((await post(f, { action: 'setup', name: 'Admin', pin: '1234' })).body as { token: string }).token;
+    expect((await post(f, { action: 'share', snapshot: { pl: 1 } })).status).toBe(401);
+    const r = await post(f, { action: 'share', snapshot: { pl: { reference: 'X' } } }, tok);
+    const id = (r.body as { id: string }).id;
+    expect(id).toMatch(/^[A-Z0-9]{20}$/);
+    const g = await handle({ method: 'POST', headers: {}, body: { action: 'shared', id } }, env, fetcher);
+    expect((g.body as { snapshot: { pl: { reference: string } } }).snapshot.pl.reference).toBe('X');
+    expect((await handle({ method: 'POST', headers: {}, body: { action: 'shared', id: 'A'.repeat(20) } }, env, fetcher)).status).toBe(404);
+    expect((await handle({ method: 'POST', headers: {}, body: { action: 'shared', id: '../x' } }, env, fetcher)).status).toBe(400);
+  });
 });

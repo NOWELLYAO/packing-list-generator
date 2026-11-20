@@ -238,3 +238,23 @@ export const asInvite = (s: string) => {
   const c = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
   return c.length === 6 ? c : null;
 };
+
+/* ------------------------------------------------------------------ */
+/* Lien de suivi client                                                */
+/* ------------------------------------------------------------------ */
+export interface SharedSnapshot {
+  v: 1;
+  createdAt: string;
+  pl: import('../types').PackingList;
+  company: string;
+  logo: string;
+  accent: string;
+  lang: 'fr' | 'en';
+  transportMode: 'sea' | 'road' | 'air';
+}
+/** publie un instantané de la PL (lecture seule) ; renvoie le lien à envoyer au client */
+export async function createShareLink(space: string, snapshot: SharedSnapshot, days = 90): Promise<string> {
+  const r = await post<{ id: string }>(space, { action: 'share', snapshot, days });
+  return `${window.location.origin}/#s=${r.id}`;
+}
+export const fetchShared = (id: string) => postNoSpace<{ snapshot: SharedSnapshot }>({ action: 'shared', id }).then((r) => r.snapshot);
