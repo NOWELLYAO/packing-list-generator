@@ -335,6 +335,11 @@ function piecesFor(item: CatalogItem, qty: number, lineIdx: number): Piece[] {
   } else if (hasDims && isPalletLike(item)) {
     // une palette vide pèse au moins 15 kg (120 × 80) ou 8 kg (demi-palette) : brut = net est impossible
     palletFloor = item.length * item.width >= 9000 ? 15 : 8;
+  } else if (hasDims && item.grossWeightPerUnit - item.netWeightPerUnit <= item.netWeightPerUnit * 0.005) {
+    // fiche SAP où brut = net (poids de l'emballage absent) : caisse bois ≈ 3 kg + 45 kg/m³, carton ≈ 0,3 kg + 8 kg/m³
+    const v = (item.length * item.width * item.height) / 1e6;
+    if (/caisse|crate|box|wood/i.test(item.packageType)) palletFloor = round(3 + v * 45, 1);
+    else if (/carton|^\d/i.test(item.packageType) && item.netWeightPerUnit * perPkg >= 1) palletFloor = round(0.3 + v * 8, 1);
   }
   const mk = (q: number, h: number, basis: Piece['basis'], volume: number, packTare: number): Piece => ({
     lineIdx,
