@@ -153,7 +153,8 @@ export default function App() {
   };
 
   // plan de chargement : gerbage selon le réglage (lu par tous les calculs, PDF compris)
-  setStacking(settings.stacking !== false);
+  // (étiquettes « ne pas gerber » choisies : le plan ne gerbe pas non plus)
+  setStacking(settings.stacking !== false && !settings.labels?.noStack);
   // Contrôle d'accès (si activé sur l'espace de sauvegarde)
   const access = useAccess(cloud.cloud?.code);
   // protection active et utilisateur non administrateur : ses changements de base deviennent des propositions à valider

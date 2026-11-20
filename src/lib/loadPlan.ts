@@ -184,11 +184,18 @@ export function setStacking(on: boolean) {
 export const stackingEnabled = () => stackingOn;
 
 type Stack = PLPackage & { members: PLPackage[] };
-const WOODEN = /crate|caisse|plywood|wood|contreplaq|pal|euro|half|plate|skid|[ée]troite|carton sur/i;
+/**
+ * Dessus rigide : caisse bois ou contreplaqué, palette à plateau (PALPLATE : le plateau est là pour gerber).
+ * Pas une palette de cartons (ils s'écrasent), ni une palette de pompes couchées, ni une pompe verticale
+ * sur palette étroite, ni un carton sur palette.
+ */
+const RIGID_TOP = /crate|caisse|plywood|wood|contreplaq|plate|plateau/i;
+const NOT_RIGID = /group|[ée]troite|carton/i;
+const rigidTop = (t: string) => RIGID_TOP.test(t) && !NOT_RIGID.test(t);
 
 /**
  * Colonnes de colis : un colis va sur un autre si son emprise tient dans celle du dessous,
- * s'il est moins lourd, si le colis du dessous est en bois (caisse, palette) et si la hauteur
+ * s'il est moins lourd, si le colis du dessous a un dessus rigide (caisse, palette à plateau) et si la hauteur
  * totale passe la porte. 3 niveaux au plus. Le colis du dessous porte au plus deux fois son poids.
  */
 function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
@@ -200,7 +207,7 @@ function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
     let bestWaste = Infinity;
     for (const st of stacks) {
       const top = st.members[st.members.length - 1];
-      if (st.members.length >= 3 || !WOODEN.test(top.type)) continue;
+      if (st.members.length >= 3 || !rigidTop(top.type)) continue;
       if (it.grossWeight > top.grossWeight || st.height + it.height > limit) continue;
       // le colis du dessous porte au plus deux fois son propre poids (3 caisses identiques gerbées : oui)
       if (st.members.slice(1).reduce((s, m) => s + m.grossWeight, 0) + it.grossWeight > 2 * st.members[0].grossWeight) continue;
