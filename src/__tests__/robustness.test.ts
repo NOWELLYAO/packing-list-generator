@@ -618,3 +618,16 @@ describe('gerbage', () => {
     setStacking(true);
   });
 });
+
+describe('gerbable colis par colis', () => {
+  it('une caisse marquée « non gerbable » ne reçoit rien ; une palette de cartons marquée « gerbable » reçoit un colis', async () => {
+    const { planLoad, setStacking } = await import('../lib/loadPlan');
+    setStacking(true);
+    const crate = (no: number, stackable?: boolean) => ({ no, type: 'Caisse', length: 280, width: 30, height: 30, volume: 0.25, netWeight: 92, grossWeight: 132, contents: [{ code: 'SP', quantity: 1 }], stackable });
+    const a = planLoad([crate(1, false), crate(2, false)] as never, 'auto', 'road')!;
+    expect(a.bins[0].placements.some((p) => p.z)).toBe(false);
+    const pal = (no: number, kg: number, stackable?: boolean) => ({ no, type: 'Palette groupée', length: 120, width: 80, height: 50, volume: 0.48, netWeight: kg - 25, grossWeight: kg, contents: [{ code: 'X' + no, quantity: 1 }], stackable });
+    expect(planLoad([pal(1, 300), pal(2, 200)] as never, 'auto', 'road')!.bins[0].placements.some((p) => p.z)).toBe(false);
+    expect(planLoad([pal(1, 300, true), pal(2, 200)] as never, 'auto', 'road')!.bins[0].placements.some((p) => p.z)).toBe(true);
+  });
+});

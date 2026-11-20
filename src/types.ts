@@ -160,6 +160,8 @@ export interface PLPackage {
   load?: LoadHint;
   /** dimensions à vérifier : 'inferred' = reconstituées à partir du volume, 'estimated' = calculées (jamais expédié ainsi) */
   dimCheck?: 'inferred' | 'estimated';
+  /** gerbable (un colis peut être posé dessus) : choix de l'utilisateur ; absent = règle automatique */
+  stackable?: boolean;
 }
 
 export interface LoadHint {

@@ -23,6 +23,7 @@ import type { GlossaryKey } from '../lib/glossary';
 import { DEFAULT_ACCENT } from '../lib/exporters';
 import { dimsText, packLabel } from '../lib/i18n';
 import { useSafety } from '../lib/safety';
+import { isStackable, stackKey } from '../lib/loadPlan';
 import { usePersistent } from '../lib/storage';
 import { isPieceUnit } from '../lib/validate';
 import { hasError, itemIssues } from '../lib/quality';
@@ -154,7 +155,13 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
     return { items, dupOf };
   }, [catalog, lines]);
   // les sections lourdes (schémas, plan) suivent avec un léger différé : la saisie reste fluide
-  const deferredPl = useDeferredValue(pl);
+  // colis gerbables : choix de l'utilisateur, colis par colis (sinon la règle automatique)
+  const [stackOv, setStackOv] = usePersistent<Record<string, boolean>>('stackOverrides', {});
+  const plStacked = useMemo(
+    () => (pl ? { ...pl, packages: pl.packages.map((p) => (stackKey(p) in stackOv ? { ...p, stackable: stackOv[stackKey(p)] } : p)) } : pl),
+    [pl, stackOv],
+  );
+  const deferredPl = useDeferredValue(plStacked);
 
   const addItem = (code: string, pn: string, quantity = 1) => {
     const existing = lines.find((l) => (code && l.code === code) || (pn && l.pn === pn && l.pn));
@@ -469,13 +476,13 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
                 ))}
               </div>
               {canExport && (<>
-              <button className="btn primary" disabled={!!busy} onClick={() => run('pdf', () => exportPackingListPdf(pl, settings))}>
+              <button className="btn primary" disabled={!!busy} onClick={() => run('pdf', () => exportPackingListPdf(plStacked ?? pl, settings))}>
                 {busy === 'pdf' ? '…' : 'PDF'}
               </button>
-              <button className="btn" disabled={!!busy} onClick={() => run('xlsx', () => exportPackingListXlsx(pl, settings))}>
+              <button className="btn" disabled={!!busy} onClick={() => run('xlsx', () => exportPackingListXlsx(plStacked ?? pl, settings))}>
                 {busy === 'xlsx' ? '…' : 'Excel'}
               </button>
-              <button className="btn" disabled={!!busy} onClick={() => run('share', () => sharePackingListPdf(pl, settings))}>
+              <button className="btn" disabled={!!busy} onClick={() => run('share', () => sharePackingListPdf(plStacked ?? pl, settings))}>
                 {busy === 'share' ? '…' : 'Partager'}
               </button>
               </>)}
@@ -537,9 +544,24 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
             </div>
           </div>
 
-          {deferredPl && <PackingListView pl={deferredPl} accent={settings.accent || DEFAULT_ACCENT} logo={logoInfo} />}
+          {deferredPl && (
+            <PackingListView
+              pl={deferredPl}
+              accent={settings.accent || DEFAULT_ACCENT}
+              logo={logoInfo}
+              stacking={settings.stacking !== false && !settings.labels?.noStack}
+              onToggleStack={(p, b) => {
+                const k = stackKey(p);
+                const next = { ...stackOv };
+                // revenir à la règle automatique : on n'enregistre rien
+                if (b === isStackable({ type: p.type })) delete next[k];
+                else next[k] = b;
+                setStackOv(next);
+              }}
+            />
+          )}
           <TransportPanel
-            pl={deferredPl ?? pl}
+            pl={deferredPl ?? plStacked ?? pl}
             accent={settings.accent || DEFAULT_ACCENT}
             logo={logoInfo}
             mode={settings.transportMode ?? 'sea'}
@@ -554,10 +576,10 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         </>
       )}
 
-      {showShare && pl && shareSpace && <ShareLinkDialog pl={pl} settings={settings} space={shareSpace} onClose={() => setShowShare(false)} />}
+      {showShare && pl && shareSpace && <ShareLinkDialog pl={plStacked ?? pl} settings={settings} space={shareSpace} onClose={() => setShowShare(false)} />}
       {showExport && pl && (
         <ExportDocsDialog
-          pl={pl}
+          pl={plStacked ?? pl}
           catalog={catalog}
           settings={settings}
           setSettings={setSettings}
@@ -567,7 +589,7 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
         />
       )}
       {order && <OrderImportDialog fileName={order.fileName} lines={order.lines} onAdd={addOrder} onClose={() => setOrder(null)} />}
-      {showLabels && pl && <LabelsDialog pl={pl} settings={settings} setSettings={setSettings} onClose={() => setShowLabels(false)} />}
+      {showLabels && pl && <LabelsDialog pl={plStacked ?? pl} settings={settings} setSettings={setSettings} onClose={() => setShowLabels(false)} />}
       {quick && (
         <QuickItemForm
           item={quick.item}

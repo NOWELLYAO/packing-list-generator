@@ -1,4 +1,5 @@
-import type { PackingList } from '../types';
+import type { PackingList, PLPackage } from '../types';
+import { isStackable } from '../lib/loadPlan';
 import { packLabel, useLang } from '../lib/i18n';
 import { formatNos, groupIdentical, packageDrawing, refScale, scaleStrip, type LogoInfo } from '../lib/drawing';
 import Drawing from './Drawing';
@@ -7,7 +8,20 @@ import InfoTip from './InfoTip';
 const fmt = (n: number, d = 2) => n.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /** Aperçu du colisage et des articles (mis à jour en direct) */
-export default function PackingListView({ pl, accent, logo }: { pl: PackingList; accent: string; logo?: LogoInfo }) {
+export default function PackingListView({
+  pl,
+  accent,
+  logo,
+  stacking,
+  onToggleStack,
+}: {
+  pl: PackingList;
+  accent: string;
+  logo?: LogoInfo;
+  /** gerbage activé : case « gerbable » sur chaque colis */
+  stacking?: boolean;
+  onToggleStack?: (p: PLPackage, stackable: boolean) => void;
+}) {
   const descOf = new Map(pl.lines.map((l) => [l.code, l.description] as const));
   const lang = useLang();
   const labels = { cm: 'cm', kg: 'kg', packageWord: lang === 'fr' ? 'Colis' : 'Package', locale: lang === 'fr' ? 'fr-FR' : 'en-GB' };
@@ -73,6 +87,14 @@ export default function PackingListView({ pl, accent, logo }: { pl: PackingList;
                 />
               ) : (
                 <div className="pkg-dims">Dimensions inconnues</div>
+              )}
+              {onToggleStack && stacking && (
+                <label className="check pkg-stack" title="Un autre colis peut être posé sur celui-ci dans le plan de chargement">
+                  <input type="checkbox" checked={isStackable(p)} onChange={(e) => onToggleStack(p, e.target.checked)} />
+                  Gerbable{nos.length > 1 ? ' (tous ces colis)' : ''}
+                  {p.stackable === undefined && <small className="hint"> · {isStackable(p) ? 'dessus rigide' : 'dessus non porteur'}</small>}
+                  {p.stackable !== undefined && <small className="hint"> · votre choix</small>}
+                </label>
               )}
               <div className="pkg-stats">
                 <span>

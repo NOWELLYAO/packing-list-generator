@@ -192,6 +192,11 @@ type Stack = PLPackage & { members: PLPackage[] };
 const RIGID_TOP = /crate|caisse|plywood|wood|contreplaq|plate|plateau/i;
 const NOT_RIGID = /group|[ée]troite|carton/i;
 const rigidTop = (t: string) => RIGID_TOP.test(t) && !NOT_RIGID.test(t);
+/** gerbable : choix de l'utilisateur s'il existe, sinon la règle (dessus rigide) */
+export const isStackable = (p: { type: string; stackable?: boolean }) => p.stackable ?? rigidTop(p.type);
+/** identifiant stable d'un colis (le même colis garde son choix « gerbable » quand la PL est recalculée) */
+export const stackKey = (p: { type: string; length: number; width: number; height: number; contents: { code: string; quantity: number }[] }) =>
+  `${p.type}|${Math.round(p.length)}x${Math.round(p.width)}x${Math.round(p.height)}|${p.contents.map((c) => `${c.code}:${c.quantity}`).join(',')}`;
 
 /**
  * Colonnes de colis : un colis va sur un autre si son emprise tient dans celle du dessous,
@@ -207,7 +212,7 @@ function buildStacks(v: Vehicle, pkgs: PLPackage[]): Stack[] {
     let bestWaste = Infinity;
     for (const st of stacks) {
       const top = st.members[st.members.length - 1];
-      if (st.members.length >= 3 || !rigidTop(top.type)) continue;
+      if (st.members.length >= 3 || !isStackable(top)) continue;
       if (it.grossWeight > top.grossWeight || st.height + it.height > limit) continue;
       // le colis du dessous porte au plus deux fois son propre poids (3 caisses identiques gerbées : oui)
       if (st.members.slice(1).reduce((s, m) => s + m.grossWeight, 0) + it.grossWeight > 2 * st.members[0].grossWeight) continue;
