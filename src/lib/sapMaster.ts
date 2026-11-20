@@ -101,7 +101,7 @@ export function parseSapMaster(tables: ParsedTable[]): SapMasterResult | null {
           qtyPerPackage: qty,
           // pièce seule : empreinte de palette → palette ; lourde ou très longue (pompe immergée…) → caisse
           packageType:
-            pallet || (qty === 1 && Math.max(L, W) >= 100 && Math.min(L, W) >= 60) ? 'Palette' : qty === 1 && (gross >= 60 || Math.max(L, W, H) >= 150) ? 'Caisse' : 'Carton',
+            pallet || (qty === 1 && Math.max(L, W) >= 100 && Math.min(L, W) >= 60) ? 'Palette' : qty === 1 && gross >= 50 ? 'Caisse' : 'Carton',
           length: Math.max(L, W),
           width: Math.min(L, W),
           height: H,

@@ -70,6 +70,8 @@ export function adaptSapPacking(item: CatalogItem, fam: FamilyIndex, strategy: '
   } else {
     out = vs.flatMap((v) => {
       if (!isSap(v) || !hasDims(v)) return [v];
+      // fiche SAP classée « caisse » à l'import pour sa seule longueur : sous 50 kg (pompe 4" en tube), Grundfos l'envoie en carton
+      if (/caisse/i.test(v.packageType) && v.grossWeightPerUnit * v.qtyPerPackage < 50) v = { ...v, packageType: 'Carton' };
       // 1) l'article lui-même a déjà été expédié avec cette quantité
       const same = own.find((o) => o.qtyPerPackage === v.qtyPerPackage);
       // caisse ou palette réellement expédiée : c'est elle qui fait foi (la fiche SAP décrit l'article, pas le colis)
@@ -106,6 +108,8 @@ export function adaptSapPacking(item: CatalogItem, fam: FamilyIndex, strategy: '
       return [v];
     });
   }
+  // pompe immergée de moins de 50 kg (4" en tube) : Grundfos l'envoie en carton, même si sa famille part en caisse
+  out = out.map((v) => (isSap(v) && /caisse/i.test(v.packageType) && v.grossWeightPerUnit * v.qtyPerPackage < 50 ? { ...v, packageType: 'Carton' } : v));
   if (!out.length) return item;
   const pref = preferredVariant(out);
   const res: CatalogItem = { ...applyVariant({ ...item, variants: out }, pref), variants: out };

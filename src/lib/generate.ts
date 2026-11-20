@@ -782,7 +782,9 @@ export function generatePackingList(
     const medium = new Map<number, Piece[]>();
     for (const p of pool) {
       const d = sorted3(p.l, p.w, p.h);
-      if (p.fromSap && p.basis === 'reference' && p.qty === 1 && p.gross >= 20 && p.gross <= 300 && d[0] <= 250 && !realPallet(p)) medium.set(p.lineIdx, [...(medium.get(p.lineIdx) ?? []), p]);
+      // pompe immergée de 50 kg et plus : Grundfos l'expédie toujours seule dans sa caisse (vos PL : SP 4" lourdes et SP 6")
+      const longHeavy = d[0] >= 150 && d[1] <= 45 && p.gross >= 50;
+      if (p.fromSap && p.basis === 'reference' && p.qty === 1 && p.gross >= 20 && p.gross <= 300 && d[0] <= 250 && !realPallet(p) && !longHeavy) medium.set(p.lineIdx, [...(medium.get(p.lineIdx) ?? []), p]);
     }
     for (const list of medium.values()) {
       if (list.length < 2) continue;
@@ -791,7 +793,8 @@ export function generatePackingList(
     }
     // 2 ou 3 cartons d'un même appareil partent tels quels ; au-delà, réunis sur une palette
     const byLine = new Map<number, Piece[]>();
-    for (const p of boxed) byLine.set(p.lineIdx, [...(byLine.get(p.lineIdx) ?? []), p]);
+    // (seulement les colis pas déjà regroupés ci-dessus : un colis ne doit jamais compter deux fois)
+    for (const p of boxed) if (pool.includes(p)) byLine.set(p.lineIdx, [...(byLine.get(p.lineIdx) ?? []), p]);
     for (const list of byLine.values()) {
       if (list.length <= 3) continue;
       groups.push({ pieces: list, source: 'rule' });
@@ -839,13 +842,16 @@ export function generatePackingList(
     }
     if (p.width > p.length) [p.length, p.width] = [p.width, p.length];
     // « Box » de Grundfos pour un colis lourd ou très long (pompe immergée de 3,5 m, 114 kg) : caisse en bois, pas un carton
-    if (/^box$/i.test(p.type.trim()) && (p.grossWeight >= 60 || p.length >= 150)) p.type = 'Caisse';
+    if (/^box$/i.test(p.type.trim()) && p.grossWeight >= 50) p.type = 'Caisse';
+    // « carton » de plus de 1,50 m et 60 kg (pompe immergée) : c'est une caisse
+    if (/carton/i.test(p.type) && p.grossWeight >= 60 && p.length >= 150) p.type = 'Caisse';
     // « palette » de 30 cm de large sous une pompe de 3,5 m : c'est un berceau en bois, présenté comme une caisse
-    if (PALLET_RE.test(p.type) && p.length >= 150 && p.width < 50) p.type = 'Caisse';
+    if (PALLET_RE.test(p.type) && p.length >= 150 && p.width < 50) p.type = p.grossWeight >= 50 ? 'Caisse' : 'Carton';
     // « Pallet » / « EURO PAL » de moins de 80 × 50 cm (et moins de 1,5 m) : c'est un carton, le libellé suit
     if (PALLET_RE.test(p.type) && !/plywood/i.test(p.type) && p.length > 0 && (p.width < 30 || ((p.length < 80 || p.width < 50) && p.length < 150)))
       // lourd ou très long (pompe immergée sur berceau de 29 cm, pompe de 120 kg) : c'est une caisse / un berceau en bois, pas un carton
-      p.type = p.grossWeight >= 60 || p.length >= 150 ? 'Caisse' : 'Carton';
+      // vos PL : pompes immergées de 63 à 158 kg en caisse bois ; tubes et petits colis de 21 à 49 kg en carton
+      p.type = p.grossWeight >= 50 ? 'Caisse' : 'Carton';
   }
 
   // Dimensions à vérifier : reconstituées à partir du volume, ou calculées pour une quantité jamais expédiée ainsi

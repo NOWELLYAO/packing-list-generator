@@ -525,3 +525,23 @@ describe('normes de manutention (proposition optimisée)', () => {
     expect(g.type).toBe('Carton');
   });
 });
+
+describe('jamais deux fois le même colis', () => {
+  it('4 pompes de 39 kg connues par SAP → une seule palette de 4, poids total = 4 pompes + palette', () => {
+    const S = 'Fiche article fabricant (saisie)';
+    const v = { qtyPerPackage: 1, packageType: 'Caisse', length: 160, width: 19, height: 18, volumePerPackage: 0.055, netWeightPerUnit: 35, grossWeightPerUnit: 39, mixed: false, source: S, count: 10 };
+    const P = { ...v, id: 'sp', code: 'SPX-7', pn: 'SPX-7', description: 'SPX18- 7 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [v] };
+    for (const strategy of ['smart', 'grundfos'] as const) {
+      const pk = generatePackingList([P], [req('SPX-7', 4)], { consolidate: true, strategy }).packages;
+      expect(pk.reduce((t, p) => t + p.contents.reduce((u, c) => u + c.quantity, 0), 0)).toBe(4);
+    }
+  });
+  it('pompe immergée lourde : une caisse chacune, jamais palettisées ensemble', () => {
+    const S = 'Fiche article fabricant (saisie)';
+    const v = { qtyPerPackage: 1, packageType: 'Caisse', length: 219, width: 29, height: 37, volumePerPackage: 0.235, netWeightPerUnit: 80, grossWeightPerUnit: 89, mixed: false, source: S, count: 10 };
+    const P = { ...v, id: 'sp6', code: 'SPX-8', pn: 'SPX-8', description: 'SPX32- 8 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [v] };
+    const pk = generatePackingList([P], [req('SPX-8', 4)], { consolidate: true }).packages;
+    expect(pk).toHaveLength(4);
+    expect(pk.every((p) => p.type === 'Caisse')).toBe(true);
+  });
+});
