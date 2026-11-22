@@ -48,11 +48,13 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
     if (!(v > 0)) errors[k] = 'Obligatoire';
     else if (v > 1500) errors[k] = 'Max 1500 cm';
   }
-  if (!(net > 0)) errors.net = 'Obligatoire';
-  if (f.gross && !(gross > 0)) errors.gross = 'Nombre invalide';
+  // le brut (ce qui part chez le client) est obligatoire ; le net, s'il manque, est pris égal au brut
+  if (!(gross > 0)) errors.gross = 'Obligatoire';
+  if (f.net && !(net > 0)) errors.net = 'Nombre invalide';
   if (gross > 0 && net > 0 && gross < net) errors.gross = 'Le brut doit être ≥ au net';
   const valid = Object.keys(errors).length === 0;
-  const grossFinal = gross > 0 ? gross : net; // brut non saisi = net (sans emballage connu)
+  const grossFinal = gross;
+  const netFinal = net > 0 ? net : gross;
   const volume = valid ? (L * W * H) / 1e6 : 0;
 
   const save = () => {
@@ -87,7 +89,7 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
       width: W,
       height: H,
       volumePerPackage: 0,
-      netWeightPerUnit: net,
+      netWeightPerUnit: netFinal,
       grossWeightPerUnit: grossFinal,
       mixed: false,
       // la saisie manuelle prime sur les emballages déduits des PL (ceux-ci restent visibles dans la fiche)
@@ -141,10 +143,10 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
             Poids d'une unité <InfoTip k="netGross" />
           </h3>
           <div className="dims-grid two">
-            {input('net', 'Poids net', 'kg')}
             {input('gross', 'Poids brut', 'kg')}
+            {input('net', 'Poids net', 'kg')}
           </div>
-          <p className="hint">Brut = article + son emballage. Laissé vide, il est pris égal au net.</p>
+          <p className="hint">Brut = article + son emballage. Net laissé vide : pris égal au brut.</p>
 
           <h3 className="card-title">Emballage</h3>
           <div className="segmented">

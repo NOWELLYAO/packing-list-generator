@@ -19,8 +19,8 @@ interface Props {
 
 type Field = { key: keyof CatalogItem; label: string; num?: boolean; mono?: boolean; wide?: boolean };
 const IDENT: Field[] = [
-  { key: 'code', label: 'Code article', mono: true },
-  { key: 'pn', label: 'Part Number (PN)', mono: true },
+  // code article et Part Number sont identiques chez Grundfos : un seul champ, le PN suit le code
+  { key: 'code', label: 'Code article (P/N)', mono: true },
   { key: 'description', label: 'Désignation', wide: true },
   { key: 'unit', label: 'Unité' },
   { key: 'hsCode', label: 'Code SH' },
@@ -32,8 +32,8 @@ const PACK: Field[] = [
   { key: 'length', label: 'Longueur (cm)', num: true },
   { key: 'width', label: 'Largeur (cm)', num: true },
   { key: 'height', label: 'Hauteur (cm)', num: true },
-  { key: 'netWeightPerUnit', label: 'Poids net / unité (kg)', num: true },
   { key: 'grossWeightPerUnit', label: 'Poids brut / unité (kg)', num: true },
+  { key: 'netWeightPerUnit', label: 'Poids net / unité (kg)', num: true },
 ];
 
 const NUM_FIELDS: Field[] = PACK.filter((f) => f.num);
@@ -56,7 +56,7 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
 
   const set = (f: Field, v: string) => {
     if (f.num) setRaw({ ...raw, [f.key]: v });
-    else setDrafted({ ...draft, [f.key]: v });
+    else setDrafted(f.key === 'code' && (draft.pn === draft.code || !draft.pn) ? { ...draft, code: v, pn: v } : { ...draft, [f.key]: v });
     if (PACK.includes(f)) setPackChanged(true);
     if (fieldErrors[f.key]) setFieldErrors({ ...fieldErrors, [f.key]: '' });
   };
@@ -74,7 +74,7 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
   );
 
   const save = () => {
-    if (!draft.code.trim() && !draft.pn.trim()) return setError('Renseignez un code article ou un PN.');
+    if (!draft.code.trim() && !draft.pn.trim()) return setError('Renseignez le code article (P/N).');
     // lecture et contrôle des nombres
     const errs: Record<string, string> = {};
     const vals: Record<string, number> = {};
