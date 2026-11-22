@@ -665,7 +665,9 @@ function grundfosPieces(item: CatalogItem, qty: number, lineIdx: number): { piec
     if (!exactRem) exactAll = false;
     // l'article a son propre carton (fiche SAP) : quelques unités partent dans leurs cartons, pas sur une palette presque vide
     const ub = item.unitBox;
-    const ownBoxes = !exactRem && ub && h.qtyPerPackage > 1 && rem * ub.gross <= SMALL_PKG_KG;
+    // (une seule unité en reste : Grundfos l'envoie dans son emballage individuel — 1 CR10-10 en carton 114 × 34 × 33,
+    // 1 SP9-21 en caisse 210 × 20 × 28 — pas sur une palette presque vide)
+    const ownBoxes = !exactRem && ub && h.qtyPerPackage > 1 && (rem * ub.gross <= SMALL_PKG_KG || Math.abs(rem - 1) < 1e-9);
     // petit reliquat d'une palette (ex. 1 flotteur sur 50) : même un fournisseur le réemballe en carton
     const repacked = !ownBoxes && !exactRem && h.qtyPerPackage > 1 ? piecesFor(h, rem, lineIdx).filter((x) => x.repacked) : [];
     if (ownBoxes) {

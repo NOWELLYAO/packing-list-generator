@@ -661,3 +661,15 @@ describe('site d’emballage Grundfos', () => {
     expect(generatePackingList([onlyEu], [req('H', 8)], { consolidate: true, strategy: 'grundfos', site: 'ZA' }).packages).toHaveLength(8);
   });
 });
+
+describe('une seule unité', () => {
+  it('1 CR10-10 (Grundfos ne l’a vu que sur palettes de 2 à 6) : dans son carton individuel, pas sur une palette', () => {
+    const S = 'Fiche article fabricant (saisie)';
+    const pal = { qtyPerPackage: 2, packageType: 'PALPLATE', length: 120, width: 80, height: 50, volumePerPackage: 0.48, netWeightPerUnit: 74.5, grossWeightPerUnit: 87, mixed: false, source: 'PL 1', count: 1 };
+    const box = { qtyPerPackage: 1, packageType: 'Carton', length: 114.2, width: 33.4, height: 34.1, volumePerPackage: 0.13, netWeightPerUnit: 71, grossWeightPerUnit: 75, mixed: false, source: S, count: 10 };
+    const CR = { ...pal, id: 'c', code: 'CR', pn: 'CR', description: 'CR10-10 test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [pal, box] };
+    const pk = generatePackingList([CR], [req('CR', 1)], { consolidate: true, strategy: 'grundfos' }).packages;
+    expect(pk).toHaveLength(1);
+    expect(Math.round(pk[0].length)).toBe(114);
+  });
+});
