@@ -641,3 +641,23 @@ describe('faute de frappe dans une PL fournisseur', () => {
     expect(variantsOf(it0 as never).some((v) => v.volumePerPackage > 40)).toBe(false);
   });
 });
+
+describe('site d’emballage Grundfos', () => {
+  it('détecte l’Afrique du Sud (n° GZA…) et l’Europe (adresse d’expédition au Danemark)', async () => {
+    const { detectSite } = await import('../lib/sapPackingList');
+    expect(detectSite(['Packing list 34182958', 'Delivery method: LCL /SEA', 'IVORY COAST ID-number: GZA34182958'])).toBe('ZA');
+    expect(detectSite(['Grundfos (Pty) Ltd - South Africa', 'Customer no.: 1', 'Ship from address:', 'Poul Due Jensens Vej 7', 'DK-8850 BJERRINGBRO', 'DENMARK'])).toBe('EU');
+    expect(detectSite(['Packing list 1', 'Customer no.: 1'])).toBe('');
+  });
+  it('Afrique du Sud choisie : ses emballages servent ; article jamais expédié de là-bas : ceux d’Europe', () => {
+    const eu = { qtyPerPackage: 1, packageType: 'Pre-Pack', length: 90, width: 90, height: 108, volumePerPackage: 0.87, netWeightPerUnit: 101, grossWeightPerUnit: 101, mixed: false, source: 'PL EU', count: 14 };
+    const za = { ...eu, qtyPerPackage: 2, packageType: 'Pallet', length: 128, width: 85, height: 122, volumePerPackage: 1.33, grossWeightPerUnit: 110, source: 'PL ZA', count: 1, site: 'ZA' };
+    const H = { ...eu, id: 'h', code: 'H', pn: 'H', description: 'Hydro Multi-S test', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [eu, za] };
+    const e = generatePackingList([H], [req('H', 8)], { consolidate: true, strategy: 'grundfos', site: 'EU' }).packages;
+    const z = generatePackingList([H], [req('H', 8)], { consolidate: true, strategy: 'grundfos', site: 'ZA' }).packages;
+    expect(e).toHaveLength(8);
+    expect(z).toHaveLength(4);
+    const onlyEu = { ...H, variants: [eu] };
+    expect(generatePackingList([onlyEu], [req('H', 8)], { consolidate: true, strategy: 'grundfos', site: 'ZA' }).packages).toHaveLength(8);
+  });
+});

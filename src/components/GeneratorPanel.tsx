@@ -130,13 +130,15 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
   // Calcul en direct à chaque modification
   // Deux propositions calculées en direct : « selon Grundfos » et « optimisée »
   const [proposal, setProposal] = usePersistent<Proposal>('proposal', 'smart');
+  // site Grundfos qui emballe : l'Afrique du Sud n'emballe pas comme l'Europe
+  const site = settings.packSite ?? 'EU';
   const plSmart = useMemo(
-    () => (active.length ? generatePackingList(catalog, active, { consolidate, strategy: 'smart' }) : null),
-    [catalog, active, consolidate],
+    () => (active.length ? generatePackingList(catalog, active, { consolidate, strategy: 'smart', site }) : null),
+    [catalog, active, consolidate, site],
   );
   const plGrundfos = useMemo(
-    () => (active.length ? generatePackingList(catalog, active, { consolidate: false, strategy: 'grundfos' }) : null),
-    [catalog, active],
+    () => (active.length ? generatePackingList(catalog, active, { consolidate: false, strategy: 'grundfos', site }) : null),
+    [catalog, active, site],
   );
   const pl = proposal === 'grundfos' ? plGrundfos : plSmart;
 
@@ -507,6 +509,23 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               </button>
               )}
             </div>
+          </div>
+
+          <div className="site-row">
+            <span className="hint">Emballé par Grundfos</span>
+            <div className="segmented small" role="group" aria-label="Site d'emballage Grundfos">
+              {(
+                [
+                  ['EU', 'Europe'],
+                  ['ZA', 'Afrique du Sud'],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} className={site === k ? 'on' : ''} onClick={() => setSettings({ ...settings, packSite: k })}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <InfoTip k="packSite" />
           </div>
 
           {plGrundfos && plSmart && (

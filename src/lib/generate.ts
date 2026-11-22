@@ -1,7 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
-import { applyVariant, completeDims, preferredVariant, SAP_SOURCE, variantsOf } from './variants';
+import { applyVariant, completeDims, preferredVariant, SAP_SOURCE, variantsOf, withSite } from './variants';
 import { adaptSapPacking, buildFamilyIndex, withTwinPallets } from './packIntel';
 
 /** Recherche d'un article : code + PN, sinon code, sinon PN (insensible à la casse/espaces) */
@@ -731,7 +731,7 @@ export function generatePackingList(
       continue;
     }
     const grundfos = options.strategy === 'grundfos';
-    const packItem0 = withSimilarPacking(adaptSapPacking(withTwinPallets(refineMixedShare(sanitizeManual(item), catalog), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
+    const packItem0 = withSimilarPacking(adaptSapPacking(withTwinPallets(refineMixedShare(sanitizeManual(withSite(item, options.site)), catalog), catalog), famIdx, options.strategy === 'grundfos' ? 'grundfos' : 'smart'), catalog);
     // carton individuel connu (1 unité, colis dédié) : utile pour les reliquats d'une palette
     const isUnitBox = (v: PackVariant) => !v.mixed && v.qtyPerPackage === 1 && v.length > 0 && v.width > 0 && v.height > 0 && !PALLET_RE.test(v.packageType);
     // (la fiche SAP peut avoir été écartée des emballages proposés : elle reste la référence du carton individuel)

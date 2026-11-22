@@ -179,8 +179,10 @@ export function blindTest(doc: SapDocument, catalog: CatalogItem[], fileName: st
   const knownReq = requests.filter((r) => comparable.has(r.code));
   if (!knownReq.length) return null;
   const realKnown = real.filter((r) => r.codes.every((c) => comparable.has(c)));
-  const g = generatePackingList(catalog, knownReq, { consolidate: true, strategy: 'grundfos' });
-  const s = generatePackingList(catalog, knownReq, { consolidate: true, strategy: 'smart' });
+  // la proposition reproduit le site qui a réellement emballé (Europe ou Afrique du Sud)
+  const site = doc.site || undefined;
+  const g = generatePackingList(catalog, knownReq, { consolidate: true, strategy: 'grundfos', site });
+  const s = generatePackingList(catalog, knownReq, { consolidate: true, strategy: 'smart', site });
   return {
     id: `${doc.number || fileName}-${Date.now()}`,
     date: new Date().toISOString(),

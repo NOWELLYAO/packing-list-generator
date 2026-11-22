@@ -9,6 +9,11 @@ export interface GlossaryEntry {
 }
 
 export const GLOSSARY = {
+  packSite: {
+    title: 'Site d’emballage Grundfos',
+    text: "Grundfos n'emballe pas de la même façon en Europe (Danemark, Hongrie…) et en Afrique du Sud. À l'import, l'application reconnaît le site de chaque PL (n° d'identification GZA…, adresse d'expédition) et range ses emballages à part. Choisissez le site qui expédiera : seuls ses emballages servent, et s'il n'a jamais expédié un article, ceux de l'autre site sont repris.",
+    example: 'Hydro Multi-S 2CR5-10 : Europe → 1 par Pre-Pack 90 × 90 ; Afrique du Sud → 2 par palette 128 × 85.',
+  },
   proposals: {
     title: 'Deux propositions',
     text: "« Selon Grundfos » imite l'entrepôt Grundfos : l'emballage le plus utilisé pour chaque article, un vrai colis Grundfos pour un reliquat, et les mêmes regroupements que Grundfos (articles déjà réunis dans un colis par Grundfos, puis petits restes réunis). Testée à l'aveugle sur 13 de vos PL : 0,7 colis d'écart en moyenne. « Optimisée » applique l'intelligence de l'application : meilleur emballage selon la quantité, palettes incomplètes recalculées, petits articles regroupés. Comparez puis choisissez celle à exporter.",

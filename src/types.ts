@@ -1,6 +1,8 @@
 /** Un article de référence, extrait des Packing Lists chargées. */
 export interface CatalogItem {
   id: string;
+  /** site d'emballage du relevé (import de PL) */
+  site?: string;
   code: string; // Code article
   pn: string; // Part Number
   description: string;
@@ -66,6 +68,8 @@ export interface PackVariant {
   /** emballage repris d'un article jumeau (même produit, autre variante) : à vérifier */
   twinOf?: string;
   dimsInferred?: boolean;
+  /** site qui a emballé : 'EU' (Danemark, Hongrie…), 'ZA' (Afrique du Sud) ; plusieurs : 'EU,ZA' ; absent = Europe */
+  site?: string;
 }
 
 /** Champs reconnus lors de l'import d'un PL */
@@ -172,6 +176,8 @@ export interface LoadHint {
 export interface GenerateOptions {
   /** regrouper les petits articles sur un carton / une palette commune */
   consolidate: boolean;
+  /** site d'emballage à reproduire ('EU', 'ZA') : seuls ses relevés servent, s'il en existe */
+  site?: string;
   /** 'grundfos' : uniquement les emballages réellement utilisés par le fournisseur ; 'smart' (défaut) : proposition optimisée */
   strategy?: 'grundfos' | 'smart';
   /** proposition « selon Grundfos » : reproduire ses regroupements (défaut : oui) */
@@ -207,6 +213,8 @@ export interface Settings {
   transportMode?: 'sea' | 'road' | 'air';
   /** tarifs de fret (estimation du coût par mode de transport) */
   freightRates?: FreightRates;
+  /** site d'emballage Grundfos à reproduire : Europe (défaut) ou Afrique du Sud */
+  packSite?: 'EU' | 'ZA';
   /** plan de chargement : gerber les colis (oui par défaut) */
   stacking?: boolean;
   /** dossier export : vendeur, conditions, devise, prix unitaires */

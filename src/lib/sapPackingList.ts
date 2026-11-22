@@ -37,6 +37,8 @@ export interface SapPosition {
 
 export interface SapDocument {
   number: string;
+  /** site qui a emballé : 'EU' ou 'ZA' ('' : inconnu) */
+  site?: string;
   globalOrigin: string;
   hus: SapHU[];
   warnings: string[];
@@ -158,8 +160,37 @@ function parsePosRest(rest: string): { description: string; custMat: string; qty
   return { description: descTokens.join(' ').replace(/\s*[.:,;]$/, ''), custMat: '', qty, lineNet, orderTail };
 }
 
+/**
+ * Site Grundfos qui a emballé l'envoi :
+ * 1) le n° d'identification (ID-number) : GZA… = Afrique du Sud ; GBJ… (Bjerringbro), GMH… (Hongrie), GPC… = Europe ;
+ * 2) sinon l'adresse d'expédition (« Ship from ») : Germiston / South Africa, ou Danemark, Hongrie, Allemagne… ;
+ * 3) sinon l'en-tête de l'émetteur « Grundfos (Pty) Ltd - South Africa »
+ * L'adresse du client (Grundfos (Pty) Ltd quand l'Europe livre l'Afrique du Sud) n'est pas prise en compte.
+ */
+export function detectSite(rawLines: string[]): string {
+  const head = rawLines.slice(0, 80).map((l) => l.replace(/\s+/g, ' ').trim());
+  for (const l of head) {
+    const m = l.match(/(?:ID-number|N°\s*:?)\s*:?\s*([A-Z]{2,4})\d{6,}/i);
+    if (m) {
+      const p = m[1].toUpperCase();
+      if (p === 'GZA') return 'ZA';
+      if (/^(GBJ|GMH|GPC|GDK|GHU|GDE)$/.test(p)) return 'EU';
+    }
+  }
+  const i = head.findIndex((l) => /ship\s*from/i.test(l));
+  if (i >= 0) {
+    const blk = head.slice(i, i + 7).join(' ');
+    if (/germiston|south africa|gauteng|jet park|johannesburg/i.test(blk)) return 'ZA';
+    if (/denmark|bjerringbro|hungary|p[áa]ty|tarsoly|gmh|germany|deutschland|italy|poland|france/i.test(blk)) return 'EU';
+  }
+  // pas d'adresse d'expédition : en-tête de l'émetteur (au-dessus du client) « Grundfos (Pty) Ltd - South Africa »
+  const cust = head.findIndex((l) => /customer|compte client|nom du client/i.test(l));
+  if (cust > 0 && head.slice(0, cust).some((l) => /grundfos\s*\(p\w*\)\s*l\w*\s*[-–]?\s*south/i.test(l))) return 'ZA';
+  return '';
+}
+
 export function parseSapPackingList(rawLines: string[]): SapDocument {
-  const doc: SapDocument = { number: '', globalOrigin: '', hus: [], warnings: [] };
+  const doc: SapDocument = { number: '', globalOrigin: '', hus: [], warnings: [], site: detectSite(rawLines) };
   let hu: SapHU | null = null;
   let lastPos: SapPosition | null = null;
   let lastOrderTail = '';
@@ -287,6 +318,7 @@ export function sapToCatalog(doc: SapDocument, source: string): SapObservation[]
           grossWeightPerUnit: round(gross / p.qty, 4),
           hsCode: '',
           origin: p.origin || doc.globalOrigin,
+          ...(doc.site ? { site: doc.site } : {}),
           source: `${source}${doc.number ? ` (PL ${doc.number})` : ''}${mixed ? ' – colis mixte' : ''}`,
           updatedAt: now,
           mixed,

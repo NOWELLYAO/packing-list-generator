@@ -15,10 +15,14 @@ interface Props {
   /** base au moment présent (avant l'import du fichier en cours) */
   getCatalog: () => CatalogItem[];
   onAccuracy: (r: AccuracyRecord) => void;
+  /** corrige le site d'emballage des relevés d'une PL */
+  onRetag?: (plNumber: string, site: 'EU' | 'ZA') => void;
 }
 
 interface LogEntry {
   text: string;
+  plNumber?: string;
+  site?: string;
   rec?: AccuracyRecord;
   note?: string;
 }
@@ -55,7 +59,7 @@ function bestTable(tables: ImportDraft['tables']) {
   return best;
 }
 
-export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props) {
+export default function ImportPanel({ onImport, getCatalog, onAccuracy, onRetag }: Props) {
   const queueRef = useRef<File[]>([]);
   const [queueCount, setQueueCount] = useState(0);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
@@ -82,6 +86,8 @@ export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props)
           {
             text: `✅ ${file.name}${sap.number ? ` (PL ${sap.number})` : ''}${res.ocr ? ' [scan lu par OCR]' : ''} : ${sap.hus.length} colis, ${nPos} lignes → ${r.added} nouveaux articles, ${r.updated} mis à jour${sap.warnings.length ? ` ⚠️ ${sap.warnings.join(' ; ')}` : ''}`,
             rec: rec ?? undefined,
+            plNumber: sap.number || undefined,
+            site: sap.site || '',
             note: seen ? 'PL déjà importée : pas de test de précision (la base la connaît déjà).' : !rec ? 'Aucun article connu avant cet import : rien à comparer, la base apprend.' : undefined,
           },
           ...l,
@@ -359,6 +365,30 @@ export default function ImportPanel({ onImport, getCatalog, onAccuracy }: Props)
             <li key={i}>
               {l.text}
               {l.note && <div className="hint">{l.note}</div>}
+              {l.plNumber && onRetag && (
+                <div className="site-row">
+                  <span className="hint">Emballé par Grundfos {l.site ? '(détecté)' : '(non détecté : Europe par défaut)'}</span>
+                  <div className="segmented small" role="group" aria-label="Site d'emballage de cette PL">
+                    {(
+                      [
+                        ['EU', 'Europe'],
+                        ['ZA', 'Afrique du Sud'],
+                      ] as const
+                    ).map(([k, lab]) => (
+                      <button
+                        key={k}
+                        className={(l.site || 'EU') === k ? 'on' : ''}
+                        onClick={() => {
+                          onRetag(l.plNumber!, k);
+                          setLog((all) => all.map((x, j) => (j === i ? { ...x, site: k } : x)));
+                        }}
+                      >
+                        {lab}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {l.rec && (
                 <div className="log-accuracy">
                   <div className="hint">

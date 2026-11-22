@@ -395,7 +395,20 @@ export default function App() {
           />
         )}
         {tab === 'import' && (
-          <ImportPanel onImport={onImport} getCatalog={() => latest.current} onAccuracy={(r) => setAccuracy((a) => [r, ...a].slice(0, 300))} />
+          <ImportPanel
+            onImport={onImport}
+            getCatalog={() => latest.current}
+            onAccuracy={(r) => setAccuracy((a) => [r, ...a].slice(0, 300))}
+            onRetag={(plNumber, site) => {
+              // relevés de cette PL : rattachés au site choisi (Europe ou Afrique du Sud)
+              const tag = `(PL ${plNumber})`;
+              const next = latest.current.map((it) => {
+                if (!it.variants?.some((v) => (v.source || '').includes(tag))) return it;
+                return { ...it, variants: it.variants.map((v) => ((v.source || '').includes(tag) ? { ...v, site } : v)), updatedAt: new Date().toISOString() };
+              });
+              editCatalog(next, undefined, `Site d'emballage de la PL ${plNumber} : ${site === 'ZA' ? 'Afrique du Sud' : 'Europe'}`);
+            }}
+          />
         )}
         {tab === 'dashboard' && (
           <SafeBoundary label="Le tableau de bord">

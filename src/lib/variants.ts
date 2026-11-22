@@ -28,6 +28,7 @@ export function variantOf(item: CatalogItem): PackVariant {
     packShare: item.packShare,
     source: item.source,
     count: 1,
+    ...(item.site ? { site: item.site } : {}),
   };
 }
 
@@ -115,7 +116,12 @@ export function mergeVariants(a: PackVariant[], b: PackVariant[]): PackVariant[]
         map.set(k, { ...v, count: Math.max(prev.count, v.count) });
         continue;
       }
-      const keep = prev.mixed && !v.mixed ? v : prev;
+      const keep0 = prev.mixed && !v.mixed ? v : prev;
+      // même emballage vu chez plusieurs sites (Europe et Afrique du Sud) : valable pour les deux
+      // (la même PL réimportée : son site détecté remplace l'ancien, inconnu)
+      const sites =
+        prev.source === SAP_SOURCE ? '' : prev.source === v.source ? (v.site ?? prev.site ?? '') : [...new Set([...(prev.site ?? 'EU').split(','), ...(v.site ?? 'EU').split(',')])].sort().join(',');
+      const keep = sites && sites !== 'EU' ? { ...keep0, site: sites } : keep0;
       map.set(k, { ...keep, mixed: prev.mixed && v.mixed, count: prev.count + v.count });
     }
   }
@@ -145,4 +151,17 @@ export function applyVariant(item: CatalogItem, v: PackVariant): CatalogItem {
     twinFrom: v.twinOf,
     packSource: v.source,
   };
+}
+
+/** relevé d'emballage fait par ce site ? (absent = Europe ; fiche SAP = valable partout) */
+export const fromSite = (v: PackVariant, site: string) => v.source === SAP_SOURCE || (v.site ?? 'EU').split(',').includes(site);
+
+/** emballages du site choisi seulement (s'il en existe) : Grundfos Afrique du Sud n'emballe pas comme l'Europe */
+export function withSite(item: CatalogItem, site?: string): CatalogItem {
+  if (!site || item.manual) return item;
+  const vs = variantsOf(item);
+  const own = vs.filter((v) => v.source !== SAP_SOURCE && fromSite(v, site));
+  if (!own.length) return item; // aucun envoi connu depuis ce site : on garde tout
+  const kept = vs.filter((v) => fromSite(v, site));
+  return applyVariant({ ...item, variants: kept }, preferredVariant(kept));
 }
