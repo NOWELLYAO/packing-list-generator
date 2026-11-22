@@ -58,6 +58,24 @@ export interface AccuracyRecord {
 
 /** Colis réels d'une PL SAP */
 export function realPackages(doc: SapDocument): RealPackage[] {
+  const pkgs = realPackagesRaw(doc);
+  // colis sans volume exploitable (cotes illisibles dans la PL) : estimé d'après les autres colis du même article
+  const perUnit = new Map<string, number[]>();
+  for (const h of doc.hus) {
+    const mats = [...new Set(h.positions.map((p) => p.material))];
+    const q = h.positions.reduce((t, p) => t + (Number.isFinite(p.qty) ? p.qty : 0), 0);
+    const pk = pkgs.find((x) => x.hu === h);
+    if (mats.length === 1 && q > 0 && pk && pk.volume > 0) perUnit.set(mats[0], [...(perUnit.get(mats[0]) ?? []), pk.volume / q]);
+  }
+  return pkgs.map(({ hu, ...p }) => {
+    if (p.volume > 0 || p.codes.length !== 1) return p;
+    const v = perUnit.get(p.codes[0]);
+    const q = hu.positions.reduce((t, x) => t + (Number.isFinite(x.qty) ? x.qty : 0), 0);
+    return v?.length ? { ...p, volume: round((v.reduce((a, b) => a + b, 0) / v.length) * q, 3) } : p;
+  });
+}
+
+function realPackagesRaw(doc: SapDocument): (RealPackage & { hu: SapDocument['hus'][number] })[] {
   return doc.hus
     .filter((h) => h.positions.some((p) => Number.isFinite(p.qty) && p.qty > 0))
     .map((h) => {
@@ -72,6 +90,7 @@ export function realPackages(doc: SapDocument): RealPackage[] {
         grossWeight: Number.isFinite(h.gross) ? h.gross : 0,
         netWeight: Number.isFinite(h.net) ? h.net : 0,
         codes: [...new Set(h.positions.map((p) => p.material))],
+        hu: h,
       };
     });
 }

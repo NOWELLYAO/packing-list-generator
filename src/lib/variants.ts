@@ -90,7 +90,10 @@ export function variantsOf(item: CatalogItem): PackVariant[] {
   const nets = (sapVs.length ? sapVs : vs).map((v) => v.netWeightPerUnit).filter((n) => n > 0).sort((a, b) => a - b);
   const medNet = nets.length >= 2 ? nets[Math.floor(nets.length / 2)] : 0;
   const weightOutlier = (v: PackVariant) => medNet > 0 && v.netWeightPerUnit > 0 && (v.netWeightPerUnit / medNet > 20 || medNet / v.netWeightPerUnit > 20);
-  const absurd = (v: PackVariant) => v.source !== SAP_SOURCE && ((v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || weightOutlier(v));
+  // ou un volume impossible (« 87,102 m³ » pour une palette de 265 kg : faute de frappe dans la PL du fournisseur)
+  const volOf = (v: PackVariant) => (hasDims(v) ? (v.length * v.width * v.height) / 1e6 : v.volumePerPackage);
+  const hugeVolume = (v: PackVariant) => volOf(v) > 40 || (volOf(v) > 2 && density(v) > 0 && density(v) < 15);
+  const absurd = (v: PackVariant) => v.source !== SAP_SOURCE && ((v.qtyPerPackage > 999 && !hasDims(v)) || density(v) > 3000 || hugeVolume(v) || weightOutlier(v));
   const sane = vs.some((v) => !absurd(v)) ? vs.filter((v) => !absurd(v)) : vs;
   // fiche article du fabricant saisie : les relevés de PL sans dimensions (volume seul) deviennent inutiles
   const hasSap = sane.some((v) => v.source === SAP_SOURCE && hasDims(v));

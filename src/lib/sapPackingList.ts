@@ -113,7 +113,12 @@ function parseHuRest(rest: string) {
     .filter((t) => t.length >= 3 || /^\d+$|^x$/i.test(t))
     .join(' ')
     .trim();
-  return { packType, gross: nums[0] ?? NaN, net: nums[1] ?? NaN, volume: nums[2] ?? NaN, dims };
+  const gross = nums[0] ?? NaN;
+  let volume = nums[2] ?? NaN;
+  // volume impossible (faute de frappe du fournisseur : « 87,102 m³ » pour une palette de 265 kg, cotes « 220X8,080X49 ») :
+  // ignoré plutôt qu'appris — plus de 40 m³ pour un colis, ou moins de 15 kg par m³ au-delà de 2 m³
+  if (Number.isFinite(volume) && (volume > 40 || (volume > 2 && Number.isFinite(gross) && gross > 0 && gross / volume < 15))) volume = NaN;
+  return { packType, gross, net: nums[1] ?? NaN, volume, dims };
 }
 
 function parsePosRest(rest: string): { description: string; custMat: string; qty: number; lineNet: number; orderTail: string } {

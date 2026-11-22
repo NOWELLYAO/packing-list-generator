@@ -631,3 +631,13 @@ describe('gerbable colis par colis', () => {
     expect(planLoad([pal(1, 300, true), pal(2, 200)] as never, 'auto', 'road')!.bins[0].placements.some((p) => p.z)).toBe(true);
   });
 });
+
+describe('faute de frappe dans une PL fournisseur', () => {
+  it('« 87,102 m³ » pour une palette de 265 kg (cotes « 220X8,080X49 ») : volume ignoré, jamais appris', async () => {
+    const { variantsOf } = await import('../lib/variants');
+    const bad = { qtyPerPackage: 6, packageType: 'Pallet', length: 0, width: 0, height: 0, volumePerPackage: 87.102, netWeightPerUnit: 40.5, grossWeightPerUnit: 44.2, mixed: false, source: 'PL x', count: 1 };
+    const good = { qtyPerPackage: 4, packageType: 'Pallet', length: 210, width: 80, height: 34, volumePerPackage: 0.571, netWeightPerUnit: 44.5, grossWeightPerUnit: 50, mixed: false, source: 'PL y', count: 1 };
+    const it0 = { ...good, id: 'a', code: 'X', pn: 'X', description: 'SP9-21', unit: 'PCS', hsCode: '', origin: '', updatedAt: '', variants: [bad, good] };
+    expect(variantsOf(it0 as never).some((v) => v.volumePerPackage > 40)).toBe(false);
+  });
+});
