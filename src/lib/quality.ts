@@ -5,7 +5,7 @@ import type { CatalogItem } from '../types';
  * ou incomplètes, sans jamais les corriger à la place de l'utilisateur.
  */
 export interface Issue {
-  code: 'density' | 'tare' | 'netGross' | 'noDims' | 'noWeight' | 'mixed' | 'qtyAbsurd';
+  code: 'density' | 'tare' | 'netGross' | 'noDims' | 'noWeight' | 'mixed' | 'qtyAbsurd' | 'tooLight';
   severity: 'error' | 'warning';
   message: string;
 }
@@ -32,6 +32,13 @@ export function itemIssues(it: CatalogItem): Issue[] {
     out.push({ code: 'tare', severity: 'warning', message: 'Brut = net sur une palette ou caisse : le poids de l’emballage semble manquer' });
   if (per > 999)
     out.push({ code: 'qtyAbsurd', severity: 'error', message: `${per} unités par colis : la PL a probablement été mal lue (date ou n° de commande pris pour la quantité). Réimportez la PL ou corrigez la fiche.` });
+  // colis presque vide : 5,7 kg dans 80 × 60 × 80 cm (0,38 m³) — ce sont sans doute les cotes d'un autre emballage (palette, lot)
+  if (vol > 0.1 && gross > 0 && gross / vol < 20)
+    out.push({
+      code: 'tooLight',
+      severity: 'warning',
+      message: `Colis presque vide : ${gross.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} kg pour ${vol.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} m³ — vérifiez les dimensions (celles d'un autre emballage ?)`,
+    });
   if (!vol) out.push({ code: 'noDims', severity: 'warning', message: 'Dimensions inconnues' });
   if (!(it.grossWeightPerUnit > 0)) out.push({ code: 'noWeight', severity: 'warning', message: 'Poids inconnu' });
   if (it.mixed && !it.manual) out.push({ code: 'mixed', severity: 'warning', message: 'Vu seulement en colis mixte : valeurs estimées' });
