@@ -116,7 +116,8 @@ function fillOne(v: Vehicle, items: PLPackage[], lambda: number): { placed: Plac
         [it.width, it.length, true],
       ] as [number, number, boolean][]) {
         if (l > r.l + 0.01 || w > r.w + 0.01) continue;
-        for (const y of new Set(balance ? [r.y, r.y + r.w - w] : [r.y])) {
+        // calé d'un côté, de l'autre, ou centré quand l'espace libre fait toute la largeur (colis seul au milieu)
+        for (const y of new Set(balance ? [r.y, r.y + r.w - w, ...(r.y === 0 && r.w >= v.width - 0.01 ? [Math.round((v.width - w) / 2)] : [])] : [r.y])) {
           const fit = Math.min(r.l - l, r.w - w);
           const imbalance = balance ? Math.abs((momentY + (y + w / 2) * it.grossWeight) / mass - v.width / 2) : 0;
           const cost = r.x + Math.max(0, lambda) * imbalance;
@@ -317,12 +318,18 @@ export function planLoad(pkgs: PLPackage[], mode: 'auto' | string = 'auto', fami
   const items = pkgs.filter((p) => p.length > 0 && p.width > 0);
   if (!items.length) return null;
   const tallest = Math.max(...items.map((p) => p.height));
+  const heaviest = Math.max(...items.map((p) => p.grossWeight));
   const fleet = VEHICLES.filter((v) => v.family === family);
   const alternatives: LoadPlan['alternatives'] = [];
   let chosen: { v: Vehicle; bins: Bin[]; unplaced: number[] } | null = null;
   for (const v of fleet) {
     if (tallest > v.doorHeight) {
       alternatives.push({ vehicle: v, count: 0, feasible: false, reason: `colis de ${tallest} cm > porte ${v.doorHeight} cm` });
+      continue;
+    }
+    // petit utilitaire (Kangoo, Berlingo) : chargé à la main, sans hayon ni chariot — pas de colis de plus de 100 kg
+    if (v.id === 'mini' && heaviest > 100) {
+      alternatives.push({ vehicle: v, count: 0, feasible: false, reason: `colis de ${Math.round(heaviest)} kg : chargement à la main impossible` });
       continue;
     }
     const r = pack(v, items);
