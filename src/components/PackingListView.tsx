@@ -134,6 +134,7 @@ export default function PackingListView({
                 <th>N°</th>
                 <th>Code / PN</th>
                 <th>Désignation</th>
+                <th>Code SH</th>
                 <th className="num">Qté</th>
                 <th>Colis</th>
                 <th className="num">Net (kg)</th>
@@ -147,6 +148,9 @@ export default function PackingListView({
                   <td>{l.lineNo}</td>
                   <td className="mono">{l.code === l.pn || !l.pn ? l.code : `${l.code} / ${l.pn}`}</td>
                   <td>{l.description}</td>
+                  <td className="mono" title={l.hsSuggested ? 'Proposé d’après la désignation : à valider' : undefined}>
+                    {l.hsCode ? `${l.hsCode}${l.hsSuggested ? '*' : ''}` : '—'}
+                  </td>
                   <td className="num">{l.quantity}</td>
                   <td>{l.cases}</td>
                   <td className="num">{fmt(l.netWeight)}</td>

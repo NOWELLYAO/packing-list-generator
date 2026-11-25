@@ -211,7 +211,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
 
   // Titre
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
+  doc.setFontSize(19);
   doc.setTextColor(...accent);
   doc.text(T.title, W - M, 19, { align: 'right' });
   doc.setFont('helvetica', 'normal');
@@ -305,11 +305,12 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
   autoTable(doc, {
     ...tableStyle,
     startY: y,
-    head: [[T.no, T.codePn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.origin]],
+    head: [[T.no, T.codePn, T.description, T.hs, T.qty, T.caseNo, T.netKg, T.grossKg, T.origin]],
     body: pl.lines.map((l) => [
       String(l.lineNo),
       l.code === l.pn || !l.pn ? l.code : `${l.code}\n${l.pn}`,
       l.description,
+      l.hsCode ? `${l.hsCode}${l.hsSuggested ? '*' : ''}` : '—',
       String(l.quantity),
       l.cases,
       nf(l.netWeight),
@@ -318,18 +319,30 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
     ]),
     columnStyles: {
       0: { halign: 'center', cellWidth: 9 },
-      1: { cellWidth: 26 },
-      3: { halign: 'right', cellWidth: 12 },
-      4: { halign: 'center', cellWidth: 18 },
-      5: { halign: 'right', cellWidth: 19 },
-      6: { halign: 'right', cellWidth: 19 },
-      7: { halign: 'center', cellWidth: 13 },
+      1: { cellWidth: 22 },
+      3: { halign: 'center', cellWidth: 17 },
+      4: { halign: 'right', cellWidth: 11 },
+      5: { halign: 'center', cellWidth: 15 },
+      6: { halign: 'right', cellWidth: 17 },
+      7: { halign: 'right', cellWidth: 17 },
+      8: { halign: 'center', cellWidth: 11 },
     },
   });
 
   // ---- Mise en page continue : chaque section suit la précédente, nouvelle page seulement si elle ne tient pas ----
   // @ts-expect-error propriété ajoutée par jspdf-autotable
-  let yy: number = (doc.lastAutoTable?.finalY ?? 40) + 11;
+  let yy: number = (doc.lastAutoTable?.finalY ?? 40) + 5;
+  // mentions : codes SH proposés, caractère estimatif du document
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...muted);
+  for (const note of [...(pl.lines.some((l) => l.hsSuggested) ? [T.hsNote] : []), T.estimateNote]) {
+    const ls = doc.splitTextToSize(note, W - 2 * M);
+    doc.text(ls, M, yy);
+    yy += ls.length * 3.4;
+  }
+  doc.setFont('helvetica', 'normal');
+  yy += 6;
   const bottom = H - 16;
   const ensure = (need: number) => {
     if (yy + need > bottom) {
@@ -666,7 +679,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   const light = [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase();
   const t = pl.totals;
   ws.columns = [
-    { width: 6 }, { width: 22 }, { width: 18 }, { width: 36 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 10 }, { width: 16 },
+    { width: 6 }, { width: 22 }, { width: 18 }, { width: 36 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 10 }, { width: 16 }, { width: 16 },
   ];
   const thin = { style: 'thin' as const, color: { argb: 'FFE1E6EC' } };
   const border = { top: thin, left: thin, bottom: thin, right: thin };
@@ -806,17 +819,23 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
   row += 2;
   sectionTitle(row, T.articles);
   row++;
-  header(row, [T.no, T.code, T.pn, T.description, T.qty, T.caseNo, T.netKg, T.grossKg, T.originLong, T.reliability]);
+  header(row, [T.no, T.code, T.pn, T.description, T.hs, T.qty, T.caseNo, T.netKg, T.grossKg, T.originLong, T.reliability]);
   pl.lines.forEach((l, i) => {
     row++;
     bodyRow(
       row,
-      [l.lineNo, l.code, l.pn, l.description, l.quantity, l.cases, l.netWeight, l.grossWeight, l.origin, l.found ? T.conf[l.confidence ?? 'estimated'] : T.conf.unknown],
-      [undefined, '@', '@', undefined, '0.###', undefined, '#,##0.00', '#,##0.00', undefined, undefined],
+      [l.lineNo, l.code, l.pn, l.description, l.hsCode ? `${l.hsCode}${l.hsSuggested ? '*' : ''}` : '', l.quantity, l.cases, l.netWeight, l.grossWeight, l.origin, l.found ? T.conf[l.confidence ?? 'estimated'] : T.conf.unknown],
+      [undefined, '@', '@', undefined, '@', '0.###', undefined, '#,##0.00', '#,##0.00', undefined, undefined],
       i % 2 === 1,
-      ['center', 'left', 'left', 'left', 'right', 'center', 'right', 'right', 'center', 'left'],
+      ['center', 'left', 'left', 'left', 'center', 'right', 'center', 'right', 'right', 'center', 'left'],
     );
   });
+  row++;
+  for (const note of [...(pl.lines.some((l) => l.hsSuggested) ? [T.hsNote] : []), T.estimateNote]) {
+    row++;
+    ws.getCell(row, 1).value = note;
+    ws.getCell(row, 1).font = { italic: true, size: 9, color: { argb: 'FF6E7887' } };
+  }
 
   // ---- Feuille « Schémas » : un dessin par groupe de colis identiques ----
   const accentHex = settings.accent || DEFAULT_ACCENT;

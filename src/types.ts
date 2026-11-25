@@ -136,6 +136,8 @@ export interface PLLine {
   netWeight: number;
   grossWeight: number;
   hsCode: string;
+  /** code SH proposé d'après la désignation (absent de la base) : à valider */
+  hsSuggested?: boolean;
   origin: string;
   found: boolean;
   warning?: string;

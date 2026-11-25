@@ -40,7 +40,10 @@ export function packLabel(raw: string, lang: Lang): string {
 /** Textes des documents PDF / Excel */
 export const DOC = {
   fr: {
-    title: 'PACKING LIST',
+    title: 'PACKING LIST ESTIMATIF',
+    hs: 'Code SH',
+    hsNote: '* Code SH proposé d’après la désignation, à valider par le déclarant.',
+    estimateNote: 'Document estimatif établi avant expédition : colis, poids et dimensions peuvent différer de la Packing List définitive du fournisseur.',
     date: 'Date',
     ref: 'Réf.',
     packages: 'Colis',
@@ -70,7 +73,7 @@ export const DOC = {
     nPackages: (n: number) => `${n} colis`,
     grouped: 'groupé',
     partial: 'incomplet',
-    footer: (d: string) => `Packing List du ${d}`,
+    footer: (d: string) => `Packing list estimatif du ${d}`,
     page: (i: number, n: number) => `Page ${i} / ${n}`,
     netKgLong: 'Poids net (kg)',
     grossKgLong: 'Poids brut (kg)',
@@ -90,7 +93,10 @@ export const DOC = {
     locale: 'fr-FR',
   },
   en: {
-    title: 'PACKING LIST',
+    title: 'ESTIMATED PACKING LIST',
+    hs: 'HS code',
+    hsNote: '* HS code suggested from the description, to be confirmed by the customs declarant.',
+    estimateNote: 'Estimate prepared before shipment: packages, weights and dimensions may differ from the supplier’s final packing list.',
     date: 'Date',
     ref: 'Ref.',
     packages: 'Packages',
@@ -120,7 +126,7 @@ export const DOC = {
     nPackages: (n: number) => `${n} package${n > 1 ? 's' : ''}`,
     grouped: 'consolidated',
     partial: 'partial',
-    footer: (d: string) => `Packing List dated ${d}`,
+    footer: (d: string) => `Estimated packing list dated ${d}`,
     page: (i: number, n: number) => `Page ${i} of ${n}`,
     netKgLong: 'Net weight (kg)',
     grossKgLong: 'Gross weight (kg)',

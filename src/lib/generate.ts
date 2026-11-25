@@ -1,6 +1,7 @@
 import type { CatalogItem, GenerateOptions, PackingList, PackVariant, PLLine, PLPackage, RequestLine } from '../types';
 import { norm } from './detect';
 import { round } from './parseValues';
+import { suggestHs } from './hsCodes';
 import { applyVariant, completeDims, preferredVariant, SAP_SOURCE, variantsOf, withSite } from './variants';
 import { adaptSapPacking, buildFamilyIndex, withTwinPallets } from './packIntel';
 
@@ -747,7 +748,9 @@ export function generatePackingList(
     if (chosen.mixed) warnings.push('Données estimées (colis mixte)');
     if (packItem.similarFrom) warnings.push(`Emballage repris de l'article similaire ${packItem.similarFrom}`);
     else if (chosen.twinFrom) warnings.push(`Palette reprise de l'article jumeau ${chosen.twinFrom}`);
-    lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode, origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
+    // code SH : celui de la base, sinon proposé d'après la désignation (signalé, à valider)
+    const hsSug = item.hsCode ? null : suggestHs(item.description);
+    lines.push({ lineNo: lineIdx + 1, code: item.code, pn: item.pn, description: item.description, quantity: qty, unit: item.unit, cases: '', netWeight: 0, grossWeight: 0, hsCode: item.hsCode || hsSug?.code || '', ...(hsSug ? { hsSuggested: true } : {}), origin: item.origin, found: true, warning: warnings.join(', ') || undefined });
     if (note) lines[lineIdx].packing = note;
     lines[lineIdx].confidence = confidence;
     const linePieces = gf ? gf.pieces : piecesFor(chosen, qty, lineIdx);
