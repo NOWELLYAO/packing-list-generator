@@ -406,7 +406,8 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
 
     // ---- Plan de chargement ----
     const tmode = settings.transportMode ?? 'sea';
-    const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
+    // plan de chargement (camion / conteneur) : masqué si l'utilisateur l'a décoché
+    const plan = tmode === 'air' || settings.pdfLoadPlan === false ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
     if (plan?.light) {
       // envoi léger : pas de plan de véhicule (il n'aurait pas de sens), une simple recommandation de transport
       ensure(24);
@@ -871,7 +872,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
 
   // ---- Feuille « Plan de chargement » ----
   const tmode = settings.transportMode ?? 'sea';
-  const plan = tmode === 'air' ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
+  const plan = tmode === 'air' || settings.pdfLoadPlan === false ? null : planLoad(pl.packages, 'auto', tmode === 'road' ? 'road' : 'sea');
   // envoi léger : pas d'onglet de plan de chargement (messagerie / express)
   if (plan && !plan.light) {
     const ws3 = wb.addWorksheet(lang === 'fr' ? 'Plan de chargement' : 'Loading plan', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }, views: [{ showGridLines: false }] });

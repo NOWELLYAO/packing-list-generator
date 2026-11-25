@@ -470,6 +470,10 @@ export default function GeneratorPanel({ catalog, setCatalog, settings, setSetti
               </div>
             </div>
             <div className="actions">
+              <label className="check pdf-plan-toggle" title="Afficher ou non le camion / conteneur (plan de chargement) dans le PDF et l'Excel">
+                <input type="checkbox" checked={settings.pdfLoadPlan !== false} onChange={(e) => setSettings({ ...settings, pdfLoadPlan: e.target.checked })} />
+                Plan de chargement
+              </label>
               <div className="lang-toggle" role="group" aria-label="Langue du document">
                 {(['fr', 'en'] as const).map((l) => (
                   <button key={l} className={lang === l ? 'on' : ''} onClick={() => setSettings({ ...settings, lang: l })}>

@@ -217,6 +217,8 @@ export interface Settings {
   freightRates?: FreightRates;
   /** site d'emballage Grundfos à reproduire : Europe (défaut) ou Afrique du Sud */
   packSite?: 'EU' | 'ZA';
+  /** plan de chargement (camion / conteneur) dans le PDF et l'Excel : oui par défaut */
+  pdfLoadPlan?: boolean;
   /** plan de chargement : gerber les colis (oui par défaut) */
   stacking?: boolean;
   /** dossier export : vendeur, conditions, devise, prix unitaires */
