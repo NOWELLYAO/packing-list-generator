@@ -822,3 +822,13 @@ function insideHull(pt: Pt, hull: Pt[], margin = 0): boolean {
 export function loadingOrder(bin: Bin): Placement[] {
   return [...bin.placements].sort((a, b) => a.x - b.x || a.y - b.y || (a.z ?? 0) - (b.z ?? 0));
 }
+
+/** petit envoi maritime : groupage (LCL) plutôt qu'un conteneur complet */
+export const isSeaGroupage = (family: 'sea' | 'road', pkgs: { volume: number; grossWeight: number }[]) =>
+  family === 'sea' && pkgs.reduce((t, p) => t + p.volume, 0) < 15 && pkgs.reduce((t, p) => t + p.grossWeight, 0) < 10000;
+/** libellé du transport : « Groupage maritime (LCL) — tiendrait dans 1 × Conteneur 20' » pour un petit envoi */
+export function transportLabel(plan: LoadPlan, family: 'sea' | 'road', pkgs: { volume: number; grossWeight: number }[], lang: 'fr' | 'en') {
+  const base = lang === 'fr' ? plan.summary : plan.summaryEn;
+  if (!isSeaGroupage(family, pkgs)) return base;
+  return lang === 'fr' ? `Groupage maritime (LCL) — tiendrait dans ${base}` : `Sea groupage (LCL) — would fit in ${base}`;
+}

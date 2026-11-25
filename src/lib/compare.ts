@@ -32,7 +32,10 @@ export function comparePL(g: PackingList, s: PackingList, lang: Lang = 'fr', mod
   const planS = mode === 'air' ? null : planLoad(s.packages, 'auto', fam);
   const fG = freightInfo(g);
   const fS = freightInfo(s);
-  const vName = (p: ReturnType<typeof planLoad>) => (p ? (lang === 'fr' ? p.summary : p.summaryEn) : mode === 'air' ? 'Aérien' : '—');
+  // petit envoi maritime (moins de 15 m³ et 10 t) : il part en groupage, pas dans un conteneur complet
+  const lcl = (pl: PackingList) => mode === 'sea' && pl.totals.volume < 15 && pl.totals.grossWeight < 10000;
+  const vName = (p: ReturnType<typeof planLoad>, pl?: PackingList) =>
+    pl && lcl(pl) ? (lang === 'fr' ? 'Groupage maritime (LCL)' : 'Sea groupage (LCL)') : p ? (lang === 'fr' ? p.summary : p.summaryEn) : mode === 'air' ? 'Aérien' : '—';
   const rows: CompareRow[] = [
     { key: 'packages', label: 'Colis', short: 'Colis', g: g.totals.packages, s: s.totals.packages, unit: '', decimals: 0, lowerIsBetter: true },
     { key: 'volume', label: 'Volume', short: 'Volume', g: g.totals.volume, s: s.totals.volume, unit: 'm³', decimals: 3, lowerIsBetter: true },
@@ -63,5 +66,5 @@ export function comparePL(g: PackingList, s: PackingList, lang: Lang = 'fr', mod
       `${codes.length} petit(s) article(s) (${codes.join(', ')}) : ${before.length} colis séparés → 1 ${packLabel(p.type, lang).toLowerCase()} ${dims(p)}`,
     );
   }
-  return { rows, transportG: vName(planG), transportS: vName(planS), changes };
+  return { rows, transportG: vName(planG, g), transportS: vName(planS, s), changes };
 }

@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import type { CatalogItem, PackingList, PLPackage, Settings } from '../types';
 import { DOC, dimsText, packLabel, type Lang } from './i18n';
 import { formatNos, groupIdentical, loadLogoInfo, packageDrawing, pictureToSvg, refScale, scaleStrip, type LogoInfo, type Picture } from './drawing';
-import { loadPlan3D, loadPlanDrawing, planLoad } from './loadPlan';
+import { loadPlan3D, loadPlanDrawing, planLoad, transportLabel } from './loadPlan';
 import { comparePL } from './compare';
 
 /* ------------------------------------------------------------------ */
@@ -463,7 +463,7 @@ export async function buildPackingListPdf(pl: PackingList, settings: Settings): 
       })();
       ensure(6 + 18 + (side ? side.h + 4 : blockH(plan.bins[0], sc)) + (plan.bins.length === 1 ? tail : 6)); // titre + chiffres clés + premier véhicule
       yy = section(T.loadPlan, yy);
-      const vName = lang === 'fr' ? plan.summary : plan.summaryEn;
+      const vName = transportLabel(plan, tmode === 'road' ? 'road' : 'sea', pl.packages, lang);
       const facts: [string, string][] = [
         [T.vehicle, vName],
         [T.lengthUsed, plan.bins.map((b) => `${nf(b.usedLength / 100, 2)} m`).join(' + ')],
@@ -879,7 +879,7 @@ export async function exportPackingListXlsx(pl: PackingList, settings: Settings)
     ws3.getCell('A1').value = T.loadPlan;
     ws3.getCell('A1').font = { bold: true, size: 13, color: { argb: 'FF' + accent } };
     const facts: [string, string | number][] = [
-      [T.vehicle, lang === 'fr' ? plan.summary : plan.summaryEn],
+      [T.vehicle, transportLabel(plan, tmode === 'road' ? 'road' : 'sea', pl.packages, lang)],
       [T.lengthUsed, plan.bins.map((b) => `${nf(b.usedLength / 100, 2)} m`).join(' + ')],
       [T.floorUsed, plan.bins.map((b) => `${nf(b.floorPct, 1)} %`).join(' + ')],
       [T.ldm, plan.ldm],

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { PackingList } from '../types';
-import { loadPlanDrawing, planLoad, stackingEnabled, VEHICLES, type TransportMode } from '../lib/loadPlan';
+import { loadPlanDrawing, planLoad, stackingEnabled, transportLabel, VEHICLES, type TransportMode } from '../lib/loadPlan';
 import { freightInfo } from '../lib/freight';
 import { useLang } from '../lib/i18n';
 import Drawing from './Drawing';
@@ -83,7 +83,7 @@ export default function TransportPanel({ pl, accent, logo, mode, setMode, rates,
               <small>
                 Conteneurs <InfoTip k="loadPlan" />
               </small>
-              <b>{plan ? (lang === 'fr' ? plan.summary : plan.summaryEn) : '—'}</b>
+              <b>{plan ? transportLabel(plan, 'sea', pl.packages, lang) : '—'}</b>
             </div>
             <div>
               <small>
