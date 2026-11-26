@@ -897,7 +897,7 @@ export function generatePackingList(
     // libellé SAP tronqué (« Generi… ») : palette si elle en a la largeur, sinon caisse
     if (/^generi/i.test(p.type.trim())) p.type = p.width >= 60 ? 'Palette' : 'Caisse';
     // pompe verticale (CR 15 à CR 64…) vissée seule sur une palette étroite de 40 à 50 cm : c'est ainsi que Grundfos l'expédie
-    const vertical = p.contents.length === 1 && /^\s*CR[A-Z]?\s?\d/i.test(lines.find((l) => l.code === p.contents[0].code)?.description ?? '');
+    const vertical = p.contents.length === 1 && /^\s*CR[A-Z]{0,2}\s?\d/i.test(lines.find((l) => l.code === p.contents[0].code)?.description ?? '');
     const skid = ((PALLET_RE.test(p.type) && !/plywood|plate/i.test(p.type)) || (vertical && /caisse/i.test(p.type))) && p.width >= 35 && p.width < 60 && p.height >= 45 && p.length >= 90 && p.length < 200 && p.grossWeight >= 80;
     if (skid) { p.type = 'Palette étroite'; continue; }
     // petite CR (CR 3 à CR 15-5) seule : Grundfos l'envoie en « Pre-Pack », un carton de 30 à 34 cm de côté
