@@ -3,6 +3,8 @@
  * Proposition à valider par le transitaire ou le déclarant : la base garde le code saisi s'il existe.
  */
 const RULES: [RegExp, string, string][] = [
+  // réservoirs à diaphragme / à vessie (GT-D, GT-U, GT-H, GT-U+) : récipient en acier sous pression d'air
+  [/^\s*GT-?\s?[A-Z]{0,2}\+?\s?-?\s?\d|diaphragm tank|réservoir|bladder|expansion vessel|vase d.expansion/i, '7311.00', 'réservoir sous pression en acier'],
   // pompes doseuses (membrane, volumétriques alternatives)
   [/^\s*(DME|DDA|DDC|DDE|DDI|DMX|DMH|DMS|DMI|SMART DIGITAL)\b/i, '8413.50', 'pompe volumétrique alternative (doseuse)'],
   // joints, passe-câbles : pièces de pompes
@@ -12,14 +14,18 @@ const RULES: [RegExp, string, string][] = [
   [/motor protector|^\s*MP ?204/i, '8536.30', 'appareil de protection des circuits'],
   // câbles (avant les moteurs : « Motor cable MS6000 » est un câble)
   [/(wire|cable|câble|cordon).*(mc4|connect)|mc4/i, '8544.42', 'conducteur électrique avec connecteurs'],
-  [/\bcable\b|\bcâble\b|\bwire kit\b/i, '8544.49', 'conducteur électrique ≤ 1 000 V'],
+  [/\bcable\b|\bcâble\b|\bwire kit\b|motorcable/i, '8544.49', 'conducteur électrique ≤ 1 000 V'],
   // moteurs électriques immergés et de surface
   [/^\s*(MS|MMS)\s?-?\d|^\s*MS\d{3,4}|^\s*MG\s?\d|^\s*MMG|^\s*ML\s?\d|moteur|motor\b/i, '8501.52', 'moteur électrique à courant alternatif'],
   // variateurs, onduleurs solaires
   [/^\s*CUE\b|^\s*RSI\b|convertisseur|frequency converter|inverter/i, '8504.40', 'convertisseur statique'],
   [/sinewave|sine wave|filtre sinus/i, '8504.50', 'inductance / filtre'],
   // armoires et coffrets de commande
-  [/^\s*(CU\s?\d{3}|CU\s?[23]\d\d|LC\s?\d{3}|LCD\s?\d{3}|CONTROL MPC|DC\s?\d{3}|DCD)\b|coffret|control unit|armoire/i, '8537.10', 'tableau de commande ≤ 1 000 V'],
+  [/^\s*CP\s?\d+x\d+A|\bDOL\b|GENIECON|switch box|^\s*(CU\s?\d{3}|CU\s?[23]\d\d|LC\s?\d{3}|LCD\s?\d{3}|CONTROL MPC|DC\s?\d{3}|DCD)\b|coffret|control unit|armoire/i, '8537.10', 'tableau de commande ≤ 1 000 V'],
+  // chaînes de levage (pompes immergées)
+  [/lift\.?\s*chain|chaîne de levage/i, '7315.82', 'chaîne à maillons soudés'],
+  // chemises de refroidissement et supports des pompes immergées : parties de pompes
+  [/flow sleeve|supporting ?bracket|chemise/i, '8413.91', 'parties de pompes'],
   // robinetterie, agitateurs
   [/non-return valve|check valve|clapet/i, '8481.30', 'clapet anti-retour'],
   [/PRV kit|relief valve|soupape/i, '8481.40', 'soupape de sûreté'],
@@ -47,6 +53,16 @@ export function suggestHs(description: string): { code: string; label: string; m
 
 /** Libellés officiels (Système harmonisé, 6 chiffres) des positions proposées par l'application */
 export const HS_TITLES: Record<string, { title: string; chapter: string; examples: string }> = {
+  '7311.00': {
+    title: 'Récipients pour gaz comprimés ou liquéfiés, en fonte, fer ou acier',
+    chapter: 'Chapitre 73 · position 73.11 Récipients pour gaz comprimés',
+    examples: 'Réservoirs à diaphragme ou à vessie GT-D, GT-U, GT-H (coussin d’air sous pression). Classement discuté : certains déclarants retiennent 7309 / 7310 (réservoirs, selon la capacité) — à confirmer avec votre transitaire',
+  },
+  '7315.82': {
+    title: 'Autres chaînes à maillons soudés, en fonte, fer ou acier',
+    chapter: 'Chapitre 73 · position 73.15 Chaînes et chaînettes',
+    examples: 'Chaînes de levage inox pour pompes immergées',
+  },
   '8413.50': {
     title: 'Autres pompes volumétriques alternatives (pour liquides)',
     chapter: 'Chapitre 84 · position 84.13 Pompes pour liquides',

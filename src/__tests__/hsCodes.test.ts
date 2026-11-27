@@ -15,5 +15,18 @@ describe('codes SH proposés', () => {
     ['CU 200 control unit cpl.', '8537.10'],
     ['MP 204 motor protector', '8536.30'],
   ])('%s → %s', (d, code) => expect(suggestHs(d)?.code).toBe(code));
-  it('aucune proposition plutôt qu’une fausse : réservoir GT', () => expect(suggestHs('GT-U+ 200 PN10 R1 1/4 V')).toBeNull());
+  it('aucune proposition plutôt qu’une fausse : produit inconnu', () => expect(suggestHs('DTS 200T 0034RVE1B0G')).toBeNull());
+});
+
+describe('codes SH ajoutés', () => {
+  it.each([
+    ['GT-U+ 200 PN10 R1 1/4 V', '7311.00'],
+    ['GT-H-24 PN10 G1 V', '7311.00'],
+    ['GT-D-130 PN10 G', '7311.00'],
+    ['CUE 3x380-500V IP55 11kW', '8504.40'],
+    ['Motorcable MS4000 C, 4G 1.5mm2, 1.7m 1p', '8544.49'],
+    ['CP 1x32A DOL 3x415 DPC 1-3 PRO', '8537.10'],
+    ['Lift. chain 320kg 10m SS cert. cpl.', '7315.82'],
+    ['Flow sleeve cpl. d180(D200)x1000 4" R', '8413.91'],
+  ])('%s → %s', (d, code) => expect(suggestHs(d)?.code).toBe(code));
 });
