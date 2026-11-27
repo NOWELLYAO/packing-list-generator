@@ -15,7 +15,7 @@ describe('codes SH proposés', () => {
     ['CU 200 control unit cpl.', '8537.10'],
     ['MP 204 motor protector', '8536.30'],
   ])('%s → %s', (d, code) => expect(suggestHs(d)?.code).toBe(code));
-  it('aucune proposition plutôt qu’une fausse : produit inconnu', () => expect(suggestHs('DTS 200T 0034RVE1B0G')).toBeNull());
+  it('aucune proposition plutôt qu’une fausse : produit inconnu', () => expect(suggestHs('DUMMY PLUG (1/4')).toBeNull());
 });
 
 describe('codes SH ajoutés', () => {
