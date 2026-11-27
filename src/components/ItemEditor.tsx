@@ -6,7 +6,7 @@ import { readUserNumber } from '../lib/validate';
 import { itemIssues } from '../lib/quality';
 import InfoTip from './InfoTip';
 import { dimsText, packLabel, PACKAGE_TYPES, useLang } from '../lib/i18n';
-import { suggestHs } from '../lib/hsCodes';
+import { describeHs, suggestHs } from '../lib/hsCodes';
 
 interface Props {
   item: CatalogItem;
@@ -64,6 +64,8 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
   // code SH : proposé d'après la désignation tant qu'il n'a pas été saisi à la main
   const [hsAuto, setHsAuto] = useState(() => !item.hsCode);
   const hsSug = suggestHs(draft.description);
+  const [hsInfo, setHsInfo] = useState(false);
+  const hsDesc = describeHs(draft.hsCode ?? '');
   useEffect(() => {
     if (!hsAuto) return;
     const code = hsSug?.code ?? '';
@@ -82,8 +84,25 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
         </select>
       </label>
     ) : f.key === 'hsCode' ? (
-      <label key={f.key}>
-        <span>{f.label}</span>
+      <label key={f.key} className="hs-field">
+        <span>
+          {f.label}
+          {draft.hsCode && (
+            <button
+              type="button"
+              className={`hs-info-btn ${hsInfo ? 'on' : ''}`}
+              aria-expanded={hsInfo}
+              aria-label="Que désigne ce code SH ?"
+              title="Que désigne ce code SH ?"
+              onClick={(e) => {
+                e.preventDefault();
+                setHsInfo(!hsInfo);
+              }}
+            >
+              ?
+            </button>
+          )}
+        </span>
         <input
           className={`mono ${hsAuto && draft.hsCode ? 'hs-auto' : ''}`}
           value={draft.hsCode ?? ''}
@@ -95,6 +114,27 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
           }}
         />
         {hsAuto && draft.hsCode && <small className="hint">Proposé d’après la désignation ({hsSug?.label}) : à valider</small>}
+        {hsInfo && draft.hsCode && (
+          <div className="hs-info" role="note">
+            {hsDesc ? (
+              <>
+                <b>{hsDesc.key} · {hsDesc.title}</b>
+                <small>{hsDesc.chapter}</small>
+                <small>Exemples : {hsDesc.examples}</small>
+              </>
+            ) : (
+              <small>Code non décrit dans l’application : vérifiez-le dans la nomenclature douanière.</small>
+            )}
+            {hsAuto && hsSug && (
+              <small>
+                Choisi car la désignation contient « <b>{hsSug.matched}</b> ».
+              </small>
+            )}
+            <small className="hint">
+              6 premiers chiffres, communs à tous les pays. Le code complet (10 chiffres en Côte d’Ivoire, tarif CEDEAO) est à confirmer par votre transitaire.
+            </small>
+          </div>
+        )}
         {hsAuto && !draft.hsCode && <small className="hint">Pas de proposition pour ce produit : à saisir</small>}
       </label>
     ) : (

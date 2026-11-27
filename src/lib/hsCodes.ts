@@ -36,8 +36,98 @@ const RULES: [RegExp, string, string][] = [
   ],
 ];
 
-export function suggestHs(description: string): { code: string; label: string } | null {
+export function suggestHs(description: string): { code: string; label: string; matched: string } | null {
   const d = description ?? '';
-  for (const [re, code, label] of RULES) if (re.test(d)) return { code, label };
+  for (const [re, code, label] of RULES) {
+    const m = d.match(re);
+    if (m) return { code, label, matched: m[0].trim() };
+  }
   return null;
+}
+
+/** Libellés officiels (Système harmonisé, 6 chiffres) des positions proposées par l'application */
+export const HS_TITLES: Record<string, { title: string; chapter: string; examples: string }> = {
+  '8413.50': {
+    title: 'Autres pompes volumétriques alternatives (pour liquides)',
+    chapter: 'Chapitre 84 · position 84.13 Pompes pour liquides',
+    examples: 'Pompes doseuses à membrane : DDA, DDC, DDE, DME, DMX, DMH, DMS',
+  },
+  '8413.70': {
+    title: 'Autres pompes centrifuges (pour liquides)',
+    chapter: 'Chapitre 84 · position 84.13 Pompes pour liquides',
+    examples: 'Pompes immergées SP / SQ, multicellulaires CR, NB / NK / TP, circulateurs MAGNA / UPS / ALPHA, relevage, surpresseurs Hydro',
+  },
+  '8413.91': {
+    title: 'Parties de pompes pour liquides',
+    chapter: 'Chapitre 84 · position 84.13 Pompes pour liquides',
+    examples: 'Kits de roues, garnitures mécaniques, paliers, joints, pieds d’assise, accouplements',
+  },
+  '8501.52': {
+    title: 'Moteurs à courant alternatif polyphasés, d’une puissance de plus de 750 W à 75 kW',
+    chapter: 'Chapitre 85 · position 85.01 Moteurs et générateurs électriques',
+    examples: 'Moteurs immergés MS, MMS ; moteurs de surface MG, ML (vérifier : monophasé → 8501.40, plus de 75 kW → 8501.53)',
+  },
+  '8504.40': {
+    title: 'Convertisseurs statiques',
+    chapter: 'Chapitre 85 · position 85.04 Transformateurs, convertisseurs, bobines',
+    examples: 'Variateurs de fréquence CUE, onduleurs solaires RSI',
+  },
+  '8504.50': {
+    title: 'Autres bobines de réactance et autres selfs',
+    chapter: 'Chapitre 85 · position 85.04 Transformateurs, convertisseurs, bobines',
+    examples: 'Filtres sinus (Sinewave) pour variateurs',
+  },
+  '8537.10': {
+    title: 'Tableaux et armoires de commande électrique, pour une tension n’excédant pas 1 000 V',
+    chapter: 'Chapitre 85 · position 85.37 Tableaux, panneaux, armoires de commande',
+    examples: 'Coffrets CU, LC, Control MPC, armoires de commande',
+  },
+  '8536.50': {
+    title: 'Autres interrupteurs, sectionneurs et commutateurs (≤ 1 000 V)',
+    chapter: 'Chapitre 85 · position 85.36 Appareillage pour circuits électriques ≤ 1 000 V',
+    examples: 'Interrupteurs à flotteur, détecteurs de niveau',
+  },
+  '8536.30': {
+    title: 'Autres appareils pour la protection des circuits électriques (≤ 1 000 V)',
+    chapter: 'Chapitre 85 · position 85.36 Appareillage pour circuits électriques ≤ 1 000 V',
+    examples: 'Protections moteur MP 204',
+  },
+  '8544.42': {
+    title: 'Autres conducteurs électriques pour tension ≤ 1 000 V, munis de pièces de connexion',
+    chapter: 'Chapitre 85 · position 85.44 Fils et câbles isolés',
+    examples: 'Kits de câbles avec connecteurs MC4',
+  },
+  '8544.49': {
+    title: 'Autres conducteurs électriques pour tension ≤ 1 000 V, sans pièces de connexion',
+    chapter: 'Chapitre 85 · position 85.44 Fils et câbles isolés',
+    examples: 'Câbles moteur, câbles d’alimentation au mètre',
+  },
+  '9026.20': {
+    title: 'Instruments et appareils pour la mesure ou le contrôle de la pression',
+    chapter: 'Chapitre 90 · position 90.26 Mesure du débit, du niveau, de la pression',
+    examples: 'Capteurs et transmetteurs de pression (RPI, DPI) ; un débitmètre relève plutôt de 9026.10',
+  },
+  '8481.30': {
+    title: 'Clapets et soupapes de retenue',
+    chapter: 'Chapitre 84 · position 84.81 Robinetterie',
+    examples: 'Clapets anti-retour',
+  },
+  '8481.40': {
+    title: 'Soupapes de trop-plein ou de sûreté',
+    chapter: 'Chapitre 84 · position 84.81 Robinetterie',
+    examples: 'Kits de soupape de sûreté (PRV)',
+  },
+  '8479.82': {
+    title: 'Machines et appareils à mélanger, malaxer, broyer, homogénéiser',
+    chapter: 'Chapitre 84 · position 84.79 Machines ayant une fonction propre',
+    examples: 'Agitateurs électriques pour bacs de dosage',
+  },
+};
+
+/** description d'un code SH (6 premiers chiffres) s'il est connu de l'application */
+export function describeHs(code: string) {
+  const c = (code || '').replace(/[^\d]/g, '');
+  if (c.length < 6) return null;
+  const key = `${c.slice(0, 4)}.${c.slice(4, 6)}`;
+  return HS_TITLES[key] ? { key, ...HS_TITLES[key] } : null;
 }
