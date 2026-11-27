@@ -149,3 +149,6 @@ export const DOC = {
 
 export const LangContext = createContext<Lang>('fr');
 export const useLang = () => useContext(LangContext);
+
+/** emballages proposés dans les listes de saisie (fiche article, saisie rapide, fiche SAP) */
+export const PACKAGE_TYPES = ['Carton', 'Caisse', 'Palette', 'Demi-palette', 'Palette étroite', 'Carton sur palette', 'Caisse contreplaqué', 'Sans emballage'];

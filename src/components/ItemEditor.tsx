@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CatalogItem, PackVariant } from '../types';
 import { applyVariant, preferredVariant, SAP_SOURCE, variantsOf } from '../lib/variants';
 import BoxIcon from './BoxIcon';
 import { readUserNumber } from '../lib/validate';
 import { itemIssues } from '../lib/quality';
 import InfoTip from './InfoTip';
-import { dimsText, packLabel, useLang } from '../lib/i18n';
+import { dimsText, packLabel, PACKAGE_TYPES, useLang } from '../lib/i18n';
+import { suggestHs } from '../lib/hsCodes';
 
 interface Props {
   item: CatalogItem;
@@ -60,7 +61,43 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
     if (PACK.includes(f)) setPackChanged(true);
     if (fieldErrors[f.key]) setFieldErrors({ ...fieldErrors, [f.key]: '' });
   };
-  const input = (f: Field) => (
+  // code SH : proposé d'après la désignation tant qu'il n'a pas été saisi à la main
+  const [hsAuto, setHsAuto] = useState(() => !item.hsCode);
+  const hsSug = suggestHs(draft.description);
+  useEffect(() => {
+    if (!hsAuto) return;
+    const code = hsSug?.code ?? '';
+    if ((draft.hsCode || '') !== code) setDrafted((d) => ({ ...d, hsCode: code }));
+  }, [hsAuto, hsSug?.code]); // eslint-disable-line react-hooks/exhaustive-deps
+  const input = (f: Field) =>
+    f.key === 'packageType' ? (
+      <label key={f.key}>
+        <span>{f.label}</span>
+        <select value={draft.packageType} disabled={readOnly} onChange={(e) => set(f, e.target.value)}>
+          {/* libellé d'origine (PL Grundfos : PALPLATE, CRATE…) conservé s'il n'est pas dans la liste */}
+          {!PACKAGE_TYPES.includes(draft.packageType) && draft.packageType && <option value={draft.packageType}>{packLabel(draft.packageType, 'fr')} ({draft.packageType})</option>}
+          {PACKAGE_TYPES.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      </label>
+    ) : f.key === 'hsCode' ? (
+      <label key={f.key}>
+        <span>{f.label}</span>
+        <input
+          className={`mono ${hsAuto && draft.hsCode ? 'hs-auto' : ''}`}
+          value={draft.hsCode ?? ''}
+          disabled={readOnly}
+          placeholder="0000.00"
+          onChange={(e) => {
+            setHsAuto(e.target.value.trim() === '');
+            set(f, e.target.value.replace(/[^\d.]/g, ''));
+          }}
+        />
+        {hsAuto && draft.hsCode && <small className="hint">Proposé d’après la désignation ({hsSug?.label}) : à valider</small>}
+        {hsAuto && !draft.hsCode && <small className="hint">Pas de proposition pour ce produit : à saisir</small>}
+      </label>
+    ) : (
     <label key={f.key} className={`${f.wide ? 'wide' : ''} ${fieldErrors[f.key] ? 'has-error' : ''}`}>
       <span>{f.label}</span>
       <input
@@ -71,7 +108,7 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
       />
       {fieldErrors[f.key] && <small className="field-error">{fieldErrors[f.key]}</small>}
     </label>
-  );
+    );
 
   const save = () => {
     if (!draft.code.trim() && !draft.pn.trim()) return setError('Renseignez le code article (P/N).');
@@ -266,7 +303,7 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
   );
 }
 
-const TYPES = ['Carton', 'Palette', 'Demi-palette', 'Caisse'];
+const TYPES = PACKAGE_TYPES;
 
 /** Saisie d'un emballage depuis la fiche article du fabricant (SAP MM03 → Unités de mesure) : quantité, dimensions, poids du colis entier */
 function AddPacking({ open, setOpen, onAdd }: { open: boolean; setOpen: (b: boolean) => void; onAdd: (v: PackVariant) => void }) {

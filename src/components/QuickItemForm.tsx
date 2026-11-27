@@ -1,3 +1,4 @@
+import { PACKAGE_TYPES } from '../lib/i18n';
 import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { uid } from '../lib/normalize';
@@ -12,7 +13,7 @@ interface Props {
   onClose: () => void;
 }
 
-const PACK_TYPES = ['Carton', 'Caisse', 'Palette', 'Sans emballage'];
+const PACK_TYPES = PACKAGE_TYPES;
 
 type Field = 'description' | 'length' | 'width' | 'height' | 'net' | 'gross' | 'packageType';
 
@@ -149,13 +150,11 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
           <p className="hint">Brut = article + son emballage. Net laissé vide : pris égal au brut.</p>
 
           <h3 className="card-title">Emballage</h3>
-          <div className="segmented">
+          <select className="pack-select" value={f.packageType} onChange={(e) => set('packageType', e.target.value)} aria-label="Emballage">
             {PACK_TYPES.map((t) => (
-              <button key={t} className={f.packageType === t ? 'on' : ''} onClick={() => set('packageType', t)}>
-                {t}
-              </button>
+              <option key={t}>{t}</option>
             ))}
-          </div>
+          </select>
 
           {valid && (
             <div className="quick-preview">
