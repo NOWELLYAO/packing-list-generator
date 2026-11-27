@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { suggestHs } from '../lib/hsCodes';
+import { suggestHs, suggestPackaging } from '../lib/hsCodes';
 describe('codes SH proposés', () => {
   it.each([
     ['SP14-27 Rp2 4"3X380-415/50 7.5kW', '8413.70'],
@@ -29,4 +29,17 @@ describe('codes SH ajoutés', () => {
     ['Lift. chain 320kg 10m SS cert. cpl.', '7315.82'],
     ['Flow sleeve cpl. d180(D200)x1000 4" R', '8413.91'],
   ])('%s → %s', (d, code) => expect(suggestHs(d)?.code).toBe(code));
+});
+
+describe('emballage proposé', () => {
+  it.each([
+    ['SP14-27 Rp2 4"', 86, 'Caisse'],
+    ['SP3A-18 Rp1¼ 4"', 17, 'Carton'],
+    ['CR45-4 A-F-A-E-HQQE', 212, 'Palette étroite'],
+    ['CR5-10 A-A-A-E-HQQE', 38, 'Carton'],
+    ['Hydro Multi-E 2 CRE 15-4 U2', 310, 'Carton sur palette'],
+    ['Motor cable MS4000 C', 1, 'Carton'],
+    ['TPED 100-110/4', 238, 'Palette'],
+    ['NBE 100-200', 145, 'Caisse'],
+  ])('%s (%s kg) → %s', (d, kg, t) => expect(suggestPackaging(d as string, kg as number).type).toBe(t));
 });

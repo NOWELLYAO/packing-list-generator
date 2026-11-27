@@ -1,4 +1,5 @@
 import { PACKAGE_TYPES } from '../lib/i18n';
+import { suggestPackaging } from '../lib/hsCodes';
 import { useState } from 'react';
 import type { CatalogItem } from '../types';
 import { uid } from '../lib/normalize';
@@ -43,6 +44,10 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
   const H = num(f.height);
   const net = num(f.net);
   const gross = num(f.gross);
+  // emballage proposé d'après le produit, le poids et les dimensions, tant que vous ne l'avez pas choisi
+  const [packAuto, setPackAuto] = useState(() => !unitKnown);
+  const packSug = suggestPackaging(f.description, gross, L, W);
+  const packageType = packAuto ? packSug.type : f.packageType;
 
   const errors: Partial<Record<Field, string>> = {};
   for (const [k, v] of [['length', L], ['width', W], ['height', H]] as const) {
@@ -85,7 +90,7 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
       ...base,
       description: f.description.trim() || base.description || base.code,
       qtyPerPackage: 1,
-      packageType: f.packageType,
+      packageType,
       length: L,
       width: W,
       height: H,
@@ -150,11 +155,20 @@ export default function QuickItemForm({ item, code, pn, onSave, onClose }: Props
           <p className="hint">Brut = article + son emballage. Net laissé vide : pris égal au brut.</p>
 
           <h3 className="card-title">Emballage</h3>
-          <select className="pack-select" value={f.packageType} onChange={(e) => set('packageType', e.target.value)} aria-label="Emballage">
+          <select
+            className={`pack-select ${packAuto ? 'hs-auto' : ''}`}
+            value={packageType}
+            onChange={(e) => {
+              setPackAuto(false);
+              set('packageType', e.target.value);
+            }}
+            aria-label="Emballage"
+          >
             {PACK_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </select>
+          {packAuto && <p className="hint">Proposé : {packSug.reason}. Modifiable.</p>}
 
           {valid && (
             <div className="quick-preview">

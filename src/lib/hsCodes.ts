@@ -147,3 +147,27 @@ export function describeHs(code: string) {
   const key = `${c.slice(0, 4)}.${c.slice(4, 6)}`;
   return HS_TITLES[key] ? { key, ...HS_TITLES[key] } : null;
 }
+
+/**
+ * Emballage proposé d'après le produit (désignation), affiné par le poids et les dimensions s'ils sont connus.
+ * D'après vos PL Grundfos : pompes immergées en caisse dès 50 kg, CR lourdes sur palette étroite,
+ * surpresseurs en carton sur palette, petits articles en carton.
+ */
+export function suggestPackaging(description: string, gross = 0, l = 0, w = 0): { type: string; reason: string } {
+  const d = description ?? '';
+  const [L, W] = [Math.max(l, w), Math.min(l, w)];
+  if (/^\s*(SP\s?\d|SPA?\d|SQ|SQE|SQF)/i.test(d))
+    return gross >= 50 ? { type: 'Caisse', reason: 'pompe immergée de 50 kg ou plus : caisse bois' } : { type: 'Carton', reason: 'pompe immergée légère : carton long' };
+  if (/^\s*CR[A-Z]{0,2}\s?\d/i.test(d))
+    return gross >= 80 ? { type: 'Palette étroite', reason: 'pompe CR lourde : vissée sur palette étroite' } : { type: 'Carton', reason: 'petite pompe CR : carton (Pre-Pack)' };
+  if (/hydro\s*(multi|mpc|solo)|booster|surpresseur|fire\s*\d|^\s*si\s?2/i.test(d))
+    return { type: 'Carton sur palette', reason: 'surpresseur / groupe : carton sur palette' };
+  if (/^\s*GT-?/i.test(d)) return gross >= 50 ? { type: 'Palette', reason: 'gros réservoir : palette' } : { type: 'Carton', reason: 'réservoir : carton' };
+  if (/^\s*(MS|MMS)\s?-?\d|^\s*MS\d{3,4}/i.test(d)) return gross >= 50 ? { type: 'Caisse', reason: 'moteur immergé lourd : caisse' } : { type: 'Carton', reason: 'moteur immergé : carton' };
+  if (/cable|câble|plug|flange|kit|spare|seal|sensor|switch|module|labelset|acc\./i.test(d) && !(gross >= 50))
+    return { type: 'Carton', reason: 'accessoire / pièce : carton' };
+  // sinon : poids et dimensions
+  if (gross >= 150 || (L >= 100 && W >= 60)) return { type: 'Palette', reason: 'plus de 150 kg ou grande emprise : palette' };
+  if (gross >= 50) return { type: 'Caisse', reason: 'plus de 50 kg : caisse' };
+  return { type: 'Carton', reason: 'article léger : carton' };
+}

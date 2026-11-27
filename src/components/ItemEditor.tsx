@@ -6,7 +6,7 @@ import { readUserNumber } from '../lib/validate';
 import { itemIssues } from '../lib/quality';
 import InfoTip from './InfoTip';
 import { dimsText, packLabel, PACKAGE_TYPES, useLang } from '../lib/i18n';
-import { describeHs, suggestHs } from '../lib/hsCodes';
+import { describeHs, suggestHs, suggestPackaging } from '../lib/hsCodes';
 
 interface Props {
   item: CatalogItem;
@@ -65,6 +65,14 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
   const [hsAuto, setHsAuto] = useState(() => !item.hsCode);
   const hsSug = suggestHs(draft.description);
   const [hsInfo, setHsInfo] = useState(false);
+  // emballage : proposé d'après le produit (puis le poids et les dimensions) tant que vous ne l'avez pas choisi
+  const [packAuto, setPackAuto] = useState(() => !!isNew);
+  const num0 = (k: string) => readUserNumber((raw[k] ?? '').trim() || '0') || 0;
+  const packSug = suggestPackaging(draft.description, num0('grossWeightPerUnit') * Math.max(1, num0('qtyPerPackage')), num0('length'), num0('width'));
+  useEffect(() => {
+    if (!packAuto) return;
+    if (draft.packageType !== packSug.type) setDrafted((d) => ({ ...d, packageType: packSug.type }));
+  }, [packAuto, packSug.type]); // eslint-disable-line react-hooks/exhaustive-deps
   const hsDesc = describeHs(draft.hsCode ?? '');
   useEffect(() => {
     if (!hsAuto) return;
@@ -75,13 +83,34 @@ export default function ItemEditor({ item, isNew, readOnly, onSave, onDelete, on
     f.key === 'packageType' ? (
       <label key={f.key}>
         <span>{f.label}</span>
-        <select value={draft.packageType} disabled={readOnly} onChange={(e) => set(f, e.target.value)}>
+        <select
+          className={packAuto ? 'hs-auto' : ''}
+          value={draft.packageType}
+          disabled={readOnly}
+          onChange={(e) => {
+            setPackAuto(false);
+            set(f, e.target.value);
+          }}
+        >
           {/* libellé d'origine (PL Grundfos : PALPLATE, CRATE…) conservé s'il n'est pas dans la liste */}
           {!PACKAGE_TYPES.includes(draft.packageType) && draft.packageType && <option value={draft.packageType}>{packLabel(draft.packageType, 'fr')} ({draft.packageType})</option>}
           {PACKAGE_TYPES.map((t) => (
             <option key={t}>{t}</option>
           ))}
         </select>
+        {packAuto && <small className="hint">Proposé : {packSug.reason}. Modifiable.</small>}
+        {!packAuto && !readOnly && packSug.type !== draft.packageType && (
+          <button
+            type="button"
+            className="link-btn small"
+            onClick={(e) => {
+              e.preventDefault();
+              setPackAuto(true);
+            }}
+          >
+            Proposition : {packSug.type} ({packSug.reason})
+          </button>
+        )}
       </label>
     ) : f.key === 'hsCode' ? (
       <label key={f.key} className="hs-field">
